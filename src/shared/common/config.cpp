@@ -1,0 +1,190 @@
+#include "std_include.hpp"
+#include "config.hpp"
+
+namespace shared::common
+{
+	config& config::get()
+	{
+		static config instance;
+		return instance;
+	}
+
+	void config::load(const std::string& path)
+	{
+		ini_path_ = path;
+
+		// Check if the INI file actually exists — GetPrivateProfileInt silently
+		// returns defaults for missing files, making it look like settings are ignored.
+		if (GetFileAttributesA(ini_path_.c_str()) == INVALID_FILE_ATTRIBUTES)
+		{
+			log("Config", std::format("INI NOT FOUND: {} — using all defaults!", ini_path_),
+				LOG_TYPE::LOG_TYPE_ERROR, true);
+			loaded_ = false;
+			return;
+		}
+
+		loaded_ = true;
+		parse_all();
+	}
+
+	int config::get_int(const char* section, const char* key, int default_val) const
+	{
+		if (!loaded_) return default_val;
+		return GetPrivateProfileIntA(section, key, default_val, ini_path_.c_str());
+	}
+
+	std::string config::get_string(const char* section, const char* key, const char* default_val) const
+	{
+		if (!loaded_) return default_val;
+		char buf[512];
+		GetPrivateProfileStringA(section, key, default_val, buf, sizeof(buf), ini_path_.c_str());
+		return buf;
+	}
+
+	float config::get_float(const char* section, const char* key, float default_val) const
+	{
+		auto str = get_string(section, key, "");
+		if (str.empty()) return default_val;
+		try { return std::stof(str); }
+		catch (...) { return default_val; }
+	}
+
+	bool config::get_bool(const char* section, const char* key, bool default_val) const
+	{
+		return get_int(section, key, default_val ? 1 : 0) != 0;
+	}
+
+	void config::parse_all()
+	{
+		// [Remix]
+		remix.enabled = get_bool("Remix", "Enabled", true);
+		remix.dll_name = get_string("Remix", "DLLName", "d3d9_remix.dll");
+
+		// [Chain]
+		chain.preload = get_string("Chain", "PreLoad", "");
+		chain.postload = get_string("Chain", "PostLoad", "");
+
+		// [FFP]
+		ffp.enabled = get_bool("FFP", "Enabled", true);
+		ffp.auto_enable = get_bool("FFP", "AutoEnable", false);
+		ffp.auto_enable_threshold = get_int("FFP", "AutoEnableThreshold", 50);
+		ffp.auto_enable_frames = get_int("FFP", "AutoEnableFrames", 5);
+		ffp.albedo_stage = get_int("FFP", "AlbedoStage", 0);
+		if (ffp.albedo_stage < 0 || ffp.albedo_stage > 7)
+			ffp.albedo_stage = 0;
+		ffp.dedup_pass_mode = get_int("FFP", "DedupPassMode", 0);
+		ffp.show_dedup_ui = get_bool("FFP", "ShowDedupUI", false);
+		ffp.tex_filter = get_bool("FFP", "TexFilter", false);
+		ffp.tex_filter_threshold = get_int("FFP", "TexFilterThreshold", 80);
+		ffp.expand_skinned_uv = get_bool("FFP", "ExpandSkinnedUV", true);
+		ffp.skip_postfx = get_bool("FFP", "SkipPostFX", true);
+		ffp.suppress_aux_passes = get_bool("FFP", "SuppressAuxPasses", true);
+		ffp.shader_tex_fix = get_bool("FFP", "ShaderTexFix", false);
+		ffp.texture_layer_blend = get_bool("FFP", "TextureLayerBlend", true);
+		ffp.water_surface = get_bool("FFP", "WaterSurface", true);
+		ffp.water_fallback_albedo = get_bool("FFP", "WaterFallbackAlbedo", true);
+		ffp.zwrite_query_per_draw = get_bool("FFP", "ZWriteQueryPerDraw", true);
+
+		// [PostFX] Comma-separated list of pass indices to skip (empty = skip all)
+		postfx.skip_passes_str = get_string("PostFX", "SkipPasses", "");
+		postfx.parse_skip_string();
+
+		// [Skinning]
+		skinning.enabled = get_bool("Skinning", "Enabled", false);
+
+		// [Cheats]
+		cheats.god_mode = get_bool("Cheats", "GodMode", false);
+
+		// [Diagnostics]
+		diagnostics.enabled = get_bool("Diagnostics", "Enabled", true);
+		diagnostics.auto_capture = get_bool("Diagnostics", "AutoCapture", true);
+		diagnostics.delay_ms = get_int("Diagnostics", "DelayMs", 50000);
+		diagnostics.log_frames = get_int("Diagnostics", "LogFrames", 3);
+		diagnostics.log_draw_calls = get_bool("Diagnostics", "LogDrawCalls", true);
+		diagnostics.log_vs_constants = get_bool("Diagnostics", "LogVSConstants", true);
+		diagnostics.log_vertex_data = get_bool("Diagnostics", "LogVertexData", true);
+		diagnostics.log_declarations = get_bool("Diagnostics", "LogDeclarations", true);
+		diagnostics.log_textures = get_bool("Diagnostics", "LogTextures", true);
+		diagnostics.log_present_info = get_bool("Diagnostics", "LogPresentInfo", true);
+
+		// [IntroSkip]
+		intro_skip.enabled = get_bool("IntroSkip", "Enabled", true);
+
+		// [FPSUnlock]
+		fps_unlock.enabled = get_bool("FPSUnlock", "Enabled", false);
+		fps_unlock.target_fps = get_int("FPSUnlock", "TargetFPS", 60);
+
+		// [Culling]
+		culling.enable_frustum_culling = get_bool("Culling", "EnableFrustumCulling", true);
+		culling.frustum_relaxation_radius = std::max(0.0f, get_float("Culling", "FrustumRelaxationRadius", 0.0f));
+
+		// [Tracer]
+		tracer.backtrace_depth = get_int("Tracer", "BacktraceDepth", 8);
+		tracer.output_dir = get_string("Tracer", "OutputDir", "captures");
+
+		// [Lights]
+		lights.enabled = get_bool("Lights", "Enabled", true);
+		lights.intensity_scale = get_float("Lights", "IntensityScale", 1.0f);
+		lights.radius_scale = get_float("Lights", "RadiusScale", 1.0f);
+		lights.resolve_entity_params = get_bool("Lights", "ResolveEntityParams", true);
+		lights.synthesized_lights = get_bool("Lights", "SynthesizedLights", true);
+
+		// [Hud]
+		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);
+
+		// [Resolution]
+		resolution.render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));
+		resolution.render_height = static_cast<UINT>(get_int("Resolution", "RenderHeight", 0));
+		resolution.present_width = static_cast<UINT>(get_int("Resolution", "PresentWidth", 0));
+		resolution.present_height = static_cast<UINT>(get_int("Resolution", "PresentHeight", 0));
+		if (resolution.present_width == 0) resolution.present_width = resolution.render_width;
+		if (resolution.present_height == 0) resolution.present_height = resolution.render_height;
+
+		// [Benchmark]
+		benchmark.settle_frames = get_int("Benchmark", "SettleFrames", 90);
+		benchmark.measure_frames = get_int("Benchmark", "MeasureFrames", 240);
+
+		// [Perf] is read lazily by comp::game::render_toggles (the keys map 1:1
+		// to its toggle table) — nothing to parse here.
+
+		log("Config", std::format("Loaded from: {}", ini_path_));
+		log("Config", std::format("FFP={} AlbedoStage={} DedupPassMode={} TextureLayerBlend={}",
+			ffp.enabled ? 1 : 0, ffp.albedo_stage, ffp.dedup_pass_mode,
+			ffp.texture_layer_blend ? 1 : 0));
+		if (skinning.enabled)
+			log("Config", "Skinning ENABLED", LOG_TYPE::LOG_TYPE_WARN);
+	}
+
+	void config::postfx_settings::parse_skip_string()
+	{
+		skip_passes.clear();
+		std::istringstream ss(skip_passes_str);
+		std::string token;
+		while (std::getline(ss, token, ','))
+		{
+			// trim whitespace
+			auto start = token.find_first_not_of(" \t");
+			if (start == std::string::npos) continue;
+			auto end = token.find_last_not_of(" \t");
+			token = token.substr(start, end - start + 1);
+			if (token.empty()) continue;
+
+			char* endptr = nullptr;
+			long val = strtol(token.c_str(), &endptr, 10);
+			if (endptr != token.c_str() && *endptr == '\0' && val >= 0)
+				skip_passes.insert(static_cast<int>(val));
+		}
+	}
+
+	void config::postfx_settings::rebuild_skip_string()
+	{
+		std::vector<int> sorted(skip_passes.begin(), skip_passes.end());
+		std::sort(sorted.begin(), sorted.end());
+		skip_passes_str.clear();
+		for (size_t i = 0; i < sorted.size(); i++)
+		{
+			if (i > 0) skip_passes_str += ',';
+			skip_passes_str += std::to_string(sorted[i]);
+		}
+	}
+}

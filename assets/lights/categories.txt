@@ -1,0 +1,15 @@
+# Per-category light tuning for the synthesized map lights.
+#
+# Scales multiply the values in the per-map tables, so 1.0 is exactly the map's own
+# POINT_LIGHT_BANK row. Categories are global: torch_small covers every torch in the
+# game, in every map, so one number tunes them all.
+#
+# Edited live in F4 > Lights > Light Categories; Save Categories writes this file.
+#
+# category  intensityScale  radiusScale  enabled
+torch_small  1.000  1.000  1            # 113 lights
+catacombs_brazier  1.000  1.000  1      # 110 lights
+lantern  1.000  1.000  1                # 49 lights
+candlestick  1.000  1.000  1            # 40 lights
+oolacile_lantern  1.000  1.000  1       # 11 lights
+kiln_embers  1.000  1.000  1            # 10 lights
