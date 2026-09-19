@@ -245,6 +245,11 @@ if not "!DEPLOY_TARGET!"=="" (
         if exist "%ROOT%assets\lights" robocopy "%ROOT%assets\lights" "!DEPLOY_TARGET!\rtx_comp\lights" *.txt /XC /XN /XO >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy light tables
         ver >nul
+        :: The sky mesh table is generated from the game files (scripts\gen_sky_meshes.py),
+        :: never hand-edited, so it is always refreshed.
+        if exist "%ROOT%assets\sky" robocopy "%ROOT%assets\sky" "!DEPLOY_TARGET!\rtx_comp\sky" *.txt >nul 2>&1
+        if errorlevel 8 echo WARNING: could not deploy the sky mesh table
+        ver >nul
         echo Deployed to: !DEPLOY_TARGET!
     ) else (
         echo WARNING: deploy.conf target not found: !DEPLOY_TARGET!

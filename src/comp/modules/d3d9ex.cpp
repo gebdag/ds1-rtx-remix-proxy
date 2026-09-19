@@ -20,6 +20,8 @@ using comp::tracer;
 #include "shared/common/config.hpp"
 #include "../game/fps_unlock.hpp"
 #include "../game/render_toggles.hpp"
+#include "../game/texture_names.hpp"
+#include "../game/sky_meshes.hpp"
 
 namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
@@ -312,6 +314,8 @@ namespace comp
 		const auto hr = m_pIDirect3DDevice9->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		if (FAILED(hr))
 			crash_context::note("Tex2D %ux%u L%u f=%s p=%u t=%u hr=%08X", Width, Height, Levels, format_tag(Format).c_str(), Pool, sw.ms(), hr);
+		else if (ppTexture && *ppTexture)
+			game::texture_names::on_device_created(*ppTexture);  // D3DX names its textures after this returns
 		return hr;
 	}
 
@@ -352,6 +356,8 @@ namespace comp
 		const auto hr = m_pIDirect3DDevice9->CreateIndexBuffer(Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle);
 		if (FAILED(hr))
 			crash_context::note("IB len=%u u=%X p=%u t=%u hr=%08X", Length, Usage, Pool, sw.ms(), hr);
+		else if (ppIndexBuffer && *ppIndexBuffer)
+			game::sky_meshes::on_index_buffer_created(*ppIndexBuffer);
 		return hr;
 	}
 

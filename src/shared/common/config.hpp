@@ -168,6 +168,17 @@ namespace shared::common
 			bool mark_ui_draws = true;
 		} hud;
 
+		struct sky_settings
+		{
+			// Send the meshes of the map sky models (domes, far cloud layers and
+			// the backdrop they are blended over, recognised by their index data
+			// via rtx_comp\sky\sky_meshes.txt) through with the game's own shaders
+			// and the stage-0 D3DTSS_CONSTANT sky marker, so the custom Remix runtime
+			// (rtx.skyMarkerEnabled) rasterizes them into its sky exactly as the
+			// game shades them: tint, fog, light scattering, scrolling, blending.
+			bool mark_sky_draws = true;
+		} sky;
+
 		struct resolution_settings
 		{
 			UINT render_width = 0;   // 0 = no override (use game default)

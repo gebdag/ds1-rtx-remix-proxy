@@ -7,9 +7,43 @@
 #include "rt_tracker.hpp"
 #include "skinning.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "../game/sky_meshes.hpp"
+#include "../game/texture_names.hpp"
 
 namespace comp
 {
+	namespace
+	{
+		// Stage-0 D3DTSS_CONSTANT value the custom runtime (rtx.skyMarkerEnabled)
+		// reads as "this draw is sky", like the UI (0xD15D0011) and decal
+		// (0xD15DECA1) markers.
+		constexpr DWORD SKY_MARKER = 0xD15D05C1;
+
+		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
+		// are blended over) in a pass whose camera is the main one: no user clip
+		// plane is enabled (the water reflection pass is the only one that
+		// enables one).
+		bool is_sky_layer_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+		{
+			auto& ffp = shared::common::ffp_state::get();
+			if (!game::sky_meshes::is_sky_draw(ffp.cur_ib(), type, start_index, prim_count))
+				return false;
+
+			DWORD clip_planes = 0;
+			dev->GetRenderState(D3DRS_CLIPPLANEENABLE, &clip_planes);
+			return clip_planes == 0;
+		}
+
+		// The game's diffuse for this draw is an atmospheric or backdrop layer
+		// (mist, fog, clouds, light shafts, backdrop cards) by its TPF name.
+		bool is_atmospheric_layer()
+		{
+			auto& ffp = shared::common::ffp_state::get();
+			const int stage = shared::common::config::get().ffp.albedo_stage;
+			return game::texture_names::is_atmospheric(ffp.cur_texture(static_cast<UINT>(stage)));
+		}
+	}
+
 	namespace tex_addons
 	{
 		bool initialized = false;
@@ -144,8 +178,10 @@ namespace comp
 			if (expanded)
 			{
 				// Game-blended draws (edge-fade strips) are tagged as decals so
-				// Remix composites them onto the surface beneath.
-				const bool base_decal = ffp.apply_blended_decal_marker(dev);
+				// Remix composites them onto the surface beneath. Free-standing
+				// atmospheric layers are not: a decal only survives on a surface
+				// behind it, so mist or a backdrop card in front of the sky vanished.
+				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 				hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
 				if (base_decal)
 					ffp.clear_decal_marker(dev);
@@ -279,11 +315,39 @@ namespace comp
 			!ffp.cur_decl_is_skinned() && ffp.cur_ps_is_water_surface() &&
 			shared::common::config::get().ffp.water_surface;
 
+		// Map sky layers (domes, far cloud layers) keep the game's shaders and
+		// carry the sky marker: the runtime rasterizes them into its sky with the
+		// game's own tint, fog, light scattering, scrolling and blending, which FFP
+		// conversion would all drop. The water reflection pass redraws the dome
+		// from the mirrored ReflectCamera; it is the only pass with a user clip
+		// plane, and its copy must stay out of the sky.
+		const bool sky_draw = !water_draw && ffp.view_proj_valid() && !ffp.cur_decl_is_skinned() &&
+			shared::common::config::get().sky.mark_sky_draws &&
+			is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount);
+
 		if (!ffp.view_proj_valid())
 		{
 			// Transforms not ready: passthrough.
 			ffp.disengage(dev);
 			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			im->m_stats._drawcall_indexed_prim.track_single();
+			im->m_stats._drawcall_indexed_prim_using_vs.track_single();
+		}
+		else if (sky_draw)
+		{
+			// Same prepass drop as the rigid path below.
+			if (ffp.is_depth_prepass())
+			{
+				ctx.restore_all(dev);
+				ctx.reset_context();
+				return S_OK;
+			}
+
+			// The stage-0 constant is inert for shader draws; only the runtime reads it.
+			ffp.disengage(dev);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, SKY_MARKER);
+			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 			im->m_stats._drawcall_indexed_prim.track_single();
 			im->m_stats._drawcall_indexed_prim_using_vs.track_single();
 		}
@@ -419,8 +483,10 @@ namespace comp
 				if (expanded)
 				{
 					// Game-blended draws (edge-fade strips) are tagged as decals so
-					// Remix composites them onto the surface beneath.
-					const bool base_decal = ffp.apply_blended_decal_marker(dev);
+					// Remix composites them onto the surface beneath. Free-standing
+					// atmospheric layers are not: a decal only survives on a surface
+					// behind it, so mist or a backdrop card in front of the sky vanished.
+					const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 					if (base_decal)
 						ffp.clear_decal_marker(dev);

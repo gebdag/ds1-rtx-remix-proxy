@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "d3dx_texture_watch.hpp"
+#include "texture_names.hpp"
 #include "../modules/crash_context.hpp"
 
 namespace comp::game::d3dx_texture_watch
@@ -66,6 +67,8 @@ namespace comp::game::d3dx_texture_watch
 				format, pool, filter, mip_filter, color_key, src_info, palette, out);
 			if (FAILED(hr))
 				crash_context::note("D3DXTex2D %uB dds=%s t=%u hr=%08X", src_size, dds.c_str(), sw.ms(), hr);
+			else if (out && *out)
+				texture_names::on_d3dx_created(*out, src, src_size);
 			return hr;
 		}
 

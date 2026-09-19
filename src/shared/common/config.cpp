@@ -132,6 +132,9 @@ namespace shared::common
 		// [Hud]
 		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);
 
+		// [Sky]
+		sky.mark_sky_draws = get_bool("Sky", "MarkSkyDraws", true);
+
 		// [Resolution]
 		resolution.render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));
 		resolution.render_height = static_cast<UINT>(get_int("Resolution", "RenderHeight", 0));
