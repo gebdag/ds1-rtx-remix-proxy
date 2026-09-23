@@ -8,6 +8,7 @@
 #include "skinning.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/sun_light.hpp"
 #include "../game/texture_names.hpp"
 
 namespace comp
@@ -275,6 +276,12 @@ namespace comp
 			ctx.reset_context();
 			return S_OK;
 		}
+
+		// Draws that read the game's sun constants (shadow direction c175, key
+		// light c92/c95) vote for the Remix sun.
+		if (ffp.view_proj_valid() && ffp.cur_ps_light_flags() != 0)
+			game::sun_light::observe(ffp.ps_const_data(), ffp.frame_count(), primCount,
+				ffp.cur_ps_light_flags(), ffp.cur_decl_is_skinned());
 
 		// Track draw key for dedup learning (all draw types — rigid and skinned).
 		ffp.record_draw_key(ffp.stream_vb(0), ffp.cur_ib(), BaseVertexIndex, startIndex, primCount);

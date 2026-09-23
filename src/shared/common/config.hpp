@@ -160,6 +160,22 @@ namespace shared::common
 			bool synthesized_lights = true;
 		} lights;
 
+		struct sun_settings
+		{
+			// Mirror the game's key directional light (pixel shader c92/c95, the
+			// light its cascaded shadow map shades) into Remix as a distant light.
+			bool enabled = true;
+			// Multiplier on the game's light colour. 1.0 gives the lambert term the
+			// game's own shader computes, before its exposure (c135).
+			float intensity_scale = 1.0f;
+			// Apparent size of the sun disc; sets how soft the shadows are.
+			float angular_diameter = 0.53f;
+			// Sun colour until a HemDir3 draw has shown the game's own (c95). Maps
+			// lit by irradiance cubes (HemEnv, e.g. Sen's Fortress) never bind it to a
+			// map shader. LIGHT_BANK light 0 is typically white at 50-100%.
+			float fallback_colour[3] = { 0.7f, 0.7f, 0.7f };
+		} sun;
+
 		struct hud_settings
 		{
 			// Tag EzMenu HUD/menu quads with the stage-0 D3DTSS_CONSTANT UI marker

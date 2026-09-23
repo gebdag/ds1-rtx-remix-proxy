@@ -169,7 +169,7 @@ namespace shared::common
 
 	void ffp_state::on_set_ps_const_f(UINT start_reg, const float* data, UINT count)
 	{
-		if (!data || start_reg + count > 32) return;
+		if (!data || start_reg + count > 256) return;
 
 		std::memcpy(&ps_const_[start_reg * 4], data, count * 4 * sizeof(float));
 	}
@@ -192,12 +192,15 @@ namespace shared::common
 		// decal pass stays off rather than risking a stale-texture overlay.
 		cur_ps_sampler_mask_ = 0;
 		cur_ps_is_water_surface_ = false;
+		cur_ps_light_flags_ = 0;
 		if (shader)
 		{
 			if (auto it = ps_sampler_masks_.find(shader); it != ps_sampler_masks_.end())
 				cur_ps_sampler_mask_ = it->second;
 			if (auto it = ps_water_surface_.find(shader); it != ps_water_surface_.end())
 				cur_ps_is_water_surface_ = it->second;
+			if (auto it = ps_light_flags_.find(shader); it != ps_light_flags_.end())
+				cur_ps_light_flags_ = it->second;
 		}
 	}
 
@@ -205,6 +208,7 @@ namespace shared::common
 	{
 		if (!shader) return;
 		ps_sampler_masks_[shader] = parse_ps_sampler_mask(bytecode);
+		ps_light_flags_[shader] = parse_ps_light_flags(bytecode);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
 		// token stream from the version token through the END token inclusive:
@@ -320,6 +324,61 @@ namespace shared::common
 			i += 1 + param_count;
 		}
 		return mask;
+	}
+
+	uint32_t ffp_state::parse_ps_light_flags(const DWORD* code)
+	{
+		if (!code || (code[0] & 0xFFFF0000) != 0xFFFF0000)
+			return 0;
+
+		// Same token walk as parse_ps_sampler_mask, looking at the source operands
+		// of every instruction for float constants c92, c95 and c175. DEF/DEFI/DEFB
+		// are skipped: their trailing tokens are literals, not register operands.
+		bool reads_dir = false;
+		bool reads_colour = false;
+		bool reads_shadow_dir = false;
+		constexpr size_t max_tokens = 65536;
+		size_t i = 1;
+		while (i < max_tokens)
+		{
+			const DWORD tok = code[i];
+			if (tok == 0x0000FFFF)
+				break;
+
+			const DWORD opcode = tok & 0xFFFF;
+			if (opcode == 0xFFFE) // D3DSIO_COMMENT
+			{
+				i += 1 + ((tok >> 16) & 0x7FFF);
+				continue;
+			}
+
+			const DWORD param_count = (tok >> 24) & 0x0F;
+			const bool is_def = opcode == 81 || opcode == 82 || opcode == 83; // DEF, DEFI, DEFB
+			if (!is_def && opcode != 31 /* DCL */)
+			{
+				for (DWORD p = 1; p <= param_count; ++p)
+				{
+					const DWORD param = code[i + p];
+					const DWORD reg_type = ((param >> 28) & 0x7) | ((param >> 8) & 0x18);
+					if (reg_type != 2 /* D3DSPR_CONST */)
+						continue;
+					const DWORD reg = param & 0x7FF;
+					if (reg == 92) reads_dir = true;
+					if (reg == 95) reads_colour = true;
+					if (reg == 175) reads_shadow_dir = true;
+				}
+			}
+			i += 1 + param_count;
+		}
+		return (reads_dir && reads_colour ? PS_LIGHT_DIR3 : 0u) |
+			(reads_shadow_dir ? PS_LIGHT_SHADOW : 0u);
+	}
+
+	bool ffp_state::world_offset(float& x, float& y, float& z) const
+	{
+		if (!offset_world_ || !camera_override_fn_)
+			return false;
+		return camera_override_fn_(x, y, z);
 	}
 
 	void ffp_state::on_set_texture(UINT stage, IDirect3DBaseTexture9* texture)
@@ -697,6 +756,7 @@ namespace shared::common
 
 		if (water_fallback_tex_) { water_fallback_tex_->Release(); water_fallback_tex_ = nullptr; }
 		cur_ps_is_water_surface_ = false;
+		cur_ps_light_flags_ = 0;
 
 		log("FFP", "State reset");
 	}

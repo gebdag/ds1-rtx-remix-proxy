@@ -108,6 +108,11 @@ namespace shared::common
 		bool inject_view_pos() const { return inject_view_pos_; }
 		bool offset_world() const { return offset_world_; }
 
+		// The translation apply_transforms adds to every World matrix to turn the
+		// main pass's camera-relative matrices into absolute world space. False
+		// (and x/y/z untouched) when no offset is being applied.
+		bool world_offset(float& x, float& y, float& z) const;
+
 		// --- Diagnostic data access ---
 
 		const float* vs_const_data() const { return vs_const_; }
@@ -206,6 +211,18 @@ namespace shared::common
 		// Sampler-declaration bitmask of the current pixel shader (bit n = sn).
 		uint32_t cur_ps_sampler_mask() const { return cur_ps_sampler_mask_; }
 
+		// Which of DS1's light constants the current pixel shader reads, parsed from
+		// its instruction stream at creation:
+		//   PS_LIGHT_DIR3   c92 and c95, directional light 0 direction and colour.
+		//                   Every FRPG_Phn/Gst/Snow *HemDir3 variant; HemEnv lights
+		//                   from an irradiance cube instead and reads neither.
+		//   PS_LIGHT_SHADOW c175, the shadow light's direction of travel (ShadowBank
+		//                   lightDegRotX/Y). Every shadowed variant (Sdw/Csd), HemEnv
+		//                   included.
+		static constexpr uint32_t PS_LIGHT_DIR3 = 1u << 0;
+		static constexpr uint32_t PS_LIGHT_SHADOW = 1u << 1;
+		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
+
 		// Bind an albedo for a water-surface FFP draw: the first non-NULL,
 		// non-render-target texture on stages 0-7, else a solid-color fallback
 		// created on demand. Always succeeds unless the device is unavailable.
@@ -262,6 +279,7 @@ namespace shared::common
 	private:
 		int secondary_blend_stage() const;
 		static uint32_t parse_ps_sampler_mask(const DWORD* bytecode);
+		static uint32_t parse_ps_light_flags(const DWORD* bytecode);
 		static uint32_t hash_shader_bytecode(const DWORD* bytecode);
 
 		bool enabled_ = true;
@@ -278,7 +296,7 @@ namespace shared::common
 
 		// VS/PS constant capture
 		float vs_const_[256 * 4] = {};
-		float ps_const_[32 * 4] = {};
+		float ps_const_[256 * 4] = {};
 
 		// Dirty tracking
 		bool world_dirty_ = false;
@@ -316,6 +334,10 @@ namespace shared::common
 		// renderer routes them through a dedicated water path.
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_water_surface_;
 		bool cur_ps_is_water_surface_ = false;
+
+		// Light constants each pixel shader reads (see cur_ps_light_flags).
+		std::unordered_map<IDirect3DPixelShader9*, uint32_t> ps_light_flags_;
+		uint32_t cur_ps_light_flags_ = 0;
 
 		// Solid-color fallback albedo for water draws with no stable static
 		// texture bound. Gives Remix a constant texture hash to remap.

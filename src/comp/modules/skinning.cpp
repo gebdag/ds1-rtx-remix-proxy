@@ -124,7 +124,32 @@ namespace comp
 			}
 			skin_exp_key_[i] = 0;
 			skin_exp_nv_[i] = 0;
+			skin_exp_fp_[i] = 0;
+			skin_exp_max_idx_[i] = 0;
 		}
+	}
+
+	uint64_t skinning::fingerprint(const unsigned char* src, UINT num_verts, UINT stride)
+	{
+		// FNV-1a over the full bytes of up to 64 vertices spread across the range,
+		// always including the first and the last.
+		uint64_t h = 0xCBF29CE484222325ull;
+		auto mix = [&h](const unsigned char* p, UINT n)
+		{
+			for (UINT i = 0; i < n; ++i)
+			{
+				h ^= p[i];
+				h *= 0x100000001B3ull;
+			}
+		};
+		mix(reinterpret_cast<const unsigned char*>(&num_verts), sizeof(num_verts));
+
+		constexpr UINT kSamples = 64;
+		const UINT step = num_verts > kSamples ? num_verts / kSamples : 1;
+		for (UINT v = 0; v < num_verts; v += step)
+			mix(&src[v * stride], stride);
+		mix(&src[(num_verts - 1) * stride], stride);
+		return h;
 	}
 
 	IDirect3DVertexBuffer9* skinning::get_expanded_vb(IDirect3DDevice9* dev,
@@ -140,9 +165,22 @@ namespace comp
 
 		int slot = key % SKIN_CACHE_SIZE;
 
-		// Cache hit
-		if (skin_exp_vb_[slot] && skin_exp_key_[slot] == key && skin_exp_nv_[slot] == num_verts)
+		// Lock source VB
+		unsigned char* src_data = nullptr;
+		UINT read_off = static_cast<UINT>(base_vtx) * stride;
+		if (FAILED(src_vb->Lock(read_off, num_verts * stride, reinterpret_cast<void**>(&src_data), D3DLOCK_READONLY)))
+			return nullptr;
+
+		const uint64_t fp = fingerprint(src_data, num_verts, stride);
+
+		// Cache hit: same range and still the same vertices
+		if (skin_exp_vb_[slot] && skin_exp_key_[slot] == key && skin_exp_nv_[slot] == num_verts &&
+			skin_exp_fp_[slot] == fp)
+		{
+			src_vb->Unlock();
+			cur_max_idx_ = skin_exp_max_idx_[slot];
 			return skin_exp_vb_[slot];
+		}
 
 		// Cache miss: evict and create
 		if (skin_exp_vb_[slot])
@@ -150,12 +188,6 @@ namespace comp
 			skin_exp_vb_[slot]->Release();
 			skin_exp_vb_[slot] = nullptr;
 		}
-
-		// Lock source VB
-		unsigned char* src_data = nullptr;
-		UINT read_off = static_cast<UINT>(base_vtx) * stride;
-		if (FAILED(src_vb->Lock(read_off, num_verts * stride, reinterpret_cast<void**>(&src_data), D3DLOCK_READONLY)))
-			return nullptr;
 
 		// Create expanded VB
 		IDirect3DVertexBuffer9* exp_vb = nullptr;
@@ -175,6 +207,7 @@ namespace comp
 			return nullptr;
 		}
 
+		cur_max_idx_ = 0;
 		for (UINT v = 0; v < num_verts; v++)
 			expand_skin_vertex(&dst_data[v * SKIN_VTX_SIZE], &src_data[v * stride], stride);
 
@@ -184,6 +217,8 @@ namespace comp
 		skin_exp_vb_[slot] = exp_vb;
 		skin_exp_key_[slot] = key;
 		skin_exp_nv_[slot] = num_verts;
+		skin_exp_fp_[slot] = fp;
+		skin_exp_max_idx_[slot] = cur_max_idx_;
 
 		return exp_vb;
 	}
@@ -197,39 +232,62 @@ namespace comp
 		auto* pos = reinterpret_cast<const float*>(&src[ffp.cur_decl_pos_off()]);
 		out[0] = pos[0]; out[1] = pos[1]; out[2] = pos[2];
 
-		// Blend weights (FLOAT3 at offset 12)
-		int num_weights = ffp.cur_decl_num_weights();
+		// Blend weights (FLOAT3 at offset 12). DS1's skinned vertex shaders
+		// (FRPG_*_PIWN*) read all four SHORT4N weights and divide by their sum
+		// before blending; FFP 3WEIGHTS derives the fourth as 1 - (w0 + w1 + w2),
+		// so the stored three must already be normalised for the two to agree.
 		auto bw_off = ffp.cur_decl_blend_weight_off();
 		auto bw_type = ffp.cur_decl_blend_weight_type();
 
-		if (bw_type == D3DDECLTYPE_FLOAT3 || bw_type == D3DDECLTYPE_FLOAT2 || bw_type == D3DDECLTYPE_FLOAT1)
+		float w[4] = {};
+		int w_count = 0;
+		switch (bw_type)
 		{
-			auto* bw = reinterpret_cast<const float*>(&src[bw_off]);
-			out[3] = (num_weights >= 1) ? bw[0] : 0.0f;
-			out[4] = (num_weights >= 2) ? bw[1] : 0.0f;
-			out[5] = (num_weights >= 3) ? bw[2] : 0.0f;
+		case D3DDECLTYPE_FLOAT1: w_count = 1; break;
+		case D3DDECLTYPE_FLOAT2: w_count = 2; break;
+		case D3DDECLTYPE_FLOAT3: w_count = 3; break;
+		case D3DDECLTYPE_FLOAT4: w_count = 4; break;
+		default: break;
+		}
+		if (w_count > 0)
+		{
+			auto* f = reinterpret_cast<const float*>(&src[bw_off]);
+			for (int i = 0; i < w_count; i++) w[i] = f[i];
 		}
 		else if (bw_type == D3DDECLTYPE_UBYTE4N)
 		{
-			auto* bw = &src[bw_off];
-			out[3] = bw[0] / 255.0f;
-			out[4] = bw[1] / 255.0f;
-			out[5] = bw[2] / 255.0f;
+			for (int i = 0; i < 4; i++) w[i] = src[bw_off + i] / 255.0f;
 		}
-		else if (bw_type == D3DDECLTYPE_SHORT4N)
+		else if (bw_type == D3DDECLTYPE_SHORT4N || bw_type == D3DDECLTYPE_SHORT2N)
 		{
 			auto* bw = reinterpret_cast<const short*>(&src[bw_off]);
-			out[3] = (num_weights >= 1) ? bw[0] / 32767.0f : 0.0f;
-			out[4] = (num_weights >= 2) ? bw[1] / 32767.0f : 0.0f;
-			out[5] = (num_weights >= 3) ? bw[2] / 32767.0f : 0.0f;
+			const int n = bw_type == D3DDECLTYPE_SHORT4N ? 4 : 2;
+			for (int i = 0; i < n; i++) w[i] = std::max(-1.0f, bw[i] / 32767.0f);
+		}
+
+		const float w_sum = w[0] + w[1] + w[2] + w[3];
+		if (std::fabs(w_sum) > 1e-6f)
+		{
+			for (int i = 0; i < 4; i++) w[i] /= w_sum;
 		}
 		else
 		{
-			out[3] = out[4] = out[5] = 0.0f;
+			// No usable weights: bind rigidly to the first index.
+			w[0] = 1.0f; w[1] = w[2] = w[3] = 0.0f;
 		}
+		out[3] = w[0];
+		out[4] = w[1];
+		out[5] = w[2];
 
 		// Blend indices (UBYTE4 at offset 24)
-		std::memcpy(&dst[24], &src[ffp.cur_decl_blend_indices_off()], 4);
+		const unsigned char* bi = &src[ffp.cur_decl_blend_indices_off()];
+		std::memcpy(&dst[24], bi, 4);
+		for (int i = 0; i < 4; i++)
+		{
+			// Indices whose weight is zero never reach the output.
+			if (w[i] != 0.0f && bi[i] > cur_max_idx_)
+				cur_max_idx_ = bi[i];
+		}
 
 		// Normal (FLOAT3 at offset 28)
 		if (ffp.cur_decl_has_normal())
@@ -286,23 +344,42 @@ namespace comp
 
 		const float* vs_const = ffp.vs_const_data();
 		int regs_per_bone = ffp.regs_per_bone();
-		int max_bones = (num_bones > 48) ? 48 : num_bones;
+		if (regs_per_bone != 3 && regs_per_bone != 4) return;
+
+		// The vertex shader indexes the palette with the vertex's blend indices,
+		// whatever the last constant write covered: upload every bone a vertex of
+		// this draw can reach, from the same constants the GPU would read.
+		const int palette_capacity = (256 - bone_start) / regs_per_bone;
+		int max_bones = std::max(num_bones, cur_max_idx_ + 1);
+		max_bones = std::min({ max_bones, palette_capacity, 256 });
+
+		// The main pass draws camera-relative; apply_transforms moves World into
+		// absolute space by adding the camera position, and every bone needs the
+		// same shift or the character renders offset by the camera position.
+		float off_x = 0.0f, off_y = 0.0f, off_z = 0.0f;
+		const bool offset = ffp.world_offset(off_x, off_y, off_z);
 
 		for (int i = 0; i < max_bones; i++)
 		{
+			// Each bone is three rows of a row-major 3x4 matrix, out = M * [p, 1];
+			// D3D wants the row-vector 4x4 form, i.e. its transpose.
 			const float* src = &vs_const[(bone_start + i * regs_per_bone) * 4];
 			float bone44[16];
 
-			if (regs_per_bone == 3)
+			bone44[0]  = src[0]; bone44[1]  = src[4]; bone44[2]  = src[8];  bone44[3]  = 0.0f;
+			bone44[4]  = src[1]; bone44[5]  = src[5]; bone44[6]  = src[9];  bone44[7]  = 0.0f;
+			bone44[8]  = src[2]; bone44[9]  = src[6]; bone44[10] = src[10]; bone44[11] = 0.0f;
+			bone44[12] = src[3]; bone44[13] = src[7]; bone44[14] = src[11]; bone44[15] = 1.0f;
+			if (regs_per_bone == 4)
 			{
-				// 4x3 packed -> 4x4 (transpose and expand)
-				shared::common::ffp_state::mat4_transpose(bone44, src);
-				// The 4th column of a 4x3 is implicitly [0,0,0,1]
-				bone44[3] = 0.0f; bone44[7] = 0.0f; bone44[11] = 0.0f; bone44[15] = 1.0f;
+				bone44[3] = src[12]; bone44[7] = src[13]; bone44[11] = src[14]; bone44[15] = src[15];
 			}
-			else
+
+			if (offset)
 			{
-				shared::common::ffp_state::mat4_transpose(bone44, src);
+				bone44[12] += off_x;
+				bone44[13] += off_y;
+				bone44[14] += off_z;
 			}
 
 			dev->SetTransform(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(i)),
@@ -390,9 +467,11 @@ namespace comp
 		}
 		case D3DDECLTYPE_UBYTE4N:
 		{
-			out[0] = (src[0] / 127.5f) - 1.0f;
-			out[1] = (src[1] / 127.5f) - 1.0f;
-			out[2] = (src[2] / 127.5f) - 1.0f;
+			// FLVER normals are (b - 127) / 127. The skinned vertex shaders decode
+			// the UBYTE4N input with (v - 0.49804) * 2.00787, which is exactly that.
+			out[0] = (src[0] - 127.0f) / 127.0f;
+			out[1] = (src[1] - 127.0f) / 127.0f;
+			out[2] = (src[2] - 127.0f) / 127.0f;
 			break;
 		}
 		default:

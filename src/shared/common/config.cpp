@@ -132,6 +132,17 @@ namespace shared::common
 		// [Hud]
 		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);
 
+		// [Sun]
+		sun.enabled = get_bool("Sun", "Enabled", true);
+		sun.intensity_scale = std::max(0.0f, get_float("Sun", "IntensityScale", 1.0f));
+		sun.angular_diameter = std::clamp(get_float("Sun", "AngularDiameter", 0.53f), 0.0f, 45.0f);
+		{
+			const auto colour = get_string("Sun", "FallbackColour", "");
+			float c[3] = {};
+			if (std::sscanf(colour.c_str(), "%f , %f , %f", &c[0], &c[1], &c[2]) == 3)
+				for (int i = 0; i < 3; ++i) sun.fallback_colour[i] = std::max(0.0f, c[i]);
+		}
+
 		// [Sky]
 		sky.mark_sky_draws = get_bool("Sky", "MarkSkyDraws", true);
 

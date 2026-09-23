@@ -2,6 +2,7 @@
 #include "game_lights.hpp"
 #include "../game/point_lights.hpp"
 #include "../game/map_lights.hpp"
+#include "../game/sun_light.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
@@ -44,12 +45,63 @@ namespace comp
 		radius_scale = cfg.lights.radius_scale;
 		game::point_lights::set_resolve_entities(cfg.lights.resolve_entity_params);
 		game::map_lights::set_enabled(cfg.lights.synthesized_lights);
+
+		sun_enabled = cfg.sun.enabled;
+		sun_intensity_scale = cfg.sun.intensity_scale;
+		sun_angular_diameter = cfg.sun.angular_diameter;
+		std::memcpy(sun_fallback_colour, cfg.sun.fallback_colour, sizeof(sun_fallback_colour));
 	}
 
 	game_lights::~game_lights()
 	{
 		destroy_all_handles();
+		release_sun();
 		p_this = nullptr;
+	}
+
+	// How the runtime treats API lights (ds1-dxvk-nr rtx_remix_api.cpp):
+	//  - the handle IS the hash;
+	//  - CreateLight applies at once; on a hash that already exists it updates that
+	//    light in place, but only applies the new values every frame when the light
+	//    is flagged isDynamic (a static one is put to sleep and frozen);
+	//  - DestroyLight is only queued, and the queue is flushed at Present.
+	// So a changed light must be updated with CreateLight alone. Destroying it first
+	// and re-creating it under the same hash lets the queued destroy remove the new
+	// light at Present: it shows for one frame and is gone until its next change.
+	bool game_lights::submit_light(const remixapi_LightInfo& info, remixapi_LightHandle& handle)
+	{
+		if (destroyed_this_frame(info.hash))
+			return false; // would be removed by this frame's pending destroy; retry next frame
+
+		remixapi_LightHandle out = nullptr;
+		if (shared::common::remix_api::get().m_bridge.CreateLight(&info, &out) != REMIXAPI_ERROR_CODE_SUCCESS)
+		{
+			handle = nullptr;
+			return false;
+		}
+		handle = out;
+		return true;
+	}
+
+	void game_lights::note_destroyed(uint64_t hash)
+	{
+		destroyed_frame_[hash] = shared::common::ffp_state::get().frame_count();
+	}
+
+	bool game_lights::destroyed_this_frame(uint64_t hash) const
+	{
+		const auto it = destroyed_frame_.find(hash);
+		return it != destroyed_frame_.end() && it->second == shared::common::ffp_state::get().frame_count();
+	}
+
+	void game_lights::release_sun()
+	{
+		if (sun_handle_ && remix_api_ready_)
+		{
+			shared::common::remix_api::get().m_bridge.DestroyLight(sun_handle_);
+			note_destroyed(sun_info_.hash);
+		}
+		sun_handle_ = nullptr;
 	}
 
 	void game_lights::release_light(live_light& light)
@@ -57,6 +109,7 @@ namespace comp
 		if (light.handle && remix_api_ready_)
 		{
 			shared::common::remix_api::get().m_bridge.DestroyLight(light.handle);
+			note_destroyed(light.hash);
 		}
 		light.handle = nullptr;
 	}
@@ -94,10 +147,16 @@ namespace comp
 
 	void game_lights::draw_light_instances()
 	{
-		if (!remix_api_ready_ || !enabled)
+		if (!remix_api_ready_)
 			return;
 
 		auto& api = shared::common::remix_api::get();
+		if (sun_handle_)
+			api.m_bridge.DrawLightInstance(sun_handle_);
+
+		if (!enabled)
+			return;
+
 		for (auto& [slot, light] : live_lights_)
 		{
 			if (light.handle)
@@ -109,7 +168,6 @@ namespace comp
 	// fresh handle under the same hash — Remix treats that as the same light moving.
 	void game_lights::sync_lights()
 	{
-		auto& api = shared::common::remix_api::get();
 		const UINT frame = shared::common::ffp_state::get().frame_count();
 
 		// Engine lights first, then the synthesized stand-ins for maps the engine never
@@ -175,8 +233,8 @@ namespace comp
 			if (unchanged)
 				continue;
 
-			release_light(light);
-
+			// Changed or new: (re)submit under the slot's hash, which updates an
+			// existing light in place (see submit_light).
 			light.hash = light_hash_for_slot(src.slot);
 			light.sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
 			light.sphere.pNext = nullptr;
@@ -190,12 +248,10 @@ namespace comp
 			light.info.pNext = &light.sphere;
 			light.info.hash = light.hash;
 			light.info.radiance = radiance;
+			light.info.isDynamic = TRUE;
 
-			if (api.m_bridge.CreateLight(&light.info, &light.handle) != REMIXAPI_ERROR_CODE_SUCCESS)
-			{
-				light.handle = nullptr;
+			if (!submit_light(light.info, light.handle) && !destroyed_this_frame(light.hash))
 				++create_failed_;
-			}
 		}
 
 		// Drop lights whose slot went dark this frame, otherwise Remix keeps rendering
@@ -214,24 +270,76 @@ namespace comp
 		}
 	}
 
-	void game_lights::frame_update()
+	// The game's key light travels along c92 (its shadow light along c175) and the
+	// HemDir3 shaders light with max(0, -dot(c92, N)) * c95 * albedo. A Remix distant
+	// light's direction is also the direction of travel, and its lambert response is
+	// albedo * radiance * cos, so c95 is used as the radiance unchanged.
+	void game_lights::sync_sun()
 	{
-		if (!enabled)
+		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(),
+			sun_fallback_colour);
+
+		remixapi_Float3D radiance = {
+			sun.key.colour[0] * sun_intensity_scale,
+			sun.key.colour[1] * sun_intensity_scale,
+			sun.key.colour[2] * sun_intensity_scale,
+		};
+		const bool lit = radiance.x > 0.0f || radiance.y > 0.0f || radiance.z > 0.0f;
+
+		if (!sun_enabled || !sun.valid || !lit)
 		{
-			if (!live_lights_.empty())
-				destroy_all_handles();
+			release_sun();
 			return;
 		}
+
+		const remixapi_Float3D direction = { sun.key.dir[0], sun.key.dir[1], sun.key.dir[2] };
+		const bool unchanged = sun_handle_ &&
+			sun_distant_.direction.x == direction.x &&
+			sun_distant_.direction.y == direction.y &&
+			sun_distant_.direction.z == direction.z &&
+			sun_distant_.angularDiameterDegrees == sun_angular_diameter &&
+			sun_info_.radiance.x == radiance.x &&
+			sun_info_.radiance.y == radiance.y &&
+			sun_info_.radiance.z == radiance.z;
+		if (unchanged)
+			return;
+
+		// Changed or new: submit under the same hash, updating the light in place.
+		sun_distant_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
+		sun_distant_.pNext = nullptr;
+		sun_distant_.direction = direction;
+		sun_distant_.angularDiameterDegrees = sun_angular_diameter;
+		sun_distant_.volumetricRadianceScale = 1.0f;
+
+		sun_info_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
+		sun_info_.pNext = &sun_distant_;
+		sun_info_.hash = string_hash64("ds1_sun");
+		sun_info_.radiance = radiance;
+		// Dynamic, or the runtime freezes it after a few static frames and later
+		// direction changes never land.
+		sun_info_.isDynamic = TRUE;
+
+		if (!submit_light(sun_info_, sun_handle_) && !destroyed_this_frame(sun_info_.hash))
+			++sun_create_failed_;
+	}
+
+	void game_lights::frame_update()
+	{
+		if (!enabled && !live_lights_.empty())
+			destroy_all_handles();
 
 		if (!try_init_remix_api())
 			return;
 
+		sync_sun();
+
+		if (!enabled)
+			return;
+
 		if (probe_light_mode_)
 		{
-			auto& api = shared::common::remix_api::get();
 			auto& light = live_lights_[-1];
 			light.last_seen_frame = shared::common::ffp_state::get().frame_count();
-			release_light(light);
 
 			light.sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
 			light.sphere.pNext = nullptr;
@@ -242,19 +350,92 @@ namespace comp
 
 			light.info.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
 			light.info.pNext = &light.sphere;
-			light.info.hash = string_hash64("ds1_probe_light");
+			light.hash = string_hash64("ds1_probe_light");
+			light.info.hash = light.hash;
 			light.info.radiance = { probe_radiance_, probe_radiance_, probe_radiance_ };
+			light.info.isDynamic = TRUE;
 
-			if (api.m_bridge.CreateLight(&light.info, &light.handle) != REMIXAPI_ERROR_CODE_SUCCESS)
-				light.handle = nullptr;
+			submit_light(light.info, light.handle);
 			return;
 		}
 
 		sync_lights();
 	}
 
+	void game_lights::sun_imgui()
+	{
+		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(),
+			sun_fallback_colour);
+
+		ImGui::Checkbox("Sun Enabled", &sun_enabled);
+		ImGui::SameLine();
+		if (!sun.valid)
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+				"no sun-direction draws for %u frames", sun.frames_since_seen);
+		else if (sun_handle_)
+			ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "[live]");
+		else
+			ImGui::TextDisabled("[off]");
+		if (sun_create_failed_ > 0)
+		{
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+				"Remix rejected %d sun CreateLight call(s)", sun_create_failed_);
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(
+				"Direction: the game's shadow light (pixel shader c175, ShadowBank), which every\n"
+				"shadowed shader reads; else directional light 0 (c92). Colour: light 0 (c95)\n"
+				"from a HemDir3 draw, else the last one seen, else the fallback colour.\n"
+				"Each frame the draws reading them vote, weighted by primitive count.");
+
+		ImGui::SliderFloat("Sun Intensity Scale", &sun_intensity_scale, 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+		ImGui::SliderFloat("Sun Angular Diameter", &sun_angular_diameter, 0.05f, 10.0f, "%.2f deg");
+		ImGui::ColorEdit3("Sun Fallback Colour", sun_fallback_colour, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+
+		auto show_light = [](const char* name, const game::sun_light::light& l)
+		{
+			ImGui::ColorButton(name, ImVec4(
+				std::min(1.0f, l.colour[0]), std::min(1.0f, l.colour[1]), std::min(1.0f, l.colour[2]), 1.0f),
+				ImGuiColorEditFlags_NoTooltip, ImVec2(14, 14));
+			ImGui::SameLine();
+			ImGui::Text("%s  dir (%.3f, %.3f, %.3f)  rgb (%.3f, %.3f, %.3f)", name,
+				l.dir[0], l.dir[1], l.dir[2], l.colour[0], l.colour[1], l.colour[2]);
+		};
+		show_light("Sun  ", sun.key);
+
+		static const char* kDirSource[] = { "none", "shadow light c175", "map light 0 c92", "character light 0 c92" };
+		static const char* kColourSource[] = { "fallback", "map light 0 c95", "character light 0 c95", "last c95 seen" };
+		const float to_sun_y = -sun.key.dir[1];
+		const float heading = std::atan2(-sun.key.dir[0], -sun.key.dir[2]) * 57.2957795f;
+		ImGui::TextDisabled("  elevation %.1f deg, heading %.1f deg  | direction: %s | colour: %s",
+			std::asin(std::clamp(to_sun_y, -1.0f, 1.0f)) * 57.2957795f, heading,
+			kDirSource[static_cast<int>(sun.dir_from)], kColourSource[static_cast<int>(sun.colour_from)]);
+		ImGui::TextDisabled("  last frame: %u shadow draws (%d values), %u map / %u character HemDir3 draws (%d values)",
+			sun.shadow_draws, sun.shadow_candidates, sun.map_dir3_draws, sun.chr_dir3_draws, sun.dir3_candidates);
+
+		if (const float* ps = game::sun_light::ps_constants(); ps && ImGui::TreeNode("Raw pixel shader constants"))
+		{
+			for (int reg : { 175, 121, 122, 92, 93, 94, 95, 96, 97, 98, 99, 86, 87 })
+				ImGui::Text("c%-3d  %9.4f %9.4f %9.4f %9.4f", reg,
+					ps[reg * 4 + 0], ps[reg * 4 + 1], ps[reg * 4 + 2], ps[reg * 4 + 3]);
+			ImGui::TreePop();
+		}
+		if (ImGui::TreeNode("Fill lights / hemisphere (not sent; Remix computes bounce)"))
+		{
+			show_light("Fill1", sun.fill[0]);
+			show_light("Fill2", sun.fill[1]);
+			ImGui::Text("Hemi up   (%.3f, %.3f, %.3f)", sun.hemi_up[0], sun.hemi_up[1], sun.hemi_up[2]);
+			ImGui::Text("Hemi down (%.3f, %.3f, %.3f)", sun.hemi_down[0], sun.hemi_down[1], sun.hemi_down[2]);
+			ImGui::TreePop();
+		}
+	}
+
 	void game_lights::tab_imgui()
 	{
+		sun_imgui();
+		ImGui::Separator();
+
 		ImGui::Checkbox("Game Lights Enabled", &enabled);
 		ImGui::SameLine();
 		ImGui::TextDisabled("(%d live / %d harvested)", active_light_count(), total_light_count());

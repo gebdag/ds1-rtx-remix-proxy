@@ -44,6 +44,13 @@ namespace comp
 		IDirect3DVertexBuffer9* skin_exp_vb_[SKIN_CACHE_SIZE] = {};
 		unsigned int skin_exp_key_[SKIN_CACHE_SIZE] = {};
 		unsigned int skin_exp_nv_[SKIN_CACHE_SIZE] = {};
+		// Sampled content fingerprint of the source range: the game can free a VB
+		// and create another at the same address, which a pointer key alone would
+		// serve the old character's vertices for.
+		uint64_t skin_exp_fp_[SKIN_CACHE_SIZE] = {};
+		// Highest blend index the expanded vertices use: the bones to upload.
+		int skin_exp_max_idx_[SKIN_CACHE_SIZE] = {};
+		int cur_max_idx_ = 0;
 
 		bool initialized_ = false;
 
@@ -54,6 +61,7 @@ namespace comp
 		IDirect3DVertexBuffer9* get_expanded_vb(IDirect3DDevice9* dev,
 			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride);
 		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, UINT stride);
+		static uint64_t fingerprint(const unsigned char* src, UINT num_verts, UINT stride);
 
 		// Bone upload
 		void upload_bones(IDirect3DDevice9* dev);

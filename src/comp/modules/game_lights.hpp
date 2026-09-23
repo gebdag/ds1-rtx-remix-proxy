@@ -30,6 +30,13 @@ namespace comp
 		float intensity_scale = 1.0f;
 		float radius_scale = 1.0f;
 
+		// The sun: the game's key directional light as a Remix distant light.
+		// Independent of `enabled`, which covers the point lights only.
+		bool sun_enabled = true;
+		float sun_intensity_scale = 1.0f;
+		float sun_angular_diameter = 0.53f;
+		float sun_fallback_colour[3] = { 0.7f, 0.7f, 0.7f };
+
 		int active_light_count() const { return static_cast<int>(live_lights_.size()); }
 		int total_light_count() const { return harvested_count_; }
 		int create_failed_count() const { return create_failed_; }
@@ -52,9 +59,25 @@ namespace comp
 
 		bool try_init_remix_api();
 		void sync_lights();
+		void sync_sun();
 		void release_light(live_light& light);
+		void release_sun();
+		bool submit_light(const remixapi_LightInfo& info, remixapi_LightHandle& handle);
+		void note_destroyed(uint64_t hash);
+		bool destroyed_this_frame(uint64_t hash) const;
+		void sun_imgui();
 
 		std::unordered_map<int, live_light> live_lights_;
+
+		remixapi_LightHandle sun_handle_ = nullptr;
+		remixapi_LightInfoDistantEXT sun_distant_ = {};
+		remixapi_LightInfo sun_info_ = {};
+		int sun_create_failed_ = 0;
+
+		// Frame in which each light hash was last destroyed. The runtime defers
+		// DestroyLight to Present and keys lights by hash, so a create for the same
+		// hash earlier in that frame is destroyed along with the old light.
+		std::unordered_map<uint64_t, UINT> destroyed_frame_;
 		int harvested_count_ = 0;
 		int synthetic_count_ = 0;   // of harvested_count_, how many are stand-ins
 		int create_failed_ = 0;   // Remix refused the light this frame
