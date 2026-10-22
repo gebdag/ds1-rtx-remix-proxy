@@ -28,6 +28,14 @@ namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
 	static int s_postfx_pass_idx = 0;
 
+	// Lookdev mode is the vanilla reference: draws and render targets go to the
+	// device untouched, past every Remix-oriented route (prepass drop, UV
+	// expansion, sky/HUD markers, post-FX skip, category filters, RT redirects).
+	bool lookdev_passthrough()
+	{
+		return shared::common::config::get().lookdev.enabled;
+	}
+
 	// D3DFORMAT is either a small enum value or a FourCC ('DXT1', 'ATI2', ...).
 	std::string format_tag(D3DFORMAT format)
 	{
@@ -447,6 +455,8 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_SetRenderTarget, RenderTargetIndex, pRenderTarget);
 		shared::common::ffp_state::get().on_set_render_target(RenderTargetIndex, pRenderTarget);
+		if (lookdev_passthrough())
+			return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, pRenderTarget);
 		auto* effective = rt_tracker::on_set_render_target(RenderTargetIndex, pRenderTarget);
 		return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, effective);
 	}
@@ -732,6 +742,8 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawPrimitive([[maybe_unused]] D3DPRIMITIVETYPE PrimitiveType, [[maybe_unused]] UINT StartVertex, [[maybe_unused]] UINT PrimitiveCount)
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitive, PrimitiveType, StartVertex, PrimitiveCount);
+		if (lookdev_passthrough())
+			return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
 		UINT num_verts = PrimitiveCount * 3;
 		if (PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLEFAN)
 			num_verts = PrimitiveCount + 2;
@@ -748,6 +760,8 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount)
 	{
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitive, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+		if (lookdev_passthrough())
+			return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		const auto insp = perf::inspector_on_draw("DIP", PrimitiveType, primCount, NumVertices,
 			BaseVertexIndex, startIndex, shared::common::ffp_state::get().stream_stride(0));
 		if (insp.drop)
@@ -761,6 +775,8 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		if (lookdev_passthrough())
+			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		{
 			UINT up_verts = PrimitiveCount * 3;
 			if (PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLEFAN)
@@ -799,6 +815,8 @@ namespace comp
 		[[maybe_unused]] UINT VertexStreamZeroStride)
 	{
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitiveUP, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		if (lookdev_passthrough())
+			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		{
 			const auto insp = perf::inspector_on_draw("DIPUP", PrimitiveType, PrimitiveCount, NumVertices,
 				0, 0, VertexStreamZeroStride);
@@ -1191,6 +1209,7 @@ namespace comp
 		HRESULT hres = m_pIDirect3D9->CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
 		shared::common::log("d3d9", "m_pIDirect3D9->CreateDevice", shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, false);
 		if (SUCCEEDED(hres) && *ppReturnedDeviceInterface) {
+			shared::globals::d3d_device_real = *ppReturnedDeviceInterface;
 			*ppReturnedDeviceInterface = new d3d9ex::D3D9Device(*ppReturnedDeviceInterface);
 			shared::globals::d3d_device = *ppReturnedDeviceInterface;
 		}
@@ -1310,6 +1329,7 @@ namespace comp
 		shared::common::log("d3d9", "m_pIDirect3D9Ex->CreateDevice", shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, false);
 
 		if (SUCCEEDED(hres) && *ppReturnedDeviceInterface) {
+			shared::globals::d3d_device_real = *ppReturnedDeviceInterface;
 			*ppReturnedDeviceInterface = new d3d9ex::D3D9Device(*ppReturnedDeviceInterface);
 			shared::globals::d3d_device = *ppReturnedDeviceInterface;
 		}

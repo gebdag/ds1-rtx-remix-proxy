@@ -6,6 +6,7 @@
 #include "modules/skinning.hpp"
 #include "modules/tracer.hpp"
 #include "modules/game_lights.hpp"
+#include "modules/lookdev_capture.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
@@ -32,7 +33,8 @@ namespace comp
 
 		// Retry Remix API init — the call in main() fails with NOT_INITIALIZED (code 11)
 		// because it runs before CreateDevice. By BeginScene the device exists.
-		if (!shared::common::remix_api::is_initialized())
+		// Not without Remix (lookdev mode): each attempt would log a warning.
+		if (!shared::common::remix_api::is_initialized() && shared::common::config::get().remix.enabled)
 			shared::common::remix_api::initialize(nullptr, nullptr, nullptr);
 
 		// Update game lights each frame
@@ -132,6 +134,10 @@ namespace comp
 		shared::common::loader::module_loader::register_module(std::make_unique<game_lights>());
 
 		shared::common::loader::module_loader::register_module(std::make_unique<shared::common::dinput_v2>());
+
+		// Lookdev frame capture: lookdev mode only (-lookdev, remix-comp-proxy.lookdev.ini)
+		if (cfg.lookdev.enabled)
+			shared::common::loader::module_loader::register_module(std::make_unique<lookdev_capture>());
 
 		game::d3dx_texture_watch::install();
 

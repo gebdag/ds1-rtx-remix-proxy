@@ -22,6 +22,8 @@ namespace shared::globals
 	extern void setup_homepath();
 
 	extern IDirect3DDevice9* d3d_device;
+	// The device the wrapper above forwards to (Remix bridge or system d3d9).
+	extern IDirect3DDevice9* d3d_device_real;
 	extern IDirect3D9* d3d9_interface;
 
 	// Module handle of the real d3d9 chain (Remix bridge or system d3d9.dll).

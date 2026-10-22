@@ -211,6 +211,11 @@ namespace shared::common
 		benchmark.settle_frames = get_int("Benchmark", "SettleFrames", 90);
 		benchmark.measure_frames = get_int("Benchmark", "MeasureFrames", 240);
 
+		// [Lookdev]
+		lookdev.enabled = get_bool("Lookdev", "Enabled", false);
+		lookdev.capture_key = get_int("Lookdev", "CaptureKey", VK_F9);
+		lookdev.output_dir = get_string("Lookdev", "OutputDir", "rtx_comp\\lookdev");
+
 		// [Perf] is read lazily by comp::game::render_toggles (the keys map 1:1
 		// to its toggle table) — nothing to parse here.
 

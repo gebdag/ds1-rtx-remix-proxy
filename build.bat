@@ -232,6 +232,10 @@ if exist "%ROOT%deploy.conf" (
 if not "!DEPLOY_TARGET!"=="" (
     if exist "!DEPLOY_TARGET!" (
         copy /y "%GAME_OUT%\d3d9.dll" "!DEPLOY_TARGET!\d3d9.dll" >nul
+        if errorlevel 1 (
+            echo ERROR: could not copy d3d9.dll to the game folder - is the game still running?
+            goto :fail
+        )
         :: PDB travels with the DLL (its embedded name), so crash dumps stay symbolizable.
         copy /y "%GAME_OUT%\%NAME%.pdb" "!DEPLOY_TARGET!\%NAME%.pdb" >nul
         :: Only copy INI on first deploy — never overwrite user's game-folder customizations.

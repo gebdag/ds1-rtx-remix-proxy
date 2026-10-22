@@ -306,6 +306,15 @@ namespace shared::common
 			int measure_frames = 240; // frames measured per phase
 		} benchmark;
 
+		// Lookdev frame capture (modules/lookdev_capture). Only lookdev\lookdev.ps1
+		// turns it on, in remix-comp-proxy.lookdev.ini; the normal INI never has it.
+		struct lookdev_settings
+		{
+			bool enabled = false;
+			int capture_key = VK_F9;
+			std::string output_dir = "rtx_comp\\lookdev";
+		} lookdev;
+
 	private:
 		std::string ini_path_;
 		bool loaded_ = false;

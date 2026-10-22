@@ -95,8 +95,11 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		std::cout << "> Running as d3d9.dll proxy\n\n";
 		shared::common::set_console_color_default();
 
-		// Load config from INI file next to the DLL
-		shared::common::config::get().load(shared::globals::root_path + "\\remix-comp-proxy.ini");
+		// Load config from INI file next to the DLL. -lookdev (lookdev\lookdev.ps1)
+		// selects the lookdev INI instead: vanilla rendering plus frame capture.
+		const char* ini_name = shared::common::flags::has_flag("lookdev")
+			? "\\remix-comp-proxy.lookdev.ini" : "\\remix-comp-proxy.ini";
+		shared::common::config::get().load(shared::globals::root_path + ini_name);
 
 		// Apply fixed-address game patches as early as possible.
 		// Effect disabling lives in game/render_toggles.cpp now — schedule-level
