@@ -10,6 +10,11 @@ namespace comp::game::camera
 	// Returns true if the character position could be read from game memory.
 	bool get_char_pos(float& x, float& y, float& z);
 
+	// Character facing as the angle stored beside the position in the player's
+	// position block (+0x04, radians); see
+	// game_lights' player light readout, which prints it next to the camera heading.
+	bool get_char_heading(float& radians);
+
 	// True camera world position recovered from the main culling frustum's apex,
 	// in the engine's raw {X, Z, Y} order. False until a main camera frustum has been
 	// identified (see the lock in camera.cpp).

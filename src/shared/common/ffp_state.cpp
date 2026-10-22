@@ -384,6 +384,17 @@ namespace shared::common
 		return camera_override_fn_(x, y, z);
 	}
 
+	bool ffp_state::view_axes(float* right, float* forward) const
+	{
+		if (!transforms_cached_)
+			return false;
+		// Row-vector View maps world -> view, so the view axes in world space are its
+		// columns: x (right) = column 0, z (forward) = column 2.
+		right[0] = cached_view_[0]; right[1] = cached_view_[4]; right[2] = cached_view_[8];
+		forward[0] = cached_view_[2]; forward[1] = cached_view_[6]; forward[2] = cached_view_[10];
+		return true;
+	}
+
 	void ffp_state::on_set_texture(UINT stage, IDirect3DBaseTexture9* texture)
 	{
 		if (stage < 8)

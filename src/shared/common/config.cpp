@@ -54,6 +54,22 @@ namespace shared::common
 		return get_int(section, key, default_val ? 1 : 0) != 0;
 	}
 
+	bool config::get_float3(const char* section, const char* key, float* out) const
+	{
+		const auto str = get_string(section, key, "");
+		float v[3] = {};
+		if (std::sscanf(str.c_str(), "%f , %f , %f", &v[0], &v[1], &v[2]) != 3)
+			return false;
+		for (int i = 0; i < 3; ++i) out[i] = v[i];
+		return true;
+	}
+
+	bool config::set_string(const char* section, const char* key, const std::string& value) const
+	{
+		if (!loaded_ || ini_path_.empty()) return false;
+		return WritePrivateProfileStringA(section, key, value.c_str(), ini_path_.c_str()) != FALSE;
+	}
+
 	void config::parse_all()
 	{
 		// [Remix]
@@ -148,6 +164,22 @@ namespace shared::common
 
 		// [Hud]
 		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);
+
+		// [PlayerLight]
+		player_light.enabled = get_bool("PlayerLight", "Enabled", true);
+		player_light.use_game_colour = get_bool("PlayerLight", "UseGameColour", true);
+		get_float3("PlayerLight", "Colour", player_light.colour);
+		player_light.use_game_range = get_bool("PlayerLight", "UseGameRange", true);
+		player_light.range = std::max(0.01f, get_float("PlayerLight", "Range", 7.0f));
+		player_light.use_game_radius = get_bool("PlayerLight", "UseGameRadius", true);
+		player_light.radius = std::max(0.01f, get_float("PlayerLight", "Radius", 0.5f));
+		player_light.intensity = std::max(0.0f, get_float("PlayerLight", "Intensity", 1.0f));
+		get_float3("PlayerLight", "Offset", player_light.offset);
+		{
+			const auto frame = get_string("PlayerLight", "OffsetFrame", "View");
+			player_light.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0
+				: _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
+		}
 
 		// [Sun]
 		sun.enabled = get_bool("Sun", "Enabled", true);

@@ -280,6 +280,16 @@ namespace comp::game::camera
 		return read_player_pos(x, y, z);
 	}
 
+	bool get_char_heading(float& radians)
+	{
+		if (!world_chr_man_addr) return false;
+		const DWORD wcm = safe_read_ptr(world_chr_man_addr);
+		const DWORD player_entity = wcm ? safe_read_ptr(wcm + 0x18) : 0;
+		if (!player_entity) return false;
+		radians = safe_read_float(player_entity + 0x04);
+		return std::isfinite(radians) && std::fabs(radians) <= 7.0f;
+	}
+
 	// --- ImGui tab ---
 
 	void tab_imgui()

@@ -118,6 +118,10 @@ namespace shared::common
 		// (and x/y/z untouched) when no offset is being applied.
 		bool world_offset(float& x, float& y, float& z) const;
 
+		// World-space right and forward axes of the last main camera handed to Remix
+		// (from the cached View matrix). False before any camera has been seen.
+		bool view_axes(float* right, float* forward) const;
+
 		// --- Diagnostic data access ---
 
 		const float* vs_const_data() const { return vs_const_; }

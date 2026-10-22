@@ -40,6 +40,7 @@ namespace comp::game::map_lights
 	{
 		point_lights::light base;
 		size_t category = 0;
+		std::string name;       // last column of the table row, e.g. "o4404_1000"
 	};
 
 	static std::vector<raw_light> s_raw;
@@ -207,6 +208,7 @@ namespace comp::game::map_lights
 		std::string first, second;
 		in >> first >> second;
 		out.category = category_index(second.empty() ? "uncategorised" : first);
+		out.name = second.empty() ? first : second;
 
 		// The conversion the engine's own row evaluator applies (VA 0x00FC83D0):
 		// 0-255 components scaled by a percentage.
@@ -317,6 +319,16 @@ namespace comp::game::map_lights
 	}
 
 	bool enabled() { return s_enabled; }
+
+	bool describe(int slot, std::string& name, std::string& category)
+	{
+		const int index = slot - SYNTHETIC_SLOT_BASE;
+		if (index < 0 || index >= static_cast<int>(s_raw.size()))
+			return false;
+		name = s_raw[index].name;
+		category = s_categories[s_raw[index].category].name;
+		return true;
+	}
 	void reload() { s_force_reload = true; }
 
 	const std::vector<category>& categories() { return s_categories; }

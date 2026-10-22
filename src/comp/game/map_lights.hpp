@@ -55,6 +55,10 @@ namespace comp::game::map_lights
 	bool save_categories();
 	const std::string& categories_path();
 
+	// Row name and category name of a synthesized light (slot ids from get()).
+	// False for any slot that is not a synthesized light on the current map.
+	bool describe(int slot, std::string& name, std::string& category);
+
 	// Path last read for the map table, and why it produced nothing if it did.
 	const std::string& source_path();
 	const std::string& status();

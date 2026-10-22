@@ -14,6 +14,13 @@ namespace shared::common
 		std::string get_string(const char* section, const char* key, const char* default_val) const;
 		float get_float(const char* section, const char* key, float default_val) const;
 		bool get_bool(const char* section, const char* key, bool default_val) const;
+		// "x, y, z" -> out; leaves out untouched when the key is missing or malformed.
+		bool get_float3(const char* section, const char* key, float* out) const;
+
+		// Writes one key back to the loaded INI. False when no INI is loaded or the
+		// write fails.
+		bool set_string(const char* section, const char* key, const std::string& value) const;
+		const std::string& ini_path() const { return ini_path_; }
 
 		struct ffp_settings
 		{
@@ -224,6 +231,27 @@ namespace shared::common
 			// engine never lights (Blighttown's torches and friends).
 			bool synthesized_lights = true;
 		} lights;
+
+		// The light the game hangs on the player's head (a LerpBank point light on a
+		// character dummy-poly, coloured by the current area's POINT_LIGHT_BANK). It is
+		// split out of the harvested lights so it can be tuned on its own; [Lights]
+		// scales do not touch it. Each Use* key follows the game's value when 1.
+		struct player_light_settings
+		{
+			bool enabled = true;
+			bool use_game_colour = true;
+			float colour[3] = { 1.0f, 0.82f, 0.51f };
+			bool use_game_range = true;
+			float range = 7.0f;          // dwindle end: sets the radiance, like the other lights
+			bool use_game_radius = true;
+			float radius = 0.5f;         // emitter sphere radius
+			float intensity = 1.0f;      // radiance multiplier
+			// How Offset is applied: 0 world axes (x, y, z); 1 view: turns with the camera
+			// heading (right, up, forward); 2 character: turns with the body (right, up,
+			// forward). View and character use the heading only, so the light stays level.
+			int offset_frame = 1;
+			float offset[3] = {};
+		} player_light;
 
 		struct sun_settings
 		{
