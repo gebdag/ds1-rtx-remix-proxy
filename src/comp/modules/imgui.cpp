@@ -441,6 +441,38 @@ namespace comp
 				? "(stock game behavior)"
 				: (frustum_radius > 0.0f ? "(modified off mode)" : "(fully disabled)"));
 
+			const bool fully_disabled = !frustum_culling_enabled && frustum_radius <= 0.0f;
+			ImGui::SameLine();
+			bool keep_light_blockers = game::frustum_culling::keeps_light_blockers();
+			ImGui::BeginDisabled(fully_disabled);
+			if (ImGui::Checkbox("Keep Light Blockers", &keep_light_blockers))
+				game::frustum_culling::set_keep_light_blockers(keep_light_blockers);
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip(
+					"Keeps large geometry the game culls but the path tracer needs to stop light leaking:\n"
+					"off-screen walls, roofs and cliff faces near the camera, or whose shadow along the\n"
+					"sun direction falls into view. Small props stay culled.\n"
+					"Has no effect while culling is fully disabled (everything is drawn anyway).");
+
+			if (keep_light_blockers && !fully_disabled)
+			{
+				auto blockers = game::frustum_culling::light_blockers();
+				bool changed = false;
+				changed |= ImGui::SliderFloat("Blocker Min Size", &blockers.min_size, 0.0f, 100.0f, "%.1f");
+				changed |= ImGui::SliderFloat("Blocker Near Range", &blockers.near_range, 0.0f, 300.0f, "%.1f");
+				changed |= ImGui::SliderFloat("Blocker Sun Reach", &blockers.sun_reach, 0.0f, 1000.0f, "%.1f");
+				if (changed)
+					game::frustum_culling::set_light_blockers(blockers);
+
+				const auto stats = game::frustum_culling::last_frame_light_blockers();
+				ImGui::TextDisabled("Last frame: %u culled, kept %u near + %u by sun (%u regions)",
+					stats.rejected, stats.kept_near, stats.kept_sun, stats.kept_regions);
+				if (stats.unreadable_boxes)
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+						"%u oriented boxes skipped: transform layout not recognised", stats.unreadable_boxes);
+			}
+
 			float frustum_radius_edit = frustum_radius;
 			ImGui::BeginDisabled(frustum_culling_enabled);
 			if (ImGui::SliderFloat("Culling-Off Radius", &frustum_radius_edit, 0.0f, 500.0f, "%.1f"))

@@ -212,6 +212,15 @@ namespace comp::game::sun_light
 		return g_state;
 	}
 
+	bool key_direction(float* out_dir)
+	{
+		if (!g_state.valid)
+			return false;
+		for (int i = 0; i < 3; ++i)
+			out_dir[i] = g_state.key.dir[i];
+		return true;
+	}
+
 	const float* ps_constants()
 	{
 		return g_ps_const;

@@ -60,6 +60,10 @@ namespace comp::game::sun_light
 	// when no draw has ever carried the key light's colour.
 	const state& current(unsigned int frame, const float* fallback_colour);
 
+	// The sun's propagation direction from the last completed vote, without
+	// closing the current one. False while no direction is valid.
+	bool key_direction(float* out_dir);
+
 	// The live constant shadow, for the raw-register readout (null before the
 	// first vote).
 	const float* ps_constants();

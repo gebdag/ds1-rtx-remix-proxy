@@ -1,8 +1,11 @@
 #include "std_include.hpp"
 #include "frustum_culling.hpp"
 #include "camera.hpp"
+#include "sun_light.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
+
+#include <atomic>
 
 namespace comp::game::frustum_culling
 {
@@ -15,7 +18,7 @@ namespace comp::game::frustum_culling
 	// True layouts of the bounds the engine hands each test
 	// (analysis/ghidra_camera_culling.md §1). The leaf tests do NOT take min/max
 	// AABBs: 0x5C5720 tests a sphere-swept segment (capsule) and 0x5C5870 a
-	// sphere-swept parallelogram. Only the coarse region test takes two corners.
+	// sphere-swept parallelogram. Only the region test takes two corners.
 	struct swept_segment_bounds // 0x5C5720
 	{
 		float origin[4]; // world position A
@@ -37,28 +40,48 @@ namespace comp::game::frustum_culling
 		float corner_b[4];
 	};
 
-	using coarse_frustum_fn = int(__cdecl*)(void*, const region_bounds*);
+	// 0x5AEF50 moves the frustum into the box's local space (transposed transform)
+	// and runs the region test there against the box [-half_extent, +half_extent].
+	struct oriented_box_bounds
+	{
+		float half_extent[4];
+		float transform[16]; // local -> world, row-vector convention: rows 0-2 axes, row 3 translation
+	};
+
+	using region_frustum_fn = int(__cdecl*)(void*, const region_bounds*);
 	using segment_frustum_fn = int(__cdecl*)(void*, const swept_segment_bounds*);
 	using parallelogram_frustum_fn = int(__cdecl*)(void*, const swept_parallelogram_bounds*);
+	using oriented_box_frustum_fn = int(__cdecl*)(void*, const oriented_box_bounds*);
 
-	// World-geometry frustum tests reached from HGFrustum virtual wrappers.
-	// Return 0 = outside, 1 = straddling, 2 = fully inside. The proxy detours them
-	// to preserve stock behavior, fully disable culling, or relax culling within a
-	// radius of the tested frustum's own apex (the camera position).
+	// World-geometry frustum tests reached from the HGFrustum virtual wrappers
+	// (vtable 0x11E0324 slots +0x18..+0x24). Return 0 = outside, 1 = straddling,
+	// 2 = fully inside. The proxy detours them to preserve stock behavior, fully
+	// disable culling, relax culling within a radius of the tested frustum's own
+	// apex, and/or keep large light blockers the engine would cull.
 	static constexpr patch_site PATCH_SITES[] = {
-		{ 0x00193E40, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } },
-		{ 0x001C5720, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } },
-		{ 0x001C5870, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } },
+		{ 0x00193E40, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } }, // region AABB
+		{ 0x001C5720, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } }, // swept segment
+		{ 0x001C5870, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } }, // swept parallelogram
+		{ 0x001AEF50, { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0 } }, // oriented box
 	};
 
 	static bool available_ = false;
 	static bool enabled_ = true;
 	static bool hooks_installed_ = false;
 	static float radius_ = 0.0f;
+	static bool keep_light_blockers_ = false;
+	static light_blocker_settings blocker_settings_;
 
-	static coarse_frustum_fn coarse_frustum_original_ = nullptr;
+	static region_frustum_fn region_frustum_original_ = nullptr;
 	static segment_frustum_fn segment_frustum_original_ = nullptr;
 	static parallelogram_frustum_fn parallelogram_frustum_original_ = nullptr;
+	static oriented_box_frustum_fn oriented_box_frustum_original_ = nullptr;
+
+	// The oriented-box test calls the region test with a frustum it built on its own
+	// stack in box-local space. That inner call is part of the outer test, not a
+	// separate world-space query: it must reach the engine untouched and must not be
+	// solved for an apex (the pointer is reused with different planes every call).
+	static thread_local bool in_oriented_box_test_ = false;
 
 	static DWORD patch_address(const patch_site& site)
 	{
@@ -78,6 +101,31 @@ namespace comp::game::frustum_culling
 	static UINT current_frame()
 	{
 		return shared::common::ffp_state::get().frame_count();
+	}
+
+	static bool fully_disabled()
+	{
+		return !enabled_ && radius_ <= 0.0f;
+	}
+
+	// --- Per-frame light blocker counters ----------------------------------------
+
+	static std::atomic<UINT> blocker_rejected_ = 0;
+	static std::atomic<UINT> blocker_kept_near_ = 0;
+	static std::atomic<UINT> blocker_kept_sun_ = 0;
+	static std::atomic<UINT> blocker_kept_regions_ = 0;
+	static std::atomic<UINT> blocker_unreadable_boxes_ = 0;
+	static light_blocker_stats blocker_last_frame_;
+
+	static void publish_blocker_stats()
+	{
+		blocker_last_frame_ = {
+			blocker_rejected_.exchange(0, std::memory_order_relaxed),
+			blocker_kept_near_.exchange(0, std::memory_order_relaxed),
+			blocker_kept_sun_.exchange(0, std::memory_order_relaxed),
+			blocker_kept_regions_.exchange(0, std::memory_order_relaxed),
+			blocker_unreadable_boxes_.exchange(0, std::memory_order_relaxed),
+		};
 	}
 
 	// --- Camera apex recovery -------------------------------------------------
@@ -136,6 +184,7 @@ namespace comp::game::frustum_culling
 		{
 			apex_frame_ = frame;
 			apex_sample_count_ = 0;
+			publish_blocker_stats();
 		}
 
 		for (int i = 0; i < apex_sample_count_; ++i)
@@ -172,7 +221,23 @@ namespace comp::game::frustum_culling
 		return count;
 	}
 
-	// --- Distance from the relaxation origin to the tested shape ---------------
+	// --- Tested shapes, reduced to what the relaxation policies need -------------
+
+	enum class shape_kind { region, segment, parallelogram, oriented_box };
+
+	struct shape_summary
+	{
+		shape_kind kind;
+		float center[3];
+		float bounding_radius;    // sphere around the whole swept shape
+		float core_distance_sq;   // apex to the unswept core shape
+		float sweep_radius;       // added to the core on every side
+	};
+
+	static float length3(const float x, const float y, const float z)
+	{
+		return std::sqrt(x * x + y * y + z * z);
+	}
 
 	static float distance_sq_point_to_segment(
 		const float px, const float py, const float pz,
@@ -239,141 +304,282 @@ namespace comp::game::frustum_culling
 		return dx * dx + dy * dy + dz * dz;
 	}
 
-	static bool within_radius(const apex_sample* apex, const float distance_sq, const float shape_radius)
+	static shape_summary summarize(const region_bounds& b, const apex_sample& apex)
 	{
-		if (!apex)
+		const float* a = b.corner_a;
+		const float* c = b.corner_b;
+		return {
+			shape_kind::region,
+			{ (a[0] + c[0]) * 0.5f, (a[1] + c[1]) * 0.5f, (a[2] + c[2]) * 0.5f },
+			0.5f * length3(c[0] - a[0], c[1] - a[1], c[2] - a[2]),
+			distance_sq_point_to_aabb(apex.x, apex.y, apex.z, a, c),
+			0.0f,
+		};
+	}
+
+	static shape_summary summarize(const swept_segment_bounds& b, const apex_sample& apex)
+	{
+		const float* o = b.origin;
+		const float* e = b.extent;
+		const float sweep = std::max(0.0f, b.radius);
+		return {
+			shape_kind::segment,
+			{ o[0] + e[0] * 0.5f, o[1] + e[1] * 0.5f, o[2] + e[2] * 0.5f },
+			0.5f * length3(e[0], e[1], e[2]) + sweep,
+			distance_sq_point_to_segment(apex.x, apex.y, apex.z, o[0], o[1], o[2], e[0], e[1], e[2]),
+			sweep,
+		};
+	}
+
+	static shape_summary summarize(const swept_parallelogram_bounds& b, const apex_sample& apex)
+	{
+		const float* o = b.origin;
+		const float* d1 = b.dir1;
+		const float* d2 = b.dir2;
+		const float sweep = std::max(0.0f, b.radius);
+		const float diagonal = std::max(
+			length3(d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2]),
+			length3(d1[0] - d2[0], d1[1] - d2[1], d1[2] - d2[2]));
+		return {
+			shape_kind::parallelogram,
+			{ o[0] + (d1[0] + d2[0]) * 0.5f, o[1] + (d1[1] + d2[1]) * 0.5f, o[2] + (d1[2] + d2[2]) * 0.5f },
+			0.5f * diagonal + sweep,
+			distance_sq_point_to_parallelogram(apex.x, apex.y, apex.z, o, d1, d2),
+			sweep,
+		};
+	}
+
+	// False when the transform is not an affine row-vector matrix, i.e. when this
+	// layout reading does not hold for the box at hand.
+	static bool summarize(const oriented_box_bounds& b, const apex_sample& apex, shape_summary& out)
+	{
+		const float* m = b.transform;
+		const bool affine_row_vector =
+			std::fabs(m[3]) < 1.0e-3f && std::fabs(m[7]) < 1.0e-3f && std::fabs(m[11]) < 1.0e-3f &&
+			std::fabs(m[15] - 1.0f) < 1.0e-3f;
+		if (!affine_row_vector)
 		{
 			return false;
 		}
-		const float allowed = radius_ + std::max(0.0f, shape_radius);
-		return distance_sq <= allowed * allowed;
+
+		const float* axes[3] = { &m[0], &m[4], &m[8] };
+		const float* center = &m[12];
+		const float r[3] = { apex.x - center[0], apex.y - center[1], apex.z - center[2] };
+
+		float closest[3] = { center[0], center[1], center[2] };
+		float half_diagonal_sq = 0.0f;
+		for (int i = 0; i < 3; ++i)
+		{
+			const float* axis = axes[i];
+			const float axis_sq = axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2];
+			const float half = std::fabs(b.half_extent[i]);
+			half_diagonal_sq += axis_sq * half * half;
+			if (axis_sq <= 1.0e-8f)
+			{
+				continue;
+			}
+			const float local = std::clamp((r[0] * axis[0] + r[1] * axis[1] + r[2] * axis[2]) / axis_sq, -half, half);
+			for (int k = 0; k < 3; ++k)
+			{
+				closest[k] += axis[k] * local;
+			}
+		}
+
+		const float dx = apex.x - closest[0];
+		const float dy = apex.y - closest[1];
+		const float dz = apex.z - closest[2];
+		out = {
+			shape_kind::oriented_box,
+			{ center[0], center[1], center[2] },
+			std::sqrt(half_diagonal_sq),
+			dx * dx + dy * dy + dz * dz,
+			0.0f,
+		};
+		return true;
+	}
+
+	// --- Relaxation policies ------------------------------------------------------
+	//
+	// Culling-off radius: with engine culling disabled and a radius set, any bounds
+	// within the radius of the tested frustum's own apex is forced fully visible — no
+	// visibility history required, so geometry that was never on screen (e.g. behind
+	// the player on approach) comes back too. The region test is relaxed the same way,
+	// because a failed region test prunes the whole subtree before the leaf tests ever
+	// see its contents.
+	//
+	// Light blockers: a path tracer needs off-screen geometry that stands between the
+	// visible scene and the sky or sun, but only the large pieces matter — a wall or a
+	// roof, not a crate. A rejected shape of at least min_size is kept when it lies
+	// within near_range of the camera (roofs, walls behind the player) or when its
+	// shadow — the shape swept along the sun's direction by sun_reach — falls into the
+	// view frustum. Only perspective frustums qualify, so the orthographic shadow
+	// cascades keep stock culling. Kept shapes report "straddling" rather than "fully
+	// inside" so a kept region still has its contents tested one by one.
+
+	static bool within_culling_off_radius(const shape_summary& s)
+	{
+		const float allowed = radius_ + s.sweep_radius;
+		return s.core_distance_sq <= allowed * allowed;
+	}
+
+	static bool shadow_reaches_view(void* frustum, const shape_summary& s)
+	{
+		float sun_dir[3];
+		if (blocker_settings_.sun_reach <= 0.0f || !sun_light::key_direction(sun_dir))
+		{
+			return false;
+		}
+
+		const float reach = blocker_settings_.sun_reach;
+		const swept_segment_bounds shadow = {
+			{ s.center[0], s.center[1], s.center[2], 1.0f },
+			{ sun_dir[0] * reach, sun_dir[1] * reach, sun_dir[2] * reach, 0.0f },
+			s.bounding_radius,
+		};
+		return segment_frustum_original_(frustum, &shadow) != 0;
+	}
+
+	// Returns the visibility to report for a light blocker, or 0 to keep it culled.
+	static int keep_as_light_blocker(void* frustum, const shape_summary& s)
+	{
+		blocker_rejected_.fetch_add(1, std::memory_order_relaxed);
+		if (2.0f * s.bounding_radius < blocker_settings_.min_size)
+		{
+			return 0;
+		}
+
+		const float surface_distance = std::max(0.0f, std::sqrt(s.core_distance_sq) - s.sweep_radius);
+		const bool close_to_camera = surface_distance <= blocker_settings_.near_range;
+		if (!close_to_camera && !shadow_reaches_view(frustum, s))
+		{
+			return 0;
+		}
+
+		(close_to_camera ? blocker_kept_near_ : blocker_kept_sun_).fetch_add(1, std::memory_order_relaxed);
+		if (s.kind == shape_kind::region)
+		{
+			blocker_kept_regions_.fetch_add(1, std::memory_order_relaxed);
+		}
+		return 1;
+	}
+
+	// Decides the visibility of a shape the engine rejected (result 0).
+	static int relax_rejected(void* frustum, const shape_summary& s)
+	{
+		if (!enabled_ && radius_ > 0.0f && within_culling_off_radius(s))
+		{
+			return 2;
+		}
+		if (keep_light_blockers_)
+		{
+			return keep_as_light_blocker(frustum, s);
+		}
+		return 0;
+	}
+
+	static bool any_relaxation()
+	{
+		return !enabled_ || keep_light_blockers_;
 	}
 
 	// --- Hooks ------------------------------------------------------------------
-	//
-	// Relaxation policy: with culling disabled and a radius set, any bounds whose
-	// swept shape lies within the radius of the tested frustum's own apex is forced
-	// fully visible — no visibility history required, so geometry that was never
-	// on screen (e.g. behind the player on approach) comes back too. The coarse
-	// region test is relaxed the same way, because a failed region test prunes the
-	// whole subtree before the leaf tests ever see its contents.
 
-	static int __cdecl coarse_frustum_hk(void* frustum, const region_bounds* region)
+	static int __cdecl region_frustum_hk(void* frustum, const region_bounds* region)
 	{
-		const apex_sample* apex = apex_for_frustum(frustum);
-
-		if (enabled_)
+		if (in_oriented_box_test_)
 		{
-			return coarse_frustum_original_(frustum, region);
+			return region_frustum_original_(frustum, region);
 		}
 
-		if (radius_ <= 0.0f)
+		const apex_sample* apex = apex_for_frustum(frustum);
+		if (fully_disabled())
 		{
 			return 2;
 		}
 
-		const int original_result = coarse_frustum_original_(frustum, region);
-		if (original_result != 0 || !region)
+		const int result = region_frustum_original_(frustum, region);
+		if (result != 0 || !region || !apex || !any_relaxation())
 		{
-			return original_result;
+			return result;
 		}
-
-		const float distance_sq = apex
-			? distance_sq_point_to_aabb(apex->x, apex->y, apex->z, region->corner_a, region->corner_b)
-			: 0.0f;
-		return within_radius(apex, distance_sq, 0.0f) ? 2 : original_result;
+		return relax_rejected(frustum, summarize(*region, *apex));
 	}
 
 	static int __cdecl segment_frustum_hk(void* frustum, const swept_segment_bounds* bounds)
 	{
 		const apex_sample* apex = apex_for_frustum(frustum);
-
-		if (enabled_)
-		{
-			return segment_frustum_original_(frustum, bounds);
-		}
-
-		if (radius_ <= 0.0f)
+		if (fully_disabled())
 		{
 			return 2;
 		}
 
-		const int original_result = segment_frustum_original_(frustum, bounds);
-		if (original_result != 0 || !bounds)
+		const int result = segment_frustum_original_(frustum, bounds);
+		if (result != 0 || !bounds || !apex || !any_relaxation())
 		{
-			return original_result;
+			return result;
 		}
-
-		const float distance_sq = apex
-			? distance_sq_point_to_segment(apex->x, apex->y, apex->z,
-				bounds->origin[0], bounds->origin[1], bounds->origin[2],
-				bounds->extent[0], bounds->extent[1], bounds->extent[2])
-			: 0.0f;
-		return within_radius(apex, distance_sq, bounds->radius) ? 2 : original_result;
+		return relax_rejected(frustum, summarize(*bounds, *apex));
 	}
 
 	static int __cdecl parallelogram_frustum_hk(void* frustum, const swept_parallelogram_bounds* bounds)
 	{
 		const apex_sample* apex = apex_for_frustum(frustum);
-
-		if (enabled_)
-		{
-			return parallelogram_frustum_original_(frustum, bounds);
-		}
-
-		if (radius_ <= 0.0f)
+		if (fully_disabled())
 		{
 			return 2;
 		}
 
-		const int original_result = parallelogram_frustum_original_(frustum, bounds);
-		if (original_result != 0 || !bounds)
+		const int result = parallelogram_frustum_original_(frustum, bounds);
+		if (result != 0 || !bounds || !apex || !any_relaxation())
 		{
-			return original_result;
+			return result;
+		}
+		return relax_rejected(frustum, summarize(*bounds, *apex));
+	}
+
+	static int __cdecl oriented_box_frustum_hk(void* frustum, const oriented_box_bounds* box)
+	{
+		const apex_sample* apex = apex_for_frustum(frustum);
+		if (fully_disabled())
+		{
+			return 2;
 		}
 
-		const float distance_sq = apex
-			? distance_sq_point_to_parallelogram(apex->x, apex->y, apex->z,
-				bounds->origin, bounds->dir1, bounds->dir2)
-			: 0.0f;
-		return within_radius(apex, distance_sq, bounds->radius) ? 2 : original_result;
+		in_oriented_box_test_ = true;
+		const int result = oriented_box_frustum_original_(frustum, box);
+		in_oriented_box_test_ = false;
+		if (result != 0 || !box || !apex || !any_relaxation())
+		{
+			return result;
+		}
+
+		shape_summary summary;
+		if (!summarize(*box, *apex, summary))
+		{
+			blocker_unreadable_boxes_.fetch_add(1, std::memory_order_relaxed);
+			return result;
+		}
+		return relax_rejected(frustum, summary);
 	}
 
 	static void log_state()
 	{
-		const auto message = enabled_
+		std::string message = enabled_
 			? "Engine frustum culling enabled: stock game behavior."
 			: radius_ > 0.0f
 				? std::format("Engine frustum culling modified: world bounds within {:.1f} units of the camera stay visible.", radius_)
 				: "Engine frustum culling disabled globally.";
+		if (keep_light_blockers_ && !fully_disabled())
+		{
+			message += std::format(" Keeping light blockers >= {:.1f} units (near {:.1f}, sun reach {:.1f}).",
+				blocker_settings_.min_size, blocker_settings_.near_range, blocker_settings_.sun_reach);
+		}
 
 		shared::common::log(
 			"FrustumCulling",
 			message,
-			enabled_ ? shared::common::LOG_TYPE::LOG_TYPE_GREEN : shared::common::LOG_TYPE::LOG_TYPE_WARN,
+			enabled_ && !keep_light_blockers_ ? shared::common::LOG_TYPE::LOG_TYPE_GREEN : shared::common::LOG_TYPE::LOG_TYPE_WARN,
 			true);
-	}
-
-	static bool set_patch_state(bool enabled)
-	{
-		enabled_ = enabled;
-		shared::common::config::get().culling.enable_frustum_culling = enabled;
-		if (available_)
-		{
-			log_state();
-		}
-		return available_;
-	}
-
-	static bool set_patch_radius(float radius)
-	{
-		radius_ = std::max(0.0f, radius);
-		shared::common::config::get().culling.frustum_relaxation_radius = radius_;
-		if (available_ && !enabled_)
-		{
-			log_state();
-		}
-		return available_;
 	}
 
 	void install_hooks()
@@ -386,8 +592,8 @@ namespace comp::game::frustum_culling
 		const bool hooks_ok =
 			shared::utils::hook::detour(
 				patch_address(PATCH_SITES[0]),
-				reinterpret_cast<void*>(&coarse_frustum_hk),
-				reinterpret_cast<void**>(&coarse_frustum_original_)) &&
+				reinterpret_cast<void*>(&region_frustum_hk),
+				reinterpret_cast<void**>(&region_frustum_original_)) &&
 			shared::utils::hook::detour(
 				patch_address(PATCH_SITES[1]),
 				reinterpret_cast<void*>(&segment_frustum_hk),
@@ -395,7 +601,11 @@ namespace comp::game::frustum_culling
 			shared::utils::hook::detour(
 				patch_address(PATCH_SITES[2]),
 				reinterpret_cast<void*>(&parallelogram_frustum_hk),
-				reinterpret_cast<void**>(&parallelogram_frustum_original_));
+				reinterpret_cast<void**>(&parallelogram_frustum_original_)) &&
+			shared::utils::hook::detour(
+				patch_address(PATCH_SITES[3]),
+				reinterpret_cast<void*>(&oriented_box_frustum_hk),
+				reinterpret_cast<void**>(&oriented_box_frustum_original_));
 
 		if (!hooks_ok)
 		{
@@ -412,11 +622,27 @@ namespace comp::game::frustum_culling
 		log_state();
 	}
 
+	static light_blocker_settings sanitized(const light_blocker_settings& settings)
+	{
+		return {
+			std::max(0.0f, settings.min_size),
+			std::max(0.0f, settings.near_range),
+			std::max(0.0f, settings.sun_reach),
+		};
+	}
+
 	void init()
 	{
+		const auto& culling = shared::common::config::get().culling;
 		available_ = true;
-		enabled_ = shared::common::config::get().culling.enable_frustum_culling;
-		radius_ = std::max(0.0f, shared::common::config::get().culling.frustum_relaxation_radius);
+		enabled_ = culling.enable_frustum_culling;
+		radius_ = std::max(0.0f, culling.frustum_relaxation_radius);
+		keep_light_blockers_ = culling.keep_light_blockers;
+		blocker_settings_ = sanitized({
+			culling.light_blocker_min_size,
+			culling.light_blocker_near_range,
+			culling.light_blocker_sun_reach,
+		});
 		for (const auto& site : PATCH_SITES)
 		{
 			if (!site_matches(site))
@@ -449,11 +675,55 @@ namespace comp::game::frustum_culling
 
 	void set_enabled(bool enabled)
 	{
-		set_patch_state(enabled);
+		enabled_ = enabled;
+		shared::common::config::get().culling.enable_frustum_culling = enabled;
+		if (available_)
+		{
+			log_state();
+		}
 	}
 
 	void set_radius(float radius)
 	{
-		set_patch_radius(radius);
+		radius_ = std::max(0.0f, radius);
+		shared::common::config::get().culling.frustum_relaxation_radius = radius_;
+		if (available_ && !enabled_)
+		{
+			log_state();
+		}
+	}
+
+	bool keeps_light_blockers()
+	{
+		return keep_light_blockers_;
+	}
+
+	void set_keep_light_blockers(bool keep)
+	{
+		keep_light_blockers_ = keep;
+		shared::common::config::get().culling.keep_light_blockers = keep;
+		if (available_)
+		{
+			log_state();
+		}
+	}
+
+	light_blocker_settings light_blockers()
+	{
+		return blocker_settings_;
+	}
+
+	void set_light_blockers(const light_blocker_settings& settings)
+	{
+		blocker_settings_ = sanitized(settings);
+		auto& culling = shared::common::config::get().culling;
+		culling.light_blocker_min_size = blocker_settings_.min_size;
+		culling.light_blocker_near_range = blocker_settings_.near_range;
+		culling.light_blocker_sun_reach = blocker_settings_.sun_reach;
+	}
+
+	light_blocker_stats last_frame_light_blockers()
+	{
+		return blocker_last_frame_;
 	}
 }
