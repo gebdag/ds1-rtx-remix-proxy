@@ -181,6 +181,13 @@ namespace shared::common
 
 		const float* vs_const_data() const { return vs_const_; }
 		const float* ps_const_data() const { return ps_const_; }
+
+		// Mean RGB of each face of a cube texture's top level (+X, -X, +Y, -Y, +Z, -Z), cached
+		// per texture. 8888 cubes only (DS1's irradiance probes); false for anything else.
+		bool cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces);
+
+		// The texture bound on stage 11: the irradiance probe of DS1's HemEnv shaders.
+		IDirect3DBaseTexture9* probe_texture() const { return probe_texture_; }
 		const int* vs_const_write_log() const { return vs_const_write_log_; }
 		UINT draw_call_count() const { return draw_call_count_; }
 		UINT frame_count() const { return frame_count_; }
@@ -288,6 +295,14 @@ namespace shared::common
 		//                   included.
 		static constexpr uint32_t PS_LIGHT_DIR3 = 1u << 0;
 		static constexpr uint32_t PS_LIGHT_SHADOW = 1u << 1;
+		//   PS_HAZE         c104 and c110, the fog/scattering tail every map and
+		//                   character shader ends with (see game/haze.hpp).
+		static constexpr uint32_t PS_HAZE = 1u << 2;
+		//   PS_GRADE        c56 and c62, FRPG_Fil_HDR_ColAdj's grade (see game/atmosphere.hpp).
+		static constexpr uint32_t PS_GRADE = 1u << 3;
+		//   PS_AMBIENT      c86 and c98, the irradiance probe multiplier and hemisphere ambient
+		//                   of the HemEnv shaders (see game/atmosphere.hpp).
+		static constexpr uint32_t PS_AMBIENT = 1u << 4;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
 
 		// True when the current pixel shader reads c139, the per-draw colour and
@@ -442,6 +457,7 @@ namespace shared::common
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
 		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);
 
+
 		// Pixel shaders that read c139 (see cur_ps_reads_draw_tint).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_draw_tint_;
 		bool cur_ps_draw_tint_ = false;
@@ -501,6 +517,8 @@ namespace shared::common
 
 		// Texture tracking
 		IDirect3DBaseTexture9* cur_texture_[8] = {};
+		IDirect3DBaseTexture9* probe_texture_ = nullptr;
+		std::unordered_map<IDirect3DBaseTexture9*, std::array<std::array<float, 3>, 6>> cube_faces_;
 
 		// Stream source tracking
 		IDirect3DVertexBuffer9* stream_vb_[4] = {};

@@ -14,6 +14,7 @@
 #include "shared/common/dinput_hook_v2.hpp"
 
 #include "game/camera.hpp"
+#include "game/atmosphere.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
 
@@ -40,6 +41,9 @@ namespace comp
 		// Update game lights each frame
 		if (auto* gl = game_lights::get())
 			gl->frame_update();
+
+		// Hand the game's haze and grade to Remix (rtx.ds1Haze.*, rtx.ds1grading.game*)
+		game::atmosphere::frame_update(shared::common::ffp_state::get().frame_count());
 
 		// Sync camera override flags to ffp_state each frame
 		{

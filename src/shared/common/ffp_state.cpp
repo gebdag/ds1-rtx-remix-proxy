@@ -459,14 +459,29 @@ namespace shared::common
 		bool reads_dir = false;
 		bool reads_colour = false;
 		bool reads_shadow_dir = false;
+		bool reads_extinction = false;
+		bool reads_inscatter = false;
+		bool reads_grade_scale = false;
+		bool reads_grade_matrix = false;
+		bool reads_probe_scale = false;
+		bool reads_hemisphere = false;
 		for_each_ps_const_read(code, [&](DWORD reg)
 		{
 			if (reg == 92) reads_dir = true;
 			if (reg == 95) reads_colour = true;
 			if (reg == 175) reads_shadow_dir = true;
+			if (reg == 104) reads_extinction = true;
+			if (reg == 110) reads_inscatter = true;
+			if (reg == 56) reads_grade_scale = true;
+			if (reg == 62) reads_grade_matrix = true;
+			if (reg == 86) reads_probe_scale = true;
+			if (reg == 98) reads_hemisphere = true;
 		});
 		return (reads_dir && reads_colour ? PS_LIGHT_DIR3 : 0u) |
-			(reads_shadow_dir ? PS_LIGHT_SHADOW : 0u);
+			(reads_shadow_dir ? PS_LIGHT_SHADOW : 0u) |
+			(reads_extinction && reads_inscatter ? PS_HAZE : 0u) |
+			(reads_grade_scale && reads_grade_matrix ? PS_GRADE : 0u) |
+			(reads_probe_scale && reads_hemisphere ? PS_AMBIENT : 0u);
 	}
 
 	bool ffp_state::world_offset(float& x, float& y, float& z) const
@@ -491,6 +506,8 @@ namespace shared::common
 	{
 		if (stage < 8)
 			cur_texture_[stage] = texture;
+		else if (stage == 11)
+			probe_texture_ = texture;
 	}
 
 	void ffp_state::on_set_stream_source(UINT stream, IDirect3DVertexBuffer9* vb, UINT offset, UINT stride)
@@ -1761,9 +1778,43 @@ namespace shared::common
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnlitMarker);
+		// Some particle layers (the Crystal Cave fog) are drawn into a reduced-resolution
+		// buffer that a filter pass later upsamples onto the frame. Remix ray-traces only
+		// draws aimed at a back-buffer-sized target, and the upsample is a shader draw it
+		// ignores, so those sprites are aimed at the back buffer (without the small
+		// buffer's depth) for the draw.
+		IDirect3DSurface9* game_rt = nullptr;
+		IDirect3DSurface9* game_ds = nullptr;
+		IDirect3DSurface9* back_buffer = nullptr;
+		D3DVIEWPORT9 game_viewport {};
+		bool retarget = false;
+		if (SUCCEEDED(dev->GetRenderTarget(0, &game_rt)) && game_rt &&
+			SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) && back_buffer)
+		{
+			D3DSURFACE_DESC rt_desc {}, bb_desc {};
+			game_rt->GetDesc(&rt_desc);
+			back_buffer->GetDesc(&bb_desc);
+			if (rt_desc.Width < bb_desc.Width || rt_desc.Height < bb_desc.Height)
+			{
+				dev->GetViewport(&game_viewport);
+				dev->GetDepthStencilSurface(&game_ds);
+				dev->SetRenderTarget(0, back_buffer);
+				dev->SetDepthStencilSurface(nullptr);
+				retarget = true;
+			}
+		}
 		hr = indices
 			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
+		if (retarget)
+		{
+			dev->SetRenderTarget(0, game_rt);
+			dev->SetDepthStencilSurface(game_ds);
+			dev->SetViewport(&game_viewport);
+		}
+		if (game_ds) game_ds->Release();
+		if (back_buffer) back_buffer->Release();
+		if (game_rt) game_rt->Release();
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 		if (debug_opaque)
@@ -1853,6 +1904,41 @@ namespace shared::common
 		}
 		texture_average_[texture] = avg;
 		return avg;
+	}
+
+	bool ffp_state::cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces)
+	{
+		if (auto it = cube_faces_.find(texture); it != cube_faces_.end())
+		{
+			faces = it->second;
+			return true;
+		}
+		if (!texture || texture->GetType() != D3DRTYPE_CUBETEXTURE)
+			return false;
+		auto* cube = static_cast<IDirect3DCubeTexture9*>(texture);
+		D3DSURFACE_DESC desc {};
+		if (FAILED(cube->GetLevelDesc(0, &desc)) || (desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8))
+			return false;
+		for (int f = 0; f < 6; f++)
+		{
+			D3DLOCKED_RECT lr {};
+			const auto face = static_cast<D3DCUBEMAP_FACES>(f);
+			if (FAILED(cube->LockRect(face, 0, &lr, nullptr, D3DLOCK_READONLY)) || !lr.pBits)
+				return false;
+			double sum[3] = {};
+			const auto* p = static_cast<const unsigned char*>(lr.pBits);
+			for (UINT y = 0; y < desc.Height; y++)
+				for (UINT x = 0; x < desc.Width; x++)
+				{
+					const unsigned char* t = p + static_cast<size_t>(y) * lr.Pitch + x * 4;
+					sum[0] += t[2]; sum[1] += t[1]; sum[2] += t[0];
+				}
+			cube->UnlockRect(face, 0);
+			const double n = 255.0 * desc.Width * desc.Height;
+			faces[f] = { static_cast<float>(sum[0] / n), static_cast<float>(sum[1] / n), static_cast<float>(sum[2] / n) };
+		}
+		cube_faces_[texture] = faces;
+		return true;
 	}
 
 	int ffp_state::secondary_blend_stage() const

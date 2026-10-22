@@ -101,6 +101,9 @@ namespace comp::game::sun_light
 				out.colour[i] = std::max(0.0f, colour[i]);
 		}
 
+		float g_probe_sun[3] = {};
+		bool g_have_probe_sun = false;
+
 		void close_frame()
 		{
 			if (!g_accum_open)
@@ -136,9 +139,9 @@ namespace comp::game::sun_light
 			{
 				const float* r = dir3->regs;
 				for (int i = 0; i < 3; ++i)
-					g_last_colour[i] = std::max(0.0f, r[3 * 4 + i]);
+					g_last_colour[i] = !map && g_have_probe_sun ? g_probe_sun[i] : std::max(0.0f, r[3 * 4 + i]);
 				g_have_colour = true;
-				g_state.colour_from = map ? colour_source::map_c95 : colour_source::chr_c95;
+				g_state.colour_from = map ? colour_source::map_c95 : g_have_probe_sun ? colour_source::probe : colour_source::chr_c95;
 
 				load_light(g_state.fill[0], &r[1 * 4], &r[4 * 4]);
 				load_light(g_state.fill[1], &r[2 * 4], &r[5 * 4]);
@@ -147,6 +150,13 @@ namespace comp::game::sun_light
 					g_state.hemi_up[i] = r[6 * 4 + i];
 					g_state.hemi_down[i] = r[7 * 4 + i];
 				}
+			}
+			else if (g_have_probe_sun)
+			{
+				for (int i = 0; i < 3; ++i)
+					g_last_colour[i] = g_probe_sun[i];
+				g_have_colour = true;
+				g_state.colour_from = colour_source::probe;
 			}
 			else if (g_have_colour)
 			{
@@ -210,6 +220,13 @@ namespace comp::game::sun_light
 			g_state.valid = false;
 
 		return g_state;
+	}
+
+	void set_probe_sun(const float* colour)
+	{
+		for (int i = 0; i < 3; ++i)
+			g_probe_sun[i] = std::max(0.0f, colour[i]);
+		g_have_probe_sun = true;
 	}
 
 	bool key_direction(float* out_dir)

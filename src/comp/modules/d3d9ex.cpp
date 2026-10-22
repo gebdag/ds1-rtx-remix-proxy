@@ -23,6 +23,7 @@ using comp::tracer;
 #include "../game/render_toggles.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/atmosphere.hpp"
 
 namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
@@ -875,6 +876,8 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
+			comp::game::atmosphere::observe_grade(ffp.ps_const_data());
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			HRESULT hr = S_OK;

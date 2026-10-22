@@ -10,6 +10,7 @@
 #include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/sun_light.hpp"
+#include "../game/atmosphere.hpp"
 #include "../game/texture_names.hpp"
 
 namespace comp
@@ -314,9 +315,17 @@ namespace comp
 
 		// Draws that read the game's sun constants (shadow direction c175, key
 		// light c92/c95) vote for the Remix sun.
-		if (ffp.view_proj_valid() && ffp.cur_ps_light_flags() != 0)
+		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & (ffp.PS_LIGHT_DIR3 | ffp.PS_LIGHT_SHADOW)))
 			game::sun_light::observe(ffp.ps_const_data(), ffp.frame_count(), primCount,
 				ffp.cur_ps_light_flags(), ffp.cur_decl_is_skinned());
+
+		// Draws that end with the game's fog/scattering tail supply the haze constants.
+		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE))
+			game::atmosphere::observe_haze(ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count(), primCount);
+
+		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
+		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
+			game::atmosphere::observe_ambient(ffp.ps_const_data(), ffp.probe_texture(), ffp.frame_count(), primCount);
 
 		// Track draw key for dedup learning (all draw types — rigid and skinned).
 		{

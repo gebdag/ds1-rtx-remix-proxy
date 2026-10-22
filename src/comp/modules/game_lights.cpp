@@ -3,6 +3,7 @@
 #include "../game/point_lights.hpp"
 #include "../game/map_lights.hpp"
 #include "../game/sun_light.hpp"
+#include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/config.hpp"
@@ -492,17 +493,33 @@ namespace comp
 	// The game's key light travels along c92 (its shadow light along c175) and the
 	// HemDir3 shaders light with max(0, -dot(c92, N)) * c95 * albedo. A Remix distant
 	// light's direction is also the direction of travel, and its lambert response is
-	// albedo * radiance * cos, so c95 is used as the radiance unchanged.
+	// albedo * radiance * cos.
+	//
+	// The game adds that light to the ambient in gamma space (its shaders multiply the
+	// texture's stored, gamma-encoded colour), Remix in linear space. On a surface
+	// facing the sun the game shows albedo * (ambient + sun); Remix shows the same
+	// when its sun adds (ambient + sun)^2.2 - ambient^2.2 to the linear ambient^2.2
+	// the bounce-ray sky gives (game::atmosphere sends that cube).
 	void game_lights::sync_sun()
 	{
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(),
 			sun_fallback_colour);
 
+		float ambient[3] = {};
+		const float facing_sun[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
+		game::atmosphere::ambient_toward(facing_sun, ambient);
+		float linear[3];
+		for (int c = 0; c < 3; ++c)
+		{
+			const float base = std::max(ambient[c], 0.0f);
+			linear[c] = std::pow(base + std::max(sun.key.colour[c], 0.0f), 2.2f) - std::pow(base, 2.2f);
+		}
+
 		const float mult = sun_intensity_scale * edit_multiplier(KEY_SUN);
 		remixapi_Float3D radiance = {
-			sun.key.colour[0] * mult,
-			sun.key.colour[1] * mult,
-			sun.key.colour[2] * mult,
+			linear[0] * mult,
+			linear[1] * mult,
+			linear[2] * mult,
 		};
 		const bool lit = radiance.x > 0.0f || radiance.y > 0.0f || radiance.z > 0.0f;
 
@@ -1212,7 +1229,7 @@ namespace comp
 		show_light("Sun  ", sun.key);
 
 		static const char* kDirSource[] = { "none", "shadow light c175", "map light 0 c92", "character light 0 c92" };
-		static const char* kColourSource[] = { "fallback", "map light 0 c95", "character light 0 c95", "last c95 seen" };
+		static const char* kColourSource[] = { "fallback", "map light 0 c95", "character light 0 c95", "irradiance probe", "last seen" };
 		const float to_sun_y = -sun.key.dir[1];
 		const float heading = std::atan2(-sun.key.dir[0], -sun.key.dir[2]) * kRadToDeg;
 		ImGui::TextDisabled("  elevation %.1f deg, heading %.1f deg  | direction: %s | colour: %s",

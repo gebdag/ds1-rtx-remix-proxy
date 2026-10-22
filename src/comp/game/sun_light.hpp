@@ -23,7 +23,7 @@ namespace comp::game::sun_light
 	//               last colour seen, else the configured fallback.
 
 	enum class dir_source { none, shadow_c175, map_c92, chr_c92 };
-	enum class colour_source { fallback, map_c95, chr_c95, last_seen };
+	enum class colour_source { fallback, map_c95, chr_c95, probe, last_seen };
 
 	struct light
 	{
@@ -59,6 +59,12 @@ namespace comp::game::sun_light
 	// The result of the last completed frame's vote. fallback_colour is used
 	// when no draw has ever carried the key light's colour.
 	const state& current(unsigned int frame, const float* fallback_colour);
+
+	// The sun's colour as the area's irradiance probe holds it (game::atmosphere fits
+	// it each frame). The HemEnv maps bake their key light into that probe and read no
+	// c95, so when no map draw carries c95 this colour lights the sun, not the
+	// characters' key light.
+	void set_probe_sun(const float* colour);
 
 	// The sun's propagation direction from the last completed vote, without
 	// closing the current one. False while no direction is valid.
