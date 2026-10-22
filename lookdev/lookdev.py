@@ -3,6 +3,8 @@
   python lookdev.py capture [name]      ask the running game (started by lookdev.ps1) for a capture
   python lookdev.py replay [capture]    replay a capture in the viewer and compare with the game's frame
   python lookdev.py view [capture]      open the viewer window on a capture
+  python lookdev.py host [capture]      render a capture through the proxy and RTX Remix
+  python lookdev.py host --live         follow the running game (lookdev.ps1) through the proxy and RTX Remix
   python lookdev.py info [capture]      record statistics of a capture
   python lookdev.py list                captures, newest first
 
@@ -23,6 +25,12 @@ GAME_DIR = Path(r"<game dir>\DATA")
 CAPTURE_DIR = GAME_DIR / "rtx_comp" / "lookdev"
 HERE = Path(__file__).resolve().parent
 VIEWER = HERE / "bin" / "ds1_lookdev_viewer.exe"
+HOST = HERE / "bin" / "ds1_lookdev_host.exe"
+PROXY_BUILD = HERE.parent / "build" / "bin" / "release" / "d3d9.dll"
+# The host runs from DATA (Remix resolves rtx.conf and mods from the client exe's
+# folder) with its own copy of the proxy, so a running game's d3d9.dll is never touched.
+HOST_IN_GAME = GAME_DIR / "ds1_lookdev_host.exe"
+PROXY_IN_GAME = GAME_DIR / "d3d9_lookdev.dll"
 
 MAGIC = 0x43315344
 HEADER_SIZE = 156
@@ -30,7 +38,7 @@ HEADER_SIZE = 156
 # capture_format.hpp record_type
 RECORD_NAMES = {
     1: "TEXTURE", 2: "CUBE_TEXTURE", 3: "VOLUME_TEXTURE", 4: "SURFACE", 5: "SURFACE_LEVEL", 6: "BACKBUFFER",
-    7: "VERTEX_BUFFER", 8: "INDEX_BUFFER", 9: "VERTEX_SHADER", 10: "PIXEL_SHADER", 11: "VERTEX_DECL",
+    7: "VERTEX_BUFFER", 8: "INDEX_BUFFER", 9: "VERTEX_SHADER", 10: "PIXEL_SHADER", 11: "VERTEX_DECL", 12: "DESTROY",
     32: "TEXTURE_DATA", 33: "SURFACE_DATA", 34: "BUFFER_DATA",
     64: "RENDER_STATE", 65: "SAMPLER_STATE", 66: "TEXTURE_STAGE_STATE", 67: "SET_TEXTURE", 68: "SET_VERTEX_SHADER",
     69: "SET_PIXEL_SHADER", 70: "SET_VERTEX_DECL", 71: "SET_FVF", 72: "VS_CONST_F", 73: "PS_CONST_F", 74: "VS_CONST_I",
@@ -39,7 +47,8 @@ RECORD_NAMES = {
     87: "MATERIAL", 88: "LIGHT", 89: "LIGHT_ENABLE",
     96: "DRAW", 97: "DRAW_INDEXED", 98: "DRAW_UP", 99: "DRAW_INDEXED_UP", 100: "CLEAR", 101: "STRETCH_RECT",
     102: "COLOR_FILL", 103: "UPDATE_SURFACE", 104: "UPDATE_TEXTURE", 105: "BEGIN_SCENE", 106: "END_SCENE", 107: "PRESENT",
-    128: "REFERENCE_IMAGE", 129: "NOTE",
+    128: "REFERENCE_IMAGE", 129: "NOTE", 130: "GAME_FRAME", 131: "GAME_LIGHTS", 132: "TEXTURE_NAME",
+    140: "STREAM_BEGIN",
 }
 
 
@@ -108,7 +117,7 @@ def side_by_side(out_dir):
 def cmd_replay(args):
     cap = resolve(args.capture)
     if not VIEWER.exists():
-        sys.exit(f"viewer not built: run {HERE / 'build_viewer.bat'}")
+        sys.exit(f"viewer not built: run {HERE / 'build_lookdev.bat'}")
     out_dir = cap.parent / (cap.stem + "_replay")
     proc = subprocess.run([str(VIEWER), str(cap), "--compare", "--out", str(out_dir)], capture_output=True, text=True)
     sys.stdout.write(proc.stdout)
@@ -120,6 +129,32 @@ def cmd_replay(args):
     if sheet:
         print(f"side by side: {sheet}")
     return proc.returncode
+
+
+def running(image):
+    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    return image.lower() in out.lower()
+
+
+def cmd_host(args):
+    cap = None if args.live else resolve(args.capture)
+    for exe in (HOST, PROXY_BUILD):
+        if not exe.exists():
+            sys.exit(f"missing {exe}: run build_lookdev.bat and ..\\build.bat release --name DarkSouls --no-deploy")
+    if running(HOST_IN_GAME.name):
+        subprocess.run(["taskkill", "/IM", HOST_IN_GAME.name, "/F"], capture_output=True)
+        time.sleep(1.0)
+    if running("NvRemixBridge.exe"):
+        sys.exit("NvRemixBridge.exe is running: the normal game (or another Remix client) owns the bridge. Close it first.")
+    import shutil
+    shutil.copy2(HOST, HOST_IN_GAME)
+    shutil.copy2(PROXY_BUILD, PROXY_IN_GAME)
+    print(f"proxy {PROXY_BUILD} ({datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime):%H:%M:%S}) -> {PROXY_IN_GAME.name}")
+    source = ["--live"] if args.live else [str(cap)]
+    subprocess.Popen([str(HOST_IN_GAME), *source, "--proxy", PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
+                     cwd=str(GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE)
+    print("host started, following the game live" if args.live else f"host started on {cap.name}")
+    return 0
 
 
 def cmd_view(args):
@@ -166,6 +201,7 @@ def main():
     p = sub.add_parser("capture"); p.add_argument("name", nargs="?"); p.add_argument("--timeout", type=float, default=60); p.set_defaults(fn=cmd_capture)
     p = sub.add_parser("replay"); p.add_argument("capture", nargs="?"); p.set_defaults(fn=cmd_replay)
     p = sub.add_parser("view"); p.add_argument("capture", nargs="?"); p.set_defaults(fn=cmd_view)
+    p = sub.add_parser("host"); p.add_argument("capture", nargs="?"); p.add_argument("--live", action="store_true"); p.set_defaults(fn=cmd_host)
     p = sub.add_parser("info"); p.add_argument("capture", nargs="?"); p.set_defaults(fn=cmd_info)
     p = sub.add_parser("list"); p.set_defaults(fn=cmd_list)
     args = ap.parse_args()

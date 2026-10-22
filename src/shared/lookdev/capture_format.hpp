@@ -73,6 +73,7 @@ namespace lookdev
 		REC_VERTEX_SHADER,       // id_only + bytecode
 		REC_PIXEL_SHADER,        // id_only + bytecode
 		REC_VERTEX_DECL,         // id_only + D3DVERTEXELEMENT9[] including D3DDECL_END
+		REC_DESTROY,             // id_only: the object is gone (live streams; its address was reused)
 
 		// resource contents
 		REC_TEXTURE_DATA = 32,   // texture_data + depth * rows * row_bytes
@@ -130,6 +131,8 @@ namespace lookdev
 		REC_GAME_FRAME = 130,      // game_frame
 		REC_GAME_LIGHTS,           // game_lights + count * element_size (proxy's point_lights::light)
 		REC_TEXTURE_NAME,          // id_only + name (no terminator): the TPF name of a texture
+
+		REC_STREAM_BEGIN = 140,    // file_header: first record of a live stream session
 	};
 
 	// texture_data / buffer_data flags
@@ -294,8 +297,46 @@ namespace lookdev
 		uint32_t element_size;
 	};
 
+	// ---- live stream ----
+	//
+	// The host creates a named file mapping: stream_header followed by a byte
+	// ring that carries the same record stream as a capture file, frame after
+	// frame. The game (lookdev_capture) polls for it and writes; the host reads.
+	// Positions are running byte totals; ring offset = position % ring_size.
+	//
+	// Sessions: the host writes a new consumer_epoch whenever it attaches. The
+	// game then starts a new session at its next Present: it forgets everything
+	// it sent, sets session_start (where REC_STREAM_BEGIN goes) and bumps
+	// session. A host that sees a new session skips to session_start. A record
+	// may be larger than the ring; the host consumes it in pieces.
+
+	constexpr uint32_t STREAM_MAGIC = 0x4D525453; // "STRM"
+	constexpr uint32_t STREAM_VERSION = 1;
+	constexpr const wchar_t* STREAM_NAME = L"Local\\ds1_lookdev_stream";
+	constexpr uint32_t STREAM_RING_SIZE = 128u << 20;
+
+	struct stream_header
+	{
+		uint32_t magic;
+		uint32_t version;
+		uint32_t header_size;
+		uint32_t ring_size;
+		volatile int64_t write_pos;        // game: bytes published
+		volatile int64_t read_pos;         // host: bytes consumed
+		volatile int64_t session_start;    // game: position of the session's REC_STREAM_BEGIN
+		volatile uint32_t session;         // game: bumped per session
+		volatile uint32_t consumer_epoch;  // host: new value on every attach
+		volatile uint32_t consumer_pid;
+		volatile uint32_t producer_pid;
+		volatile uint32_t consumer_heartbeat; // host: GetTickCount, while it is alive
+		volatile uint32_t frames_written;  // game: REC_PRESENT records published this session
+		volatile uint32_t frames_consumed; // host: REC_PRESENT records processed this session
+		uint32_t reserved[15];
+	};
+
 #pragma pack(pop)
 
+	static_assert(sizeof(stream_header) == 128);
 	static_assert(sizeof(file_header) == 156);
 	static_assert(sizeof(texture_desc) == 36);
 	static_assert(sizeof(bind) == 12);

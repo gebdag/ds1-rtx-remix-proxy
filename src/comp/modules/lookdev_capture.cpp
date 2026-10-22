@@ -34,6 +34,17 @@ namespace comp
 		constexpr int VT_DRAW_INDEXED_PRIMITIVE = 82;
 		constexpr int VT_DRAW_PRIMITIVE_UP = 83;
 		constexpr int VT_DRAW_INDEXED_PRIMITIVE_UP = 84;
+		constexpr int VT_CREATE_TEXTURE = 23;
+		constexpr int VT_CREATE_VOLUME_TEXTURE = 24;
+		constexpr int VT_CREATE_CUBE_TEXTURE = 25;
+		constexpr int VT_CREATE_VERTEX_BUFFER = 26;
+		constexpr int VT_CREATE_INDEX_BUFFER = 27;
+		constexpr int VT_CREATE_RENDER_TARGET = 28;
+		constexpr int VT_CREATE_DEPTH_STENCIL = 29;
+		constexpr int VT_CREATE_OFFSCREEN_PLAIN = 36;
+		constexpr int VT_CREATE_VERTEX_DECL = 86;
+		constexpr int VT_CREATE_VERTEX_SHADER = 91;
+		constexpr int VT_CREATE_PIXEL_SHADER = 106;
 		// IDirect3DVertexBuffer9 / IDirect3DIndexBuffer9
 		constexpr int VT_BUFFER_LOCK = 11;
 		constexpr int VT_BUFFER_UNLOCK = 12;
@@ -82,17 +93,77 @@ namespace comp
 
 		rect to_rect(const RECT& r) { return { r.left, r.top, r.right, r.bottom }; }
 
-		// ---- file writer ----
+		// ---- writer: a capture file, or the live stream's ring ----
+
+		// The game end of the live stream (capture_format.hpp, stream_header).
+		struct ring_sink
+		{
+			HANDLE mapping = nullptr;
+			stream_header* hdr = nullptr;
+			uint8_t* data = nullptr;
+			uint32_t size = 0;
+			int64_t pos = 0;          // written, published or not
+			uint32_t epoch = 0;       // consumer_epoch this session serves
+			bool broken = false;      // the host stopped reading
+
+			void publish()
+			{
+				MemoryBarrier();
+				InterlockedExchange64(&hdr->write_pos, pos);
+			}
+
+			bool consumer_alive() const
+			{
+				return GetTickCount() - hdr->consumer_heartbeat < 3000 && hdr->consumer_epoch == epoch;
+			}
+
+			// The ring is full: hand over what is written and wait for the host.
+			bool wait_for_space()
+			{
+				publish();
+				const int64_t read = hdr->read_pos;
+				while (hdr->read_pos == read)
+				{
+					if (!consumer_alive())
+						return false;
+					Sleep(1);
+				}
+				return true;
+			}
+
+			void write(const void* src, size_t n)
+			{
+				auto* p = static_cast<const uint8_t*>(src);
+				while (n && !broken)
+				{
+					const int64_t free = int64_t(size) - (pos - hdr->read_pos);
+					if (free <= 0)
+					{
+						if (!wait_for_space())
+							broken = true;
+						continue;
+					}
+					const size_t offset = static_cast<size_t>(pos % size);
+					const size_t chunk = std::min({ n, static_cast<size_t>(free), size - offset });
+					std::memcpy(data + offset, p, chunk);
+					pos += chunk;
+					p += chunk;
+					n -= chunk;
+				}
+			}
+		};
 
 		struct writer
 		{
 			FILE* file = nullptr;
+			ring_sink* ring = nullptr;
 			uint64_t bytes = 0;
 
 			void raw(const void* data, size_t size)
 			{
 				if (!size) return;
-				fwrite(data, 1, size, file);
+				if (ring) ring->write(data, size);
+				else fwrite(data, 1, size, file);
 				bytes += size;
 			}
 
@@ -185,6 +256,11 @@ namespace comp
 			IDirect3DDevice9* dev = nullptr;
 			IDirect3DSurface9* backbuffer = nullptr;
 			writer w;
+			// Live stream session rather than a one-frame file: it holds no
+			// references (the game frees resources as usual; a reused address is
+			// sent as REC_DESTROY) and keeps its state from frame to frame.
+			bool streaming = false;
+			uint32_t frames = 0;
 			std::string name;
 			std::string part_path;
 			std::string final_path;
@@ -228,6 +304,7 @@ namespace comp
 		uint64_t s_frame_index = 0;
 		bool s_request = false;
 		std::string s_request_name;
+		ring_sink* s_ring = nullptr; // mapped live stream, while a host is attached
 
 		// ---- hook trampolines ----
 
@@ -594,10 +671,32 @@ namespace comp
 
 		// ---- resource registration ----
 
+		// A one-frame capture holds everything it recorded so no address can be
+		// reused mid-frame. A stream must not: the game would never free anything.
 		void keep(IUnknown* obj)
 		{
+			if (s_cap->streaming)
+				return;
 			obj->AddRef();
 			s_cap->refs.push_back(obj);
+		}
+
+		// Drops everything recorded at this address (a stream saw it reused).
+		void forget(const void* obj)
+		{
+			auto& c = *s_cap;
+			bool known = false;
+			if (c.textures.erase(obj))
+			{
+				known = true;
+				std::erase_if(c.surfaces, [obj](const auto& kv) { return kv.second.texture == obj; });
+			}
+			known |= c.surfaces.erase(obj) > 0;
+			known |= c.buffers.erase(obj) > 0;
+			known |= c.objects.erase(obj) > 0;
+			c.locks.erase(obj);
+			if (known)
+				c.w.rec(REC_DESTROY, id_only { id_of(obj) });
 		}
 
 		uint64_t ref_texture(IDirect3DBaseTexture9* texture)
@@ -667,8 +766,22 @@ namespace comp
 			if (!surface) return 0;
 			auto& c = *s_cap;
 			const auto id = id_of(surface);
-			if (c.surfaces.contains(surface))
-				return id;
+			if (const auto it = c.surfaces.find(surface); it != c.surfaces.end())
+			{
+				// A level of a texture freed since could be at this address now, as
+				// a level of another texture. Streams only; captures hold their refs.
+				if (!c.streaming || !it->second.texture)
+					return id;
+				void* container = nullptr;
+				const bool same = (SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DTexture9), &container)) ||
+					SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DCubeTexture9), &container))) && container == it->second.texture;
+				if (container)
+					static_cast<IUnknown*>(container)->Release();
+				if (same)
+					return id;
+				c.surfaces.erase(it);
+				c.w.rec(REC_DESTROY, id_only { id });
+			}
 
 			surface_info info {};
 			void* container = nullptr;
@@ -1036,48 +1149,31 @@ namespace comp
 			return shared::globals::root_path + "\\" + shared::common::config::get().lookdev.output_dir;
 		}
 
-		void start_capture(IDirect3DDevice9* dev, std::string name)
+		// Whether this device can be recorded at all; installs the device hooks.
+		bool device_recordable(IDirect3DDevice9* dev, const char* what)
 		{
 			if (shared::common::config::get().remix.enabled)
 			{
-				log("Capture refused: [Remix] Enabled=1. Lookdev captures need the vanilla system d3d9 (start with lookdev.ps1).",
+				log(std::format("{} refused: [Remix] Enabled=1. Lookdev needs the vanilla system d3d9 (start with lookdev.ps1).", what),
 					shared::common::LOG_TYPE::LOG_TYPE_ERROR);
-				return;
+				return false;
 			}
 			D3DDEVICE_CREATION_PARAMETERS cp;
 			dev->GetCreationParameters(&cp);
 			if (cp.BehaviorFlags & D3DCREATE_PUREDEVICE)
 			{
-				log("Capture refused: pure device, state cannot be read back", shared::common::LOG_TYPE::LOG_TYPE_ERROR);
-				return;
+				log(std::format("{} refused: pure device, state cannot be read back", what), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+				return false;
 			}
-
 			ensure_device_hooks(dev);
-			if (!s_device_hooks)
-				return;
+			return s_device_hooks;
+		}
 
-			if (name.empty())
-			{
-				SYSTEMTIME st;
-				GetLocalTime(&st);
-				name = std::format("frame_{:04}{:02}{:02}_{:02}{:02}{:02}", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-			}
-
-			const auto dir = output_dir();
-			std::filesystem::create_directories(dir);
-			auto* c = new capture;
-			c->dev = dev;
-			c->name = name;
-			c->final_path = dir + "\\" + name + ".ds1cap";
-			c->part_path = c->final_path + ".part";
-			c->w.file = fopen(c->part_path.c_str(), "wb");
-			if (!c->w.file)
-			{
-				log(std::format("Could not create {}", c->part_path), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
-				delete c;
-				return;
-			}
-			setvbuf(c->w.file, nullptr, _IOFBF, 8 << 20);
+		// Fills the capture's device facts and returns the file header for it.
+		file_header describe_device(IDirect3DDevice9* dev, capture* c)
+		{
+			D3DDEVICE_CREATION_PARAMETERS cp;
+			dev->GetCreationParameters(&cp);
 
 			D3DCAPS9 caps;
 			dev->GetDeviceCaps(&caps);
@@ -1118,6 +1214,44 @@ namespace comp
 			h.frame_index = s_frame_index;
 			const auto ini = std::filesystem::path(shared::common::config::get().ini_path()).filename().string();
 			strncpy_s(h.game_ini, ini.c_str(), _TRUNCATE);
+			return h;
+		}
+
+		void release_staging(capture* c)
+		{
+			for (auto& [key, s] : c->staging) if (s) s->Release();
+			c->staging.clear();
+		}
+
+		void start_capture(IDirect3DDevice9* dev, std::string name)
+		{
+			if (!device_recordable(dev, "Capture"))
+				return;
+
+			if (name.empty())
+			{
+				SYSTEMTIME st;
+				GetLocalTime(&st);
+				name = std::format("frame_{:04}{:02}{:02}_{:02}{:02}{:02}", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+			}
+
+			const auto dir = output_dir();
+			std::filesystem::create_directories(dir);
+			auto* c = new capture;
+			c->dev = dev;
+			c->name = name;
+			c->final_path = dir + "\\" + name + ".ds1cap";
+			c->part_path = c->final_path + ".part";
+			c->w.file = fopen(c->part_path.c_str(), "wb");
+			if (!c->w.file)
+			{
+				log(std::format("Could not create {}", c->part_path), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+				delete c;
+				return;
+			}
+			setvbuf(c->w.file, nullptr, _IOFBF, 8 << 20);
+
+			const auto h = describe_device(dev, c);
 			c->w.raw(&h, sizeof(h));
 
 			c->started = std::chrono::steady_clock::now();
@@ -1135,7 +1269,7 @@ namespace comp
 			const auto bytes = c->w.bytes;
 			fclose(c->w.file);
 			for (auto* obj : c->refs) obj->Release();
-			for (auto& [key, s] : c->staging) if (s) s->Release();
+			release_staging(c);
 			if (c->backbuffer) c->backbuffer->Release();
 
 			const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - c->started).count();
@@ -1149,6 +1283,127 @@ namespace comp
 			}
 			else log(std::format("Could not finalise {}", c->final_path), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 			delete c;
+		}
+
+		// ---- live stream ----
+
+		void close_ring()
+		{
+			if (!s_ring)
+				return;
+			if (s_ring->hdr)
+			{
+				s_ring->hdr->producer_pid = 0;
+				UnmapViewOfFile(s_ring->hdr);
+			}
+			if (s_ring->mapping)
+				CloseHandle(s_ring->mapping);
+			delete s_ring;
+			s_ring = nullptr;
+		}
+
+		void end_stream_session(const char* why)
+		{
+			auto* c = s_cap;
+			s_capturing = false;
+			s_cap = nullptr;
+			if (c)
+			{
+				release_staging(c);
+				if (c->backbuffer) c->backbuffer->Release();
+				log(std::format("Live stream ended ({}) after {} frames, {:.1f} MB", why, c->frames, double(c->w.bytes) / (1024.0 * 1024.0)));
+				delete c;
+			}
+		}
+
+		// A session starts from nothing, as a capture does: everything the frame
+		// uses is sent at first use. The host skips to session_start.
+		void start_stream_session(IDirect3DDevice9* dev)
+		{
+			auto& ring = *s_ring;
+			auto* c = new capture;
+			c->dev = dev;
+			c->streaming = true;
+			c->w.ring = &ring;
+
+			ring.epoch = ring.hdr->consumer_epoch;
+			ring.broken = false;
+			ring.pos = ring.hdr->write_pos;
+			ring.hdr->producer_pid = GetCurrentProcessId();
+			ring.hdr->frames_written = 0;
+			InterlockedExchange64(&ring.hdr->session_start, ring.pos);
+			MemoryBarrier();
+			InterlockedIncrement(reinterpret_cast<volatile LONG*>(&ring.hdr->session));
+
+			const auto h = describe_device(dev, c);
+			c->w.rec(REC_STREAM_BEGIN, h);
+			ring.publish();
+
+			c->started = std::chrono::steady_clock::now();
+			s_cap = c;
+			s_capturing = true;
+			const uint32_t session = ring.hdr->session, host_pid = ring.hdr->consumer_pid;
+			log(std::format("Live stream session {} started (host pid {})", session, host_pid));
+		}
+
+		// A host announces itself by creating the stream mapping. Checked every
+		// half second or so while there is none.
+		void poll_stream(IDirect3DDevice9* dev)
+		{
+			if (s_ring || s_frame_index % 30 != 0)
+				return;
+			HANDLE mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, STREAM_NAME);
+			if (!mapping)
+				return;
+			auto* hdr = static_cast<stream_header*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0));
+			if (!hdr || hdr->magic != STREAM_MAGIC || hdr->version != STREAM_VERSION || hdr->header_size != sizeof(stream_header)
+				|| GetTickCount() - hdr->consumer_heartbeat > 3000)
+			{
+				if (hdr) UnmapViewOfFile(hdr);
+				CloseHandle(mapping);
+				return;
+			}
+			if (!device_recordable(dev, "Live stream"))
+			{
+				UnmapViewOfFile(hdr);
+				CloseHandle(mapping);
+				return;
+			}
+			s_ring = new ring_sink;
+			s_ring->mapping = mapping;
+			s_ring->hdr = hdr;
+			s_ring->data = reinterpret_cast<uint8_t*>(hdr) + hdr->header_size;
+			s_ring->size = hdr->ring_size;
+			s_ring->epoch = hdr->consumer_epoch;
+			start_stream_session(dev);
+		}
+
+		// End of a streamed frame: hand it over, then follow the host (a new
+		// epoch means it restarted and needs everything again; a broken ring or a
+		// stale heartbeat means it is gone).
+		void stream_present(IDirect3DDevice9* dev)
+		{
+			auto* c = s_cap;
+			auto& ring = *s_ring;
+			c->w.rec(REC_PRESENT);
+			c->frames++;
+			c->game_state_written = false;
+			ring.publish();
+			InterlockedIncrement(reinterpret_cast<volatile LONG*>(&ring.hdr->frames_written));
+			// Read-back staging surfaces are only needed when something new is first
+			// used; keeping a 4K one per format alive costs the game address space.
+			release_staging(c);
+
+			if (ring.broken || GetTickCount() - ring.hdr->consumer_heartbeat > 3000)
+			{
+				end_stream_session("host stopped reading");
+				close_ring();
+			}
+			else if (ring.hdr->consumer_epoch != ring.epoch)
+			{
+				end_stream_session("host restarted");
+				start_stream_session(dev);
+			}
 		}
 
 		// A capture is requested with the capture key (game window focused) or
@@ -1190,12 +1445,15 @@ namespace comp
 			if (recording(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				internal_scope in;
+				if (s_cap->streaming)
+					stream_present(dev);
+				else
 				{
-					internal_scope in;
 					write_reference_image();
 					s_cap->w.rec(REC_PRESENT);
+					finish_capture();
 				}
-				finish_capture();
 			}
 
 			const auto hr = s_present_og(dev, src, dst, wnd, dirty);
@@ -1210,6 +1468,17 @@ namespace comp
 					s_request = false;
 					std::lock_guard lock(s_mutex);
 					start_capture(dev, s_request_name);
+				}
+				else if (s_request && s_cap && s_cap->streaming)
+				{
+					s_request = false;
+					log("Capture skipped: a live stream is running (close the host first)", shared::common::LOG_TYPE::LOG_TYPE_WARN);
+				}
+				if (!s_cap)
+				{
+					// streams start right after a Present too
+					std::lock_guard lock(s_mutex);
+					poll_stream(dev);
 				}
 			}
 			return hr;
@@ -1420,6 +1689,76 @@ namespace comp
 			return s_draw_indexed_up_og(dev, type, min_index, num_vertices, count, indices, index_format, vertices, stride);
 		}
 
+		// ---- creation hooks (live streams) ----
+		//
+		// A stream holds no references, so the game frees resources as usual and
+		// a new object can land on a freed address. Every creation is checked
+		// against what was sent; a hit is sent as REC_DESTROY first, so the host
+		// never mistakes the newcomer for the old object.
+
+		void on_created(const void* obj)
+		{
+			if (!obj || !s_capturing.load(std::memory_order_relaxed) || t_internal)
+				return;
+			std::lock_guard lock(s_mutex);
+			if (s_cap && s_cap->streaming)
+				forget(obj);
+		}
+
+		using create_texture_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE*);
+		using create_volume_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, UINT, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DVolumeTexture9**, HANDLE*);
+		using create_cube_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DCubeTexture9**, HANDLE*);
+		using create_vb_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, DWORD, DWORD, D3DPOOL, IDirect3DVertexBuffer9**, HANDLE*);
+		using create_ib_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DIndexBuffer9**, HANDLE*);
+		using create_rt_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9**, HANDLE*);
+		using create_plain_t = HRESULT(__stdcall*)(IDirect3DDevice9*, UINT, UINT, D3DFORMAT, D3DPOOL, IDirect3DSurface9**, HANDLE*);
+		using create_decl_t = HRESULT(__stdcall*)(IDirect3DDevice9*, const D3DVERTEXELEMENT9*, IDirect3DVertexDeclaration9**);
+		using create_vs_t = HRESULT(__stdcall*)(IDirect3DDevice9*, const DWORD*, IDirect3DVertexShader9**);
+		using create_ps_t = HRESULT(__stdcall*)(IDirect3DDevice9*, const DWORD*, IDirect3DPixelShader9**);
+
+		create_texture_t s_create_texture_og = nullptr;
+		create_volume_t s_create_volume_og = nullptr;
+		create_cube_t s_create_cube_og = nullptr;
+		create_vb_t s_create_vb_og = nullptr;
+		create_ib_t s_create_ib_og = nullptr;
+		create_rt_t s_create_rt_og = nullptr;
+		create_rt_t s_create_ds_og = nullptr; // same shape: Discard in place of Lockable
+		create_plain_t s_create_plain_og = nullptr;
+		create_decl_t s_create_decl_og = nullptr;
+		create_vs_t s_create_vs_og = nullptr;
+		create_ps_t s_create_ps_og = nullptr;
+
+		template <class T>
+		HRESULT created(HRESULT hr, T** out)
+		{
+			if (SUCCEEDED(hr) && out)
+				on_created(*out);
+			return hr;
+		}
+
+		HRESULT __stdcall create_texture_hk(IDirect3DDevice9* d, UINT w, UINT h, UINT l, DWORD u, D3DFORMAT f, D3DPOOL p, IDirect3DTexture9** o, HANDLE* s)
+		{ return created(s_create_texture_og(d, w, h, l, u, f, p, o, s), o); }
+		HRESULT __stdcall create_volume_hk(IDirect3DDevice9* d, UINT w, UINT h, UINT dp, UINT l, DWORD u, D3DFORMAT f, D3DPOOL p, IDirect3DVolumeTexture9** o, HANDLE* s)
+		{ return created(s_create_volume_og(d, w, h, dp, l, u, f, p, o, s), o); }
+		HRESULT __stdcall create_cube_hk(IDirect3DDevice9* d, UINT e, UINT l, DWORD u, D3DFORMAT f, D3DPOOL p, IDirect3DCubeTexture9** o, HANDLE* s)
+		{ return created(s_create_cube_og(d, e, l, u, f, p, o, s), o); }
+		HRESULT __stdcall create_vb_hk(IDirect3DDevice9* d, UINT n, DWORD u, DWORD fvf, D3DPOOL p, IDirect3DVertexBuffer9** o, HANDLE* s)
+		{ return created(s_create_vb_og(d, n, u, fvf, p, o, s), o); }
+		HRESULT __stdcall create_ib_hk(IDirect3DDevice9* d, UINT n, DWORD u, D3DFORMAT f, D3DPOOL p, IDirect3DIndexBuffer9** o, HANDLE* s)
+		{ return created(s_create_ib_og(d, n, u, f, p, o, s), o); }
+		HRESULT __stdcall create_rt_hk(IDirect3DDevice9* d, UINT w, UINT h, D3DFORMAT f, D3DMULTISAMPLE_TYPE m, DWORD q, BOOL b, IDirect3DSurface9** o, HANDLE* s)
+		{ return created(s_create_rt_og(d, w, h, f, m, q, b, o, s), o); }
+		HRESULT __stdcall create_ds_hk(IDirect3DDevice9* d, UINT w, UINT h, D3DFORMAT f, D3DMULTISAMPLE_TYPE m, DWORD q, BOOL b, IDirect3DSurface9** o, HANDLE* s)
+		{ return created(s_create_ds_og(d, w, h, f, m, q, b, o, s), o); }
+		HRESULT __stdcall create_plain_hk(IDirect3DDevice9* d, UINT w, UINT h, D3DFORMAT f, D3DPOOL p, IDirect3DSurface9** o, HANDLE* s)
+		{ return created(s_create_plain_og(d, w, h, f, p, o, s), o); }
+		HRESULT __stdcall create_decl_hk(IDirect3DDevice9* d, const D3DVERTEXELEMENT9* e, IDirect3DVertexDeclaration9** o)
+		{ return created(s_create_decl_og(d, e, o), o); }
+		HRESULT __stdcall create_vs_hk(IDirect3DDevice9* d, const DWORD* f, IDirect3DVertexShader9** o)
+		{ return created(s_create_vs_og(d, f, o), o); }
+		HRESULT __stdcall create_ps_hk(IDirect3DDevice9* d, const DWORD* f, IDirect3DPixelShader9** o)
+		{ return created(s_create_ps_og(d, f, o), o); }
+
 		template <class T>
 		bool hook_slot(void** vt, int slot, void* detour, T& original)
 		{
@@ -1446,7 +1785,18 @@ namespace comp
 				hook_slot(vt, VT_DRAW_PRIMITIVE, reinterpret_cast<void*>(&draw_hk), s_draw_og) &&
 				hook_slot(vt, VT_DRAW_INDEXED_PRIMITIVE, reinterpret_cast<void*>(&draw_indexed_hk), s_draw_indexed_og) &&
 				hook_slot(vt, VT_DRAW_PRIMITIVE_UP, reinterpret_cast<void*>(&draw_up_hk), s_draw_up_og) &&
-				hook_slot(vt, VT_DRAW_INDEXED_PRIMITIVE_UP, reinterpret_cast<void*>(&draw_indexed_up_hk), s_draw_indexed_up_og);
+				hook_slot(vt, VT_DRAW_INDEXED_PRIMITIVE_UP, reinterpret_cast<void*>(&draw_indexed_up_hk), s_draw_indexed_up_og) &&
+				hook_slot(vt, VT_CREATE_TEXTURE, reinterpret_cast<void*>(&create_texture_hk), s_create_texture_og) &&
+				hook_slot(vt, VT_CREATE_VOLUME_TEXTURE, reinterpret_cast<void*>(&create_volume_hk), s_create_volume_og) &&
+				hook_slot(vt, VT_CREATE_CUBE_TEXTURE, reinterpret_cast<void*>(&create_cube_hk), s_create_cube_og) &&
+				hook_slot(vt, VT_CREATE_VERTEX_BUFFER, reinterpret_cast<void*>(&create_vb_hk), s_create_vb_og) &&
+				hook_slot(vt, VT_CREATE_INDEX_BUFFER, reinterpret_cast<void*>(&create_ib_hk), s_create_ib_og) &&
+				hook_slot(vt, VT_CREATE_RENDER_TARGET, reinterpret_cast<void*>(&create_rt_hk), s_create_rt_og) &&
+				hook_slot(vt, VT_CREATE_DEPTH_STENCIL, reinterpret_cast<void*>(&create_ds_hk), s_create_ds_og) &&
+				hook_slot(vt, VT_CREATE_OFFSCREEN_PLAIN, reinterpret_cast<void*>(&create_plain_hk), s_create_plain_og) &&
+				hook_slot(vt, VT_CREATE_VERTEX_DECL, reinterpret_cast<void*>(&create_decl_hk), s_create_decl_og) &&
+				hook_slot(vt, VT_CREATE_VERTEX_SHADER, reinterpret_cast<void*>(&create_vs_hk), s_create_vs_og) &&
+				hook_slot(vt, VT_CREATE_PIXEL_SHADER, reinterpret_cast<void*>(&create_ps_hk), s_create_ps_og);
 			MH_ApplyQueued();
 			if (!ok)
 			{
