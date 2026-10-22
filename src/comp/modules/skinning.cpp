@@ -68,7 +68,10 @@ namespace comp
 		dev->SetVertexDeclaration(skin_exp_decl_);
 		dev->SetStreamSource(0, exp_vb, 0, SKIN_VTX_SIZE);
 
+		const bool tinted = ffp.apply_draw_tint(dev);
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+		if (tinted)
+			ffp.clear_draw_tint(dev);
 
 		// Restore original state
 		dev->SetVertexDeclaration(orig_decl);

@@ -27,15 +27,42 @@ namespace shared::common
 		parse_all();
 	}
 
+	void config::set_overlay(const std::string& path)
+	{
+		overlay_path_ = GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES ? path : std::string{};
+		if (!overlay_path_.empty())
+		{
+			log("Config", std::format("Overlay: {}", overlay_path_), LOG_TYPE::LOG_TYPE_STATUS, true);
+			if (loaded_) parse_all();
+		}
+	}
+
+	bool config::overlay_value(const char* section, const char* key, std::string& out) const
+	{
+		if (overlay_path_.empty()) return false;
+		char buf[512];
+		GetPrivateProfileStringA(section, key, "\x01", buf, sizeof(buf), overlay_path_.c_str());
+		if (buf[0] == '\x01' && buf[1] == '\0') return false;
+		out = buf;
+		return true;
+	}
+
 	int config::get_int(const char* section, const char* key, int default_val) const
 	{
 		if (!loaded_) return default_val;
+		if (std::string v; overlay_value(section, key, v))
+		{
+			try { return std::stoi(v, nullptr, 0); }
+			catch (...) { return default_val; }
+		}
 		return GetPrivateProfileIntA(section, key, default_val, ini_path_.c_str());
 	}
 
 	std::string config::get_string(const char* section, const char* key, const char* default_val) const
 	{
 		if (!loaded_) return default_val;
+		if (std::string v; overlay_value(section, key, v))
+			return v;
 		char buf[512];
 		GetPrivateProfileStringA(section, key, default_val, buf, sizeof(buf), ini_path_.c_str());
 		return buf;
@@ -98,6 +125,7 @@ namespace shared::common
 		ffp.shader_tex_fix = get_bool("FFP", "ShaderTexFix", false);
 		ffp.texture_layer_blend = get_bool("FFP", "TextureLayerBlend", true);
 		ffp.water_surface = get_bool("FFP", "WaterSurface", true);
+		ffp.draw_tint = get_bool("FFP", "DrawTint", true);
 		ffp.water_fallback_albedo = get_bool("FFP", "WaterFallbackAlbedo", true);
 		ffp.zwrite_query_per_draw = get_bool("FFP", "ZWriteQueryPerDraw", true);
 
@@ -211,9 +239,17 @@ namespace shared::common
 		benchmark.settle_frames = get_int("Benchmark", "SettleFrames", 90);
 		benchmark.measure_frames = get_int("Benchmark", "MeasureFrames", 240);
 
+		// [Sfx]
+		sfx.ffp_sprites = get_bool("Sfx", "FFPSprites", true);
+		sfx.debug_opaque = get_bool("Sfx", "DebugOpaque", false);
+		sfx.translate = get_bool("Sfx", "Translate", true);
+		sfx.drop_screen_effects = get_bool("Sfx", "DropScreenEffects", true);
+		sfx.hide = get_bool("Sfx", "Hide", false);
+
 		// [Lookdev]
 		lookdev.enabled = get_bool("Lookdev", "Enabled", false);
 		lookdev.capture_key = get_int("Lookdev", "CaptureKey", VK_F9);
+		lookdev.freeze_input_key = get_int("Lookdev", "FreezeInputKey", VK_F8);
 		lookdev.output_dir = get_string("Lookdev", "OutputDir", "rtx_comp\\lookdev");
 
 		// [Perf] is read lazily by comp::game::render_toggles (the keys map 1:1

@@ -10,6 +10,11 @@ namespace shared::common
 		void load(const std::string& ini_path);
 		bool is_loaded() const { return loaded_; }
 
+		// A second INI whose keys win over the loaded one, if the file exists. The
+		// lookdev host uses remix-comp-proxy.host.ini for experiments that must not
+		// touch the game's own INI.
+		void set_overlay(const std::string& path);
+
 		int get_int(const char* section, const char* key, int default_val) const;
 		std::string get_string(const char* section, const char* key, const char* default_val) const;
 		float get_float(const char* section, const char* key, float default_val) const;
@@ -66,6 +71,14 @@ namespace shared::common
 			// path-traced scene. The FFP water draw is forced opaque with a static
 			// albedo; assign a translucent water material in Remix by texture hash.
 			bool water_surface = true;
+			// Carry the per-draw colour and fade (PS c139) of converted draws into
+			// Remix. Every FRPG pixel shader that reads c139 ends with
+			// rgb *= c139.rgb, a *= c139.w (before fog); FFP conversion drops the
+			// shader, so without this fire meshes lose their orange tint and their
+			// fade-out, and fading map pieces/characters pop. The value rides as
+			// D3DRS_TEXTUREFACTOR on stage 1 (MODULATE CURRENT x TFACTOR, colour and
+			// alpha), which the fork runtime applies to albedo, emissive and opacity.
+			bool draw_tint = true;
 			// Albedo policy for Env/Reflect water (no static stage-0 diffuse
 			// exists): when true, bind the generated solid-color fallback —
 			// its fresh hash cannot collide with rtx.conf ignore/hide lists.
@@ -281,6 +294,30 @@ namespace shared::common
 			bool mark_ui_draws = true;
 		} hud;
 
+		// DS1's particles (FRPG_Sfx_* pixel shaders) reach Remix as shader draws,
+		// which it reads through the stage-0 texture stage state, not the shader.
+		struct sfx_settings
+		{
+			// Draw sprite particles (Sprite / SoftSprite / LitSprite UP draws) fixed-
+			// function in the converted geometry's space: their shaders use an absolute
+			// view-projection that the camera-relative transforms Remix is given cannot
+			// place, so as shader draws they land elsewhere or nowhere.
+			bool ffp_sprites = true;
+			// Diagnostic: draw those sprites with blending and alpha test off, as solid
+			// quads, to see where they land.
+			bool debug_opaque = false;
+			// Express what each particle shader computes as stage state Remix reads:
+			// colour and alpha = texture * vertex colour. Off leaves whatever stage
+			// state the last converted draw left (alpha often texture-only).
+			bool translate = true;
+			// Drop the particle draws Remix can only get wrong: depth-encoding passes
+			// (encoded depth in rgb), frame-copy distortion (heat haze) and blurs.
+			bool drop_screen_effects = true;
+			// Diagnostic: drop every particle draw, to see what the rest of the frame
+			// contributes on its own.
+			bool hide = false;
+		} sfx;
+
 		struct sky_settings
 		{
 			// Send the meshes of the map sky models (domes, far cloud layers and
@@ -312,12 +349,16 @@ namespace shared::common
 		{
 			bool enabled = false;
 			int capture_key = VK_F9;
+			int freeze_input_key = VK_F8;
 			std::string output_dir = "rtx_comp\\lookdev";
 		} lookdev;
 
 	private:
 		std::string ini_path_;
+		std::string overlay_path_;
 		bool loaded_ = false;
+
+		bool overlay_value(const char* section, const char* key, std::string& out) const;
 
 		void parse_all();
 	};

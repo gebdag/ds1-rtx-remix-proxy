@@ -103,6 +103,8 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		const char* ini_name = shared::common::flags::has_flag("lookdev")
 			? "\\remix-comp-proxy.lookdev.ini" : "\\remix-comp-proxy.ini";
 		shared::common::config::get().load(shared::globals::root_path + ini_name);
+		if (shared::globals::lookdev_host)
+			shared::common::config::get().set_overlay(shared::globals::root_path + "\\remix-comp-proxy.host.ini");
 
 		// Apply fixed-address game patches as early as possible.
 		// Effect disabling lives in game/render_toggles.cpp now — schedule-level

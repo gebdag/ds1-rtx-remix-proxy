@@ -227,7 +227,7 @@ namespace
 
 	// ---- one captured frame ----
 
-	int run_file(proxy_api& proxy, const std::filesystem::path& capture_path)
+	int run_file(proxy_api& proxy, const std::filesystem::path& capture_path, const std::unordered_set<uint32_t>& drop_draws)
 	{
 		capture_file cap;
 		if (!cap.open(capture_path.wstring()))
@@ -247,6 +247,7 @@ namespace
 		replayer rp(cap);
 		rp.dev = dev;
 		rp.reapply_gpu_targets = false;
+		rp.drop_draws = drop_draws;
 		proxy.attach(rp);
 
 		fps_meter fps;
@@ -516,16 +517,29 @@ int wmain(int argc, wchar_t** argv)
 	std::filesystem::path capture_path;
 	std::filesystem::path proxy_path = L"d3d9_lookdev.dll";
 	bool live = false;
+	std::unordered_set<uint32_t> drop_draws;
 	for (int i = 1; i < argc; i++)
 	{
 		const std::wstring a = argv[i];
 		if (a == L"--proxy" && i + 1 < argc) proxy_path = argv[++i];
 		else if (a == L"--live") live = true;
+		else if (a == L"--drop" && i + 1 < argc)
+		{
+			// Comma-separated draw indices, e.g. --drop 240,343
+			for (const wchar_t* s = argv[++i]; *s; )
+			{
+				wchar_t* end = nullptr;
+				const auto v = std::wcstoul(s, &end, 10);
+				if (end == s) break;
+				drop_draws.insert(static_cast<uint32_t>(v));
+				s = (*end == L',') ? end + 1 : end;
+			}
+		}
 		else if (!a.empty() && a[0] != L'-') capture_path = a;
 	}
 	if (capture_path.empty() && !live)
 	{
-		std::printf("usage: ds1_lookdev_host (<capture.ds1cap> | --live) [--proxy <dll>] -lookdev-host\n");
+		std::printf("usage: ds1_lookdev_host (<capture.ds1cap> [--drop i,j,...] | --live) [--proxy <dll>] -lookdev-host\n");
 		return 2;
 	}
 	if (!std::wstring(GetCommandLineW()).contains(L"-lookdev-host"))
@@ -538,7 +552,7 @@ int wmain(int argc, wchar_t** argv)
 	if (!proxy.load(proxy_path))
 		return 2;
 
-	const int rc = live ? run_live(proxy) : run_file(proxy, capture_path);
+	const int rc = live ? run_live(proxy) : run_file(proxy, capture_path, drop_draws);
 	proxy.d3d->Release();
 	return rc;
 }

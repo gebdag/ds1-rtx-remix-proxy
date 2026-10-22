@@ -36,6 +36,100 @@ namespace {
 		return shared::common::config::get().lookdev.enabled;
 	}
 
+	// DS1's particles (FRPG_Sfx_* pixel shaders) reach Remix as shader draws, and
+	// Remix builds their material from the stage-0 texture stage state, not the
+	// shader. Every sprite shader computes colour = texture * vertex colour and
+	// alpha = texture.a * vertex.a (fog, scattering and the game's exposure on
+	// top, the same for the whole family), but the stage state at that point was
+	// whatever the last converted draw left, and the pixel shader itself was still
+	// swallowed by the FFP latch. Flames fade through vertex alpha on textures
+	// whose alpha is 1, so an alpha without the vertex term drew every strip at
+	// full strength. sfx_draw restores the game's shaders and transforms as any
+	// passthrough draw does, states the shader's maths for the draw, and restores
+	// the stage state after. The screen-space families, which Remix can only get
+	// wrong (encoded depth, frame-copy distortion, blurs), are dropped.
+	template <class Draw>
+	HRESULT sfx_draw(IDirect3DDevice9* dev, shared::common::sfx_class cls, Draw&& draw)
+	{
+		using shared::common::sfx_class;
+		const auto& cfg = shared::common::config::get().sfx;
+		auto& ffp = shared::common::ffp_state::get();
+
+		if (cfg.hide)
+			return S_OK;
+		if (cls == sfx_class::DepthEncode || cls == sfx_class::Distortion || cls == sfx_class::Blur)
+		{
+			if (cfg.drop_screen_effects)
+				return S_OK;
+			ffp.with_cached_transforms([&] { ffp.disengage(dev); });
+			return draw();
+		}
+
+		constexpr D3DTEXTURESTAGESTATETYPE states[] = {
+			D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_COLORARG2, D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1, D3DTSS_ALPHAARG2 };
+		constexpr DWORD values[] = {
+			D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE };
+		DWORD saved[std::size(states)] = {};
+		for (size_t i = 0; i < std::size(states); i++)
+			dev->GetTextureStageState(0, states[i], &saved[i]);
+
+		static bool logged = false;
+		if (!logged)
+		{
+			logged = true;
+			shared::common::log("Sfx", std::format("first particle draw: FFP latch {}, stage 0 colour op {} ({:#x}, {:#x}), alpha op {} ({:#x}, {:#x})",
+				ffp.is_ffp_active() ? "engaged (pixel shader swallowed)" : "off",
+				saved[0], saved[1], saved[2], saved[3], saved[4], saved[5]));
+		}
+
+		ffp.with_cached_transforms([&] { ffp.disengage(dev); });
+		if (!cfg.translate)
+			return draw();
+
+		for (size_t i = 0; i < std::size(states); i++)
+			dev->SetTextureStageState(0, states[i], values[i]);
+		const auto hr = draw();
+		for (size_t i = 0; i < std::size(states); i++)
+			dev->SetTextureStageState(0, states[i], saved[i]);
+		return hr;
+	}
+
+	shared::common::sfx_class current_sfx()
+	{
+		return shared::common::ffp_state::get().cur_ps_sfx_class();
+	}
+
+	// Sprite particles of UP draws go fixed-function (ffp_state::draw_sprite_up);
+	// true when it drew. Everything else, and anything it cannot place, takes sfx_draw.
+	bool sfx_sprite_up(IDirect3DDevice9* dev, shared::common::sfx_class cls, D3DPRIMITIVETYPE prim, UINT prim_count,
+		UINT min_index, UINT num_verts, const void* indices, D3DFORMAT index_format,
+		const void* vertices, UINT stride, HRESULT& hr)
+	{
+		using shared::common::sfx_class;
+		const auto& cfg = shared::common::config::get().sfx;
+		if (cfg.hide || !cfg.ffp_sprites)
+			return false;
+		if (cls != sfx_class::Sprite && cls != sfx_class::SoftSprite && cls != sfx_class::LitSprite)
+			return false;
+
+		auto& ffp = shared::common::ffp_state::get();
+		static uint32_t drawn = 0, fallback = 0, frame = 0, frames_logged = 0;
+		if (frame != ffp.frame_count())
+		{
+			if (frame && (drawn || fallback) && (frames_logged < 3 || frame % 600 == 0))
+			{
+				frames_logged++;
+				shared::common::log("Sfx", std::format("frame {}: {} sprites drawn fixed-function, {} as shader draws", frame, drawn, fallback));
+			}
+			frame = ffp.frame_count();
+			drawn = fallback = 0;
+		}
+		const bool ok = ffp.draw_sprite_up(dev, prim, prim_count, min_index, num_verts,
+			indices, index_format, vertices, stride, cls != sfx_class::LitSprite, hr);
+		(ok ? drawn : fallback)++;
+		return ok;
+	}
+
 	// D3DFORMAT is either a small enum value or a FourCC ('DXT1', 'ATI2', ...).
 	std::string format_tag(D3DFORMAT format)
 	{
@@ -744,6 +838,8 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitive, PrimitiveType, StartVertex, PrimitiveCount);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
+		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount); });
 		UINT num_verts = PrimitiveCount * 3;
 		if (PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLEFAN)
 			num_verts = PrimitiveCount + 2;
@@ -762,6 +858,8 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitive, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount); });
 		const auto insp = perf::inspector_on_draw("DIP", PrimitiveType, primCount, NumVertices,
 			BaseVertexIndex, startIndex, shared::common::ffp_state::get().stream_stride(0));
 		if (insp.drop)
@@ -777,6 +875,14 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+		{
+			HRESULT hr = S_OK;
+			if (sfx_sprite_up(m_pIDirect3DDevice9, sfx, PrimitiveType, PrimitiveCount, 0, 0, nullptr, D3DFMT_UNKNOWN,
+				pVertexStreamZeroData, VertexStreamZeroStride, hr))
+				return hr;
+			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride); });
+		}
 		{
 			UINT up_verts = PrimitiveCount * 3;
 			if (PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLEFAN)
@@ -817,6 +923,14 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitiveUP, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+		{
+			HRESULT hr = S_OK;
+			if (sfx_sprite_up(m_pIDirect3DDevice9, sfx, PrimitiveType, PrimitiveCount, MinVertexIndex, NumVertices, pIndexData, IndexDataFormat,
+				pVertexStreamZeroData, VertexStreamZeroStride, hr))
+				return hr;
+			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride); });
+		}
 		{
 			const auto insp = perf::inspector_on_draw("DIPUP", PrimitiveType, PrimitiveCount, NumVertices,
 				0, 0, VertexStreamZeroStride);
@@ -912,7 +1026,10 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_CreateVertexShader, pFunction, ppShader);
 		auto hr = m_pIDirect3DDevice9->CreateVertexShader(pFunction, ppShader);
 		if (SUCCEEDED(hr) && ppShader && *ppShader)
+		{
+			shared::common::ffp_state::get().on_create_vertex_shader(*ppShader, pFunction);
 			if (auto* t = tracer::get(); t && t->is_capturing()) t->record_created_handle(*ppShader);
+		}
 		return hr;
 	}
 

@@ -203,6 +203,7 @@ namespace comp
 				// atmospheric layers are not: a decal only survives on a surface
 				// behind it, so mist or a backdrop card in front of the sky vanished.
 				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+				const bool tinted = ffp.apply_draw_tint(dev);
 				{
 					shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 					hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
@@ -226,6 +227,8 @@ namespace comp
 							hr = overlay_hr;
 					}
 				}
+				if (tinted)
+					ffp.clear_draw_tint(dev);
 			}
 			else
 			{
@@ -532,6 +535,7 @@ namespace comp
 					// atmospheric layers are not: a decal only survives on a surface
 					// behind it, so mist or a backdrop card in front of the sky vanished.
 					const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					const bool tinted = ffp.apply_draw_tint(dev);
 					{
 						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
@@ -566,6 +570,8 @@ namespace comp
 								hr = overlay_hr;
 						}
 					}
+					if (tinted)
+						ffp.clear_draw_tint(dev);
 				}
 				else
 				{

@@ -12,12 +12,30 @@ namespace comp
 	//
 	// The recording hooks sit on the REAL device and its buffers, below this
 	// proxy's wrapper, so the file holds exactly what the GPU was given, the
-	// proxy's own draws included. Outside a capture every hook passes straight
-	// through after one flag test.
+	// proxy's own draws included (its ImGui overlays excepted, see private_scope).
+	// Outside a capture every hook passes straight through after one flag test.
+	//
+	// The freeze key (F8) also lives here: while shared::globals::input_frozen is
+	// set the game gets no keyboard, mouse or gamepad input, so a camera lined up
+	// for a capture or the live host stays put while the desktop is used.
 	class lookdev_capture final : public shared::common::loader::component_module
 	{
 	public:
 		lookdev_capture();
 		~lookdev_capture();
+
+		// Device calls made while one of these exists are not recorded: the proxy's
+		// ImGui overlays drawn into the game's frame. Harmless outside lookdev mode.
+		struct private_scope
+		{
+			private_scope();
+			~private_scope();
+		private:
+			bool prev_;
+		};
+
+		// True while the frame being drawn goes into a capture file, whose
+		// reference image must show only what the game and proxy rendered.
+		static bool writing_file();
 	};
 }

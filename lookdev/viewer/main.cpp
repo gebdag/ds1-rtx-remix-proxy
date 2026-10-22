@@ -81,11 +81,18 @@ int wmain(int argc, wchar_t** argv)
 {
 	std::filesystem::path capture_path, out_dir;
 	bool compare_only = false;
+	int pixel_x = -1, pixel_y = -1;
 	for (int i = 1; i < argc; i++)
 	{
 		const std::wstring a = argv[i];
 		if (a == L"--compare") compare_only = true;
 		else if (a == L"--out" && i + 1 < argc) out_dir = argv[++i];
+		else if (a == L"--pixel" && i + 2 < argc)
+		{
+			pixel_x = _wtoi(argv[++i]);
+			pixel_y = _wtoi(argv[++i]);
+			compare_only = true;
+		}
 		else capture_path = a;
 	}
 	if (capture_path.empty())
@@ -144,9 +151,62 @@ int wmain(int argc, wchar_t** argv)
 
 	replayer rp(cap);
 	rp.dev = dev;
+
+	// Pixel history: after every command that can write pixels, copy the pixel
+	// out of the bound full-size render target and report every change.
+	std::unordered_map<uint32_t, std::pair<IDirect3DSurface9*, IDirect3DSurface9*>> probes; // format -> 1x1 RT, 1x1 sysmem
+	std::unordered_map<IDirect3DSurface9*, std::vector<uint8_t>> last_value;
+	if (pixel_x >= 0)
+	{
+		std::printf("pixel history of (%d, %d):\n", pixel_x, pixel_y);
+		rp.after_command = [&](uint32_t type)
+		{
+			IDirect3DSurface9* rt = nullptr;
+			if (FAILED(dev->GetRenderTarget(0, &rt)) || !rt) return;
+			D3DSURFACE_DESC sd;
+			rt->GetDesc(&sd);
+			if (sd.Width != h.bb_width || sd.Height != h.bb_height || sd.MultiSampleType != D3DMULTISAMPLE_NONE)
+			{
+				rt->Release();
+				return;
+			}
+			auto& probe = probes[sd.Format];
+			if (!probe.first)
+			{
+				dev->CreateRenderTarget(1, 1, sd.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &probe.first, nullptr);
+				dev->CreateOffscreenPlainSurface(1, 1, sd.Format, D3DPOOL_SYSTEMMEM, &probe.second, nullptr);
+			}
+			const RECT src { pixel_x, pixel_y, pixel_x + 1, pixel_y + 1 };
+			std::vector<uint8_t> value;
+			D3DLOCKED_RECT lr;
+			if (probe.first && probe.second && SUCCEEDED(dev->StretchRect(rt, &src, probe.first, nullptr, D3DTEXF_NONE))
+				&& SUCCEEDED(dev->GetRenderTargetData(probe.first, probe.second)) && SUCCEEDED(probe.second->LockRect(&lr, nullptr, D3DLOCK_READONLY)))
+			{
+				const uint32_t bytes = std::max<uint32_t>(1, bits_per_pixel(sd.Format) / 8);
+				value.assign(static_cast<const uint8_t*>(lr.pBits), static_cast<const uint8_t*>(lr.pBits) + bytes);
+				probe.second->UnlockRect();
+			}
+			auto& last = last_value[rt];
+			if (!value.empty() && value != last)
+			{
+				std::string hex;
+				for (auto b : value) { char t[4]; std::snprintf(t, sizeof t, "%02X", b); hex += t; }
+				const char* what = type == REC_CLEAR ? "clear" : type == REC_STRETCH_RECT ? "stretch" : type == REC_COLOR_FILL ? "fill" : "draw";
+				std::printf("  %-7s %4d  rt %p fmt %3u  -> %s", what, static_cast<int>(rp.draws) - 1, static_cast<void*>(rt), sd.Format, hex.c_str());
+				if (value.size() == 4) // B8G8R8A8 in memory
+					std::printf("  (r %u g %u b %u a %u)", value[2], value[1], value[0], value[3]);
+				std::printf("\n");
+				last = value;
+			}
+			rt->Release();
+		};
+	}
+
 	const auto t0 = GetTickCount64();
 	rp.run();
 	const auto t1 = GetTickCount64();
+	if (pixel_x >= 0)
+		return 0;
 
 	image_buf replay;
 	if (!rp.read_backbuffer(replay))

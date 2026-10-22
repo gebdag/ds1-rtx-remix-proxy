@@ -16,8 +16,29 @@ python lookdev.py view [name]         # plain-D3D9 viewer window: 1 replay, 2 va
 python lookdev.py info [name]         # what is in a capture
 ```
 
+The same, double-clickable from this folder:
+
+| File | Does |
+|---|---|
+| `lookdev_start_game.cmd` | `lookdev.ps1`: the game in lookdev mode |
+| `lookdev_live.cmd` | `host --live`: the Remix window following the game (run again to restart it) |
+| `lookdev_capture.cmd` | `capture`: asks for a name (Enter = timestamp) |
+| `lookdev_replay.cmd` | `host <name>`: lists captures, asks which to replay in Remix (Enter = newest) |
+| `lookdev_view.cmd` | `view <name>`: same, in the plain D3D9 viewer |
+
+Each also takes the name as an argument.
+
 Captures are stored in `DATA\rtx_comp\lookdev\`. In the host window, F4 opens the
 proxy menu and Alt+X opens the Remix menu, as in the game.
+
+F8 in the game freezes its input: keyboard, mouse and gamepad stop reaching the
+game, so a camera lined up for a capture or the live host stays put while you use
+the desktop. A pill at the top of the game window shows the state; F8 again (game
+window focused) releases it. The pill never appears in captures or in the host.
+`[Lookdev] FreezeInputKey` (a virtual-key code) changes the key.
+
+`host [name] --drop i,j,...` leaves those draws (numbered as `analyze.py draws`
+numbers them) out of the replay, to find which draw produces something.
 
 ### Iterating on the proxy
 

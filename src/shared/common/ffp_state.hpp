@@ -1,8 +1,24 @@
 #pragma once
 #include "config.hpp"
 
+#include <array>
+
 namespace shared::common
 {
+	// What one of DS1's particle pixel shaders (FRPG_Sfx_*) computes, which decides
+	// how its draws reach Remix. Generated per shader into sfx_shaders.inc by
+	// scripts/gen_sfx_shader_table.py; the reasoning is in the script.
+	enum class sfx_class : uint8_t
+	{
+		None,        // not a particle shader
+		Sprite,      // rgb = tex * vcolor, a = tex.a * vcolor.a (fog, scatter, exposure on top)
+		SoftSprite,  // Sprite, alpha also faded by the scene depth over the per-vertex feather
+		LitSprite,   // normal-mapped lighting * tex * vcolor (smoke)
+		DepthEncode, // writes the particle's depth encoded into rgb, no colour of its own
+		Distortion,  // warps a copy of the frame (heat haze, refraction)
+		Blur,        // screen-space depth copy / bright pass / blurs
+	};
+
 	/*
 	 * FFP state tracker — captures D3D9 state needed for fixed-function pipeline conversion.
 	 *
@@ -22,6 +38,9 @@ namespace shared::common
 		void on_set_vs_const_f(UINT start_reg, const float* data, UINT count);
 		void on_set_ps_const_f(UINT start_reg, const float* data, UINT count);
 		void on_set_vertex_shader(IDirect3DVertexShader9* shader);
+		// Record which constant registers a vertex shader takes its view-projection
+		// from (the particle sprite path needs it). Called from CreateVertexShader.
+		void on_create_vertex_shader(IDirect3DVertexShader9* shader, const DWORD* bytecode);
 
 		void on_set_pixel_shader(IDirect3DPixelShader9* shader);
 		// Record the sampler usage of a freshly created pixel shader (parsed from
@@ -61,6 +80,42 @@ namespace shared::common
 
 		// Restore original texture bindings on all 8 stages. Call after draw.
 		void restore_textures(IDirect3DDevice9* dev);
+
+		// DS1 particle sprites (FRPG_Sfx_* sprite shaders) are UP draws of world-space
+		// quads the CPU rebuilds every frame, transformed by an ABSOLUTE view-projection
+		// in their vertex shader (c8-c11, c12-c15 for point sprites), while map pieces use
+		// a camera-relative one (c0-c3) plus a world matrix. This draws such a sprite
+		// fixed-function in the converted geometry's space: World = translation from the
+		// particle camera to the space ffp gives map pieces, vertices repacked to
+		// position + colour + uv, stage 0 = texture x vertex colour (the sprite
+		// shaders' own colour and alpha). Returns false, drawing nothing, when the draw
+		// cannot be placed that way (unknown vertex shader, a different camera such as the
+		// water reflection pass, no map camera yet, unusable vertex layout).
+		// unlit: the sprite shader is unlit (Sprite / SoftSprite: colour = texture x vertex
+		// colour); the draw then carries the unlit marker for the runtime
+		// (rtx.fixedFunctionUnlitMarkerEnabled) and the masks the shader multiplies in
+		// on samplers 1 and 3 (the "Multi" families) are folded into the vertex colour as
+		// their average, since Remix only takes stage 0.
+		bool draw_sprite_up(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, UINT prim_count,
+			UINT min_index, UINT num_verts, const void* indices, D3DFORMAT index_format,
+			const void* vertices, UINT stride, bool unlit, HRESULT& hr);
+
+		// Particle shaders upload their own data into c0-c3 and c8-c11 (the camera and
+		// world registers of map pieces) while c4-c6 still hold a valid camera basis, so
+		// engage/disengage during a particle draw would decompose that data as the camera
+		// and world and cache it for every following draw. This runs fn with the cached
+		// transforms re-applied as they are, then restores the dirty flags so the next
+		// map draw still picks up the constants it uploads.
+		template <class Fn>
+		void with_cached_transforms(Fn&& fn)
+		{
+			const bool vp_dirty = view_proj_dirty_, w_dirty = world_dirty_;
+			view_proj_dirty_ = false;
+			world_dirty_ = false;
+			fn();
+			view_proj_dirty_ = vp_dirty;
+			world_dirty_ = w_dirty;
+		}
 
 		// --- Read-only accessors for renderer ---
 
@@ -220,6 +275,9 @@ namespace shared::common
 		// Sampler-declaration bitmask of the current pixel shader (bit n = sn).
 		uint32_t cur_ps_sampler_mask() const { return cur_ps_sampler_mask_; }
 
+		// Particle class of the current pixel shader (sfx_class::None for all others).
+		sfx_class cur_ps_sfx_class() const { return cur_ps_sfx_class_; }
+
 		// Which of DS1's light constants the current pixel shader reads, parsed from
 		// its instruction stream at creation:
 		//   PS_LIGHT_DIR3   c92 and c95, directional light 0 direction and colour.
@@ -231,6 +289,17 @@ namespace shared::common
 		static constexpr uint32_t PS_LIGHT_DIR3 = 1u << 0;
 		static constexpr uint32_t PS_LIGHT_SHADOW = 1u << 1;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
+
+		// True when the current pixel shader reads c139, the per-draw colour and
+		// fade every FRPG material shader multiplies its output by.
+		bool cur_ps_reads_draw_tint() const { return cur_ps_draw_tint_; }
+
+		// For a converted draw whose pixel shader reads c139 and whose c139 is not
+		// (1,1,1,1): put c139 in D3DRS_TEXTUREFACTOR and enable stage 1 as
+		// MODULATE(CURRENT, TFACTOR) for colour and alpha. Returns true when it did;
+		// pair with clear_draw_tint after the draw(s). Call after engage().
+		bool apply_draw_tint(IDirect3DDevice9* dev);
+		void clear_draw_tint(IDirect3DDevice9* dev);
 
 		// Bind an albedo for a water-surface FFP draw: the first non-NULL,
 		// non-render-target texture on stages 0-7, else a solid-color fallback
@@ -301,6 +370,7 @@ namespace shared::common
 		int secondary_blend_stage() const;
 		static uint32_t parse_ps_sampler_mask(const DWORD* bytecode);
 		static uint32_t parse_ps_light_flags(const DWORD* bytecode);
+		static bool ps_reads_float_const(const DWORD* bytecode, DWORD reg);
 		static uint32_t hash_shader_bytecode(const DWORD* bytecode);
 
 		bool enabled_ = true;
@@ -360,6 +430,28 @@ namespace shared::common
 		std::unordered_map<IDirect3DPixelShader9*, uint32_t> ps_light_flags_;
 		uint32_t cur_ps_light_flags_ = 0;
 
+		// First register of each vertex shader's view-projection (see on_create_vertex_shader).
+		std::unordered_map<IDirect3DVertexShader9*, int> vs_viewproj_base_;
+		int cur_vs_viewproj_base_ = -1;
+		// The map camera's c0-c3 rows as of the last View/Proj decomposition, and the
+		// sprite path's repacked vertices.
+		float map_viewproj_rows_[16] = {};
+		bool have_map_viewproj_ = false;
+		std::vector<unsigned char> sprite_vertices_;
+		// Average colour (rgba, 0-1) of textures used as sprite masks, from their smallest mip.
+		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
+		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);
+
+		// Pixel shaders that read c139 (see cur_ps_reads_draw_tint).
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_draw_tint_;
+		bool cur_ps_draw_tint_ = false;
+		// The game's own D3DRS_TEXTUREFACTOR, restored by clear_draw_tint.
+		DWORD game_tfactor_ = 0xFFFFFFFF;
+
+		// Particle class of each pixel shader (see cur_ps_sfx_class).
+		std::unordered_map<IDirect3DPixelShader9*, sfx_class> ps_sfx_class_;
+		sfx_class cur_ps_sfx_class_ = sfx_class::None;
+
 		// Solid-color fallback albedo for water draws with no stable static
 		// texture bound. Gives Remix a constant texture hash to remap.
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
@@ -382,6 +474,7 @@ namespace shared::common
 		int cur_decl_blend_indices_off_ = 0;
 		int cur_decl_blend_indices_type_ = -1;
 		int cur_decl_pos_off_ = 0;
+		int cur_decl_pos_type_ = -1;
 		int cur_decl_normal_off_ = 0;
 		int cur_decl_normal_type_ = -1;
 		int cur_decl_color_off_ = 0;

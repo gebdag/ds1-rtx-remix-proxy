@@ -29,6 +29,10 @@ namespace shared::globals
 	// memory and code do not exist in this process, so nothing may read, patch or
 	// hook it. Game state the modules need arrives through game::host_feed.
 	extern bool lookdev_host;
+
+	// Lookdev mode: the game sees no keyboard, mouse or gamepad input while set,
+	// so the camera stays where it was lined up (toggled by [Lookdev] FreezeInputKey).
+	extern bool input_frozen;
 	extern IDirect3D9* d3d9_interface;
 
 	// Module handle of the real d3d9 chain (Remix bridge or system d3d9.dll).

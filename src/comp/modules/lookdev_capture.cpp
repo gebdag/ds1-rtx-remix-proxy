@@ -10,6 +10,10 @@
 #include "../game/point_lights.hpp"
 #include "../game/texture_names.hpp"
 
+#include "shared/common/dinput_hook_v2.hpp"
+#include <Xinput.h>
+#include <intrin.h>
+
 #include <atomic>
 #include <cctype>
 #include <optional>
@@ -1406,6 +1410,182 @@ namespace comp
 			}
 		}
 
+		// ---- input freeze ----
+		//
+		// While shared::globals::input_frozen is set, every way the game reads input
+		// comes back idle: DirectInput (ANSI and wide devices, state and buffered
+		// data; the wide GetDeviceState is shared::common::dinput_v2's hook), the
+		// user32 key and cursor queries, and XInput. Only calls from the game's own
+		// code are blocked, so the proxy's key polling and ImGui keep working.
+
+		POINT s_frozen_cursor {};
+		uintptr_t s_game_lo = 0, s_game_hi = 0;
+		std::atomic<uint32_t> s_blocked_seen = 0;
+
+		bool from_game(void* return_address)
+		{
+			const auto a = reinterpret_cast<uintptr_t>(return_address);
+			return a >= s_game_lo && a < s_game_hi;
+		}
+
+		bool block_for_game(void* return_address, int api, const char* name)
+		{
+			if (!shared::globals::input_frozen || !from_game(return_address))
+				return false;
+			const uint32_t bit = 1u << api;
+			if (!(s_blocked_seen.fetch_or(bit) & bit))
+				log(std::format("Input freeze: blocked the game's {}", name));
+			return true;
+		}
+
+		using get_key_state_t = SHORT(WINAPI*)(int);
+		using get_keyboard_state_t = BOOL(WINAPI*)(PBYTE);
+		using get_cursor_pos_t = BOOL(WINAPI*)(LPPOINT);
+		using xinput_get_state_t = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
+		using di_get_state_t = HRESULT(__stdcall*)(IDirectInputDevice8A*, DWORD, LPVOID);
+		using di_get_data_t = HRESULT(__stdcall*)(IDirectInputDevice8A*, DWORD, LPDIDEVICEOBJECTDATA, LPDWORD, DWORD);
+
+		get_key_state_t s_get_async_key_state_og = nullptr;
+		get_key_state_t s_get_key_state_og = nullptr;
+		get_keyboard_state_t s_get_keyboard_state_og = nullptr;
+		get_cursor_pos_t s_get_cursor_pos_og = nullptr;
+		xinput_get_state_t s_xinput_get_state_og = nullptr;
+		di_get_state_t s_di_get_state_og = nullptr;
+		di_get_data_t s_di_get_data_og[2] = {};
+
+		SHORT WINAPI get_async_key_state_hk(int vk)
+		{
+			return block_for_game(_ReturnAddress(), 0, "GetAsyncKeyState") ? 0 : s_get_async_key_state_og(vk);
+		}
+
+		SHORT WINAPI get_key_state_hk(int vk)
+		{
+			return block_for_game(_ReturnAddress(), 1, "GetKeyState") ? 0 : s_get_key_state_og(vk);
+		}
+
+		BOOL WINAPI get_keyboard_state_hk(PBYTE keys)
+		{
+			const BOOL r = s_get_keyboard_state_og(keys);
+			if (r && keys && block_for_game(_ReturnAddress(), 2, "GetKeyboardState"))
+				std::memset(keys, 0, 256);
+			return r;
+		}
+
+		BOOL WINAPI get_cursor_pos_hk(LPPOINT pt)
+		{
+			if (pt && block_for_game(_ReturnAddress(), 3, "GetCursorPos"))
+			{
+				*pt = s_frozen_cursor;
+				return TRUE;
+			}
+			return s_get_cursor_pos_og(pt);
+		}
+
+		// The packet number is flipped so a game that only re-reads on a new packet
+		// still sees the idle pad.
+		DWORD WINAPI xinput_get_state_hk(DWORD user, XINPUT_STATE* state)
+		{
+			const DWORD r = s_xinput_get_state_og(user, state);
+			if (r == ERROR_SUCCESS && state && block_for_game(_ReturnAddress(), 4, "XInputGetState"))
+			{
+				state->dwPacketNumber ^= 0x40000000u;
+				std::memset(&state->Gamepad, 0, sizeof(state->Gamepad));
+			}
+			return r;
+		}
+
+		HRESULT __stdcall di_get_state_hk(IDirectInputDevice8A* dev, DWORD size, LPVOID data)
+		{
+			const HRESULT hr = s_di_get_state_og(dev, size, data);
+			if (SUCCEEDED(hr) && data && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)"))
+				std::memset(data, 0, size);
+			return hr;
+		}
+
+		// Buffered input: drained as usual, then reported empty.
+		template <int Slot>
+		HRESULT __stdcall di_get_data_hk(IDirectInputDevice8A* dev, DWORD object_size, LPDIDEVICEOBJECTDATA data, LPDWORD count, DWORD flags)
+		{
+			const HRESULT hr = s_di_get_data_og[Slot](dev, object_size, data, count, flags);
+			if (SUCCEEDED(hr) && count && block_for_game(_ReturnAddress(), 6 + Slot, "DirectInput GetDeviceData"))
+				*count = 0;
+			return hr;
+		}
+
+		template <class Fn>
+		void hook_target(void* target, Fn detour, Fn& og, const char* name)
+		{
+			if (!target)
+			{
+				log(std::format("Input freeze: {} not found", name));
+				return;
+			}
+			const auto st = MH_CreateHook(target, reinterpret_cast<void*>(detour), reinterpret_cast<void**>(&og));
+			if (st == MH_ERROR_ALREADY_CREATED)
+				return; // another module's hook on the same code (dinput_v2) covers it
+			if (st != MH_OK || MH_EnableHook(target) != MH_OK)
+				log(std::format("Input freeze: could not hook {}", name), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+		}
+
+		void* proc(const wchar_t* module, const char* name)
+		{
+			const auto mod = GetModuleHandleW(module);
+			return mod ? reinterpret_cast<void*>(GetProcAddress(mod, name)) : nullptr;
+		}
+
+		void hook_input_freeze()
+		{
+			const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+			const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+			s_game_lo = base;
+			s_game_hi = base + nt->OptionalHeader.SizeOfImage;
+
+			hook_target(proc(L"user32.dll", "GetAsyncKeyState"), &get_async_key_state_hk, s_get_async_key_state_og, "GetAsyncKeyState");
+			hook_target(proc(L"user32.dll", "GetKeyState"), &get_key_state_hk, s_get_key_state_og, "GetKeyState");
+			hook_target(proc(L"user32.dll", "GetKeyboardState"), &get_keyboard_state_hk, s_get_keyboard_state_og, "GetKeyboardState");
+			hook_target(proc(L"user32.dll", "GetCursorPos"), &get_cursor_pos_hk, s_get_cursor_pos_og, "GetCursorPos");
+			hook_target(proc(L"xinput1_3.dll", "XInputGetState"), &xinput_get_state_hk, s_xinput_get_state_og, "XInputGetState");
+
+			// DirectInput methods live in vtables; take them from throwaway devices.
+			IDirectInput8A* di_a = nullptr;
+			IDirectInput8W* di_w = nullptr;
+			IDirectInputDevice8A* dev_a = nullptr;
+			IDirectInputDevice8W* dev_w = nullptr;
+			if (SUCCEEDED(DirectInput8Create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8A, reinterpret_cast<void**>(&di_a), nullptr))
+				&& SUCCEEDED(di_a->CreateDevice(GUID_SysKeyboard, &dev_a, nullptr)))
+			{
+				auto** vt = *reinterpret_cast<void***>(dev_a);
+				hook_target(vt[9], &di_get_state_hk, s_di_get_state_og, "DirectInput GetDeviceState (ANSI)");
+				hook_target(vt[10], &di_get_data_hk<0>, s_di_get_data_og[0], "DirectInput GetDeviceData (ANSI)");
+			}
+			if (SUCCEEDED(DirectInput8Create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8W, reinterpret_cast<void**>(&di_w), nullptr))
+				&& SUCCEEDED(di_w->CreateDevice(GUID_SysKeyboard, &dev_w, nullptr)))
+			{
+				auto** vt = *reinterpret_cast<void***>(dev_w);
+				hook_target(vt[10], &di_get_data_hk<1>, s_di_get_data_og[1], "DirectInput GetDeviceData (wide)");
+			}
+			if (dev_a) dev_a->Release();
+			if (di_a) di_a->Release();
+			if (dev_w) dev_w->Release();
+			if (di_w) di_w->Release();
+		}
+
+		// The freeze key (game window focused) toggles whether the game sees input.
+		void poll_freeze_key()
+		{
+			static bool key_down = false;
+			const int key = shared::common::config::get().lookdev.freeze_input_key;
+			const bool down = key && (GetAsyncKeyState(key) & 0x8000) && GetForegroundWindow() == shared::globals::main_window;
+			if (down && !key_down)
+			{
+				if (!shared::globals::input_frozen)
+					GetCursorPos(&s_frozen_cursor);
+				shared::globals::input_frozen = !shared::globals::input_frozen;
+				log(shared::globals::input_frozen ? "Input frozen: the game ignores keyboard, mouse and gamepad" : "Input live");
+			}
+			key_down = down;
+		}
+
 		// A capture is requested with the capture key (game window focused) or
 		// by creating <output dir>\capture.request; its first line, if any,
 		// names the capture.
@@ -1461,6 +1641,7 @@ namespace comp
 			if (!t_internal)
 			{
 				s_frame_index++;
+				poll_freeze_key();
 				poll_request();
 				if (s_request && !s_cap)
 				{
@@ -1819,8 +2000,10 @@ namespace comp
 				log("Could not hook Present; captures disabled", shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 				return 1;
 			}
-			const auto key = shared::common::config::get().lookdev.capture_key;
-			log(std::format("Ready. Capture key 0x{:X}, or create {}\\capture.request", key, output_dir()));
+			hook_input_freeze();
+			const auto& cfg = shared::common::config::get().lookdev;
+			log(std::format("Ready. Capture key 0x{:X}, or create {}\\capture.request; freeze-input key 0x{:X}",
+				cfg.capture_key, output_dir(), cfg.freeze_input_key));
 			return 0;
 		}
 	}
@@ -1829,6 +2012,14 @@ namespace comp
 	{
 		if (const auto t = CreateThread(nullptr, 0, install_present_hook, nullptr, 0, nullptr); t)
 			CloseHandle(t);
+	}
+
+	lookdev_capture::private_scope::private_scope() : prev_(t_internal) { t_internal = true; }
+	lookdev_capture::private_scope::~private_scope() { t_internal = prev_; }
+
+	bool lookdev_capture::writing_file()
+	{
+		return s_capturing.load(std::memory_order_relaxed) && s_cap && !s_cap->streaming;
 	}
 
 	lookdev_capture::~lookdev_capture() = default;

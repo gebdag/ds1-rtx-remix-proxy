@@ -183,6 +183,64 @@ namespace shared::common
 		if (last_vs_) last_vs_->Release();
 		last_vs_ = shader;
 		ffp_active_ = false;
+
+		cur_vs_viewproj_base_ = -1;
+		if (shader)
+			if (auto it = vs_viewproj_base_.find(shader); it != vs_viewproj_base_.end())
+				cur_vs_viewproj_base_ = it->second;
+	}
+
+	namespace
+	{
+		// First constant register of the view-projection a vertex shader applies to its
+		// position: the lowest float constant read by its first dp4 instructions (DS1's
+		// sprite shaders use c8-c11, point sprites c12-c15; some leave the z row out of
+		// the dp4s). -1 when the shader has none (relative addressing is ignored).
+		int parse_vs_viewproj_base(const DWORD* code)
+		{
+			if (!code || (code[0] & 0xFFFF0000) != 0xFFFE0000)
+				return -1;
+
+			int base = -1;
+			int seen = 0;
+			constexpr size_t max_tokens = 65536;
+			size_t i = 1;
+			while (i < max_tokens && seen < 3)
+			{
+				const DWORD tok = code[i];
+				if (tok == 0x0000FFFF)
+					break;
+				const DWORD opcode = tok & 0xFFFF;
+				if (opcode == 0xFFFE) // D3DSIO_COMMENT
+				{
+					i += 1 + ((tok >> 16) & 0x7FFF);
+					continue;
+				}
+				const DWORD param_count = (tok >> 24) & 0x0F;
+				if (opcode == 9 /* D3DSIO_DP4 */)
+				{
+					for (DWORD p = 2; p <= param_count; ++p)
+					{
+						const DWORD param = code[i + p];
+						const DWORD reg_type = ((param >> 28) & 0x7) | ((param >> 8) & 0x18);
+						if (reg_type == 2 /* D3DSPR_CONST */ && !(param & 0x2000) /* relative */)
+						{
+							const int reg = static_cast<int>(param & 0x7FF);
+							base = base < 0 ? reg : std::min(base, reg);
+							++seen;
+						}
+					}
+				}
+				i += 1 + param_count;
+			}
+			return base;
+		}
+	}
+
+	void ffp_state::on_create_vertex_shader(IDirect3DVertexShader9* shader, const DWORD* bytecode)
+	{
+		if (shader)
+			vs_viewproj_base_[shader] = parse_vs_viewproj_base(bytecode);
 	}
 
 	void ffp_state::on_set_pixel_shader(IDirect3DPixelShader9* shader)
@@ -196,10 +254,16 @@ namespace shared::common
 		cur_ps_sampler_mask_ = 0;
 		cur_ps_is_water_surface_ = false;
 		cur_ps_light_flags_ = 0;
+		cur_ps_sfx_class_ = sfx_class::None;
+		cur_ps_draw_tint_ = false;
 		if (shader)
 		{
+			if (auto it = ps_draw_tint_.find(shader); it != ps_draw_tint_.end())
+				cur_ps_draw_tint_ = it->second;
 			if (auto it = ps_sampler_masks_.find(shader); it != ps_sampler_masks_.end())
 				cur_ps_sampler_mask_ = it->second;
+			if (auto it = ps_sfx_class_.find(shader); it != ps_sfx_class_.end())
+				cur_ps_sfx_class_ = it->second;
 			if (auto it = ps_water_surface_.find(shader); it != ps_water_surface_.end())
 				cur_ps_is_water_surface_ = it->second;
 			if (auto it = ps_light_flags_.find(shader); it != ps_light_flags_.end())
@@ -212,6 +276,7 @@ namespace shared::common
 		if (!shader) return;
 		ps_sampler_masks_[shader] = parse_ps_sampler_mask(bytecode);
 		ps_light_flags_[shader] = parse_ps_light_flags(bytecode);
+		ps_draw_tint_[shader] = ps_reads_float_const(bytecode, 139);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
 		// token stream from the version token through the END token inclusive:
@@ -250,6 +315,15 @@ namespace shared::common
 		const uint32_t hash = hash_shader_bytecode(bytecode);
 		const bool is_water = water_ps_hashes.contains(hash);
 		ps_water_surface_[shader] = is_water;
+
+		struct sfx_entry { uint32_t hash; sfx_class cls; const char* name; };
+		static constexpr sfx_entry sfx_shaders[] = {
+#include "sfx_shaders.inc"
+		};
+		sfx_class sfx = sfx_class::None;
+		for (const auto& e : sfx_shaders)
+			if (e.hash == hash) { sfx = e.cls; break; }
+		ps_sfx_class_[shader] = sfx;
 		if (is_water)
 			log("WATER", std::format("water surface PS registered ptr={:#x} hash={:#010x}",
 				reinterpret_cast<uintptr_t>(shader), hash));
@@ -329,50 +403,68 @@ namespace shared::common
 		return mask;
 	}
 
+	namespace
+	{
+		// Calls fn(reg) for every float constant an instruction of the pixel shader
+		// reads. Same token walk as parse_ps_sampler_mask; DEF/DEFI/DEFB are skipped,
+		// their trailing tokens are literals, not register operands.
+		template <class Fn>
+		void for_each_ps_const_read(const DWORD* code, Fn&& fn)
+		{
+			if (!code || (code[0] & 0xFFFF0000) != 0xFFFF0000)
+				return;
+
+			constexpr size_t max_tokens = 65536;
+			size_t i = 1;
+			while (i < max_tokens)
+			{
+				const DWORD tok = code[i];
+				if (tok == 0x0000FFFF)
+					break;
+
+				const DWORD opcode = tok & 0xFFFF;
+				if (opcode == 0xFFFE) // D3DSIO_COMMENT
+				{
+					i += 1 + ((tok >> 16) & 0x7FFF);
+					continue;
+				}
+
+				const DWORD param_count = (tok >> 24) & 0x0F;
+				const bool is_def = opcode == 81 || opcode == 82 || opcode == 83; // DEF, DEFI, DEFB
+				if (!is_def && opcode != 31 /* DCL */)
+				{
+					for (DWORD p = 1; p <= param_count; ++p)
+					{
+						const DWORD param = code[i + p];
+						const DWORD reg_type = ((param >> 28) & 0x7) | ((param >> 8) & 0x18);
+						if (reg_type == 2 /* D3DSPR_CONST */)
+							fn(param & 0x7FF);
+					}
+				}
+				i += 1 + param_count;
+			}
+		}
+	}
+
+	bool ffp_state::ps_reads_float_const(const DWORD* code, DWORD reg)
+	{
+		bool reads = false;
+		for_each_ps_const_read(code, [&](DWORD r) { if (r == reg) reads = true; });
+		return reads;
+	}
+
 	uint32_t ffp_state::parse_ps_light_flags(const DWORD* code)
 	{
-		if (!code || (code[0] & 0xFFFF0000) != 0xFFFF0000)
-			return 0;
-
-		// Same token walk as parse_ps_sampler_mask, looking at the source operands
-		// of every instruction for float constants c92, c95 and c175. DEF/DEFI/DEFB
-		// are skipped: their trailing tokens are literals, not register operands.
+		// Float constants c92, c95 and c175 among the shader's source operands.
 		bool reads_dir = false;
 		bool reads_colour = false;
 		bool reads_shadow_dir = false;
-		constexpr size_t max_tokens = 65536;
-		size_t i = 1;
-		while (i < max_tokens)
+		for_each_ps_const_read(code, [&](DWORD reg)
 		{
-			const DWORD tok = code[i];
-			if (tok == 0x0000FFFF)
-				break;
-
-			const DWORD opcode = tok & 0xFFFF;
-			if (opcode == 0xFFFE) // D3DSIO_COMMENT
-			{
-				i += 1 + ((tok >> 16) & 0x7FFF);
-				continue;
-			}
-
-			const DWORD param_count = (tok >> 24) & 0x0F;
-			const bool is_def = opcode == 81 || opcode == 82 || opcode == 83; // DEF, DEFI, DEFB
-			if (!is_def && opcode != 31 /* DCL */)
-			{
-				for (DWORD p = 1; p <= param_count; ++p)
-				{
-					const DWORD param = code[i + p];
-					const DWORD reg_type = ((param >> 28) & 0x7) | ((param >> 8) & 0x18);
-					if (reg_type != 2 /* D3DSPR_CONST */)
-						continue;
-					const DWORD reg = param & 0x7FF;
-					if (reg == 92) reads_dir = true;
-					if (reg == 95) reads_colour = true;
-					if (reg == 175) reads_shadow_dir = true;
-				}
-			}
-			i += 1 + param_count;
-		}
+			if (reg == 92) reads_dir = true;
+			if (reg == 95) reads_colour = true;
+			if (reg == 175) reads_shadow_dir = true;
+		});
 		return (reads_dir && reads_colour ? PS_LIGHT_DIR3 : 0u) |
 			(reads_shadow_dir ? PS_LIGHT_SHADOW : 0u);
 	}
@@ -438,6 +530,8 @@ namespace shared::common
 			cur_zwrite_enabled_ = (value != 0);
 		else if (state == D3DRS_ALPHABLENDENABLE)
 			cur_alpha_blend_enabled_ = (value != 0);
+		else if (state == D3DRS_TEXTUREFACTOR)
+			game_tfactor_ = value;
 	}
 
 	void ffp_state::on_set_texture_stage_state(DWORD /*stage*/, D3DTEXTURESTAGESTATETYPE /*type*/, DWORD /*value*/)
@@ -470,6 +564,7 @@ namespace shared::common
 		cur_decl_blend_indices_off_ = 0;
 		cur_decl_blend_indices_type_ = -1;
 		cur_decl_pos_off_ = 0;
+		cur_decl_pos_type_ = -1;
 		cur_decl_normal_off_ = 0;
 		cur_decl_normal_type_ = -1;
 		cur_decl_color_off_ = 0;
@@ -512,8 +607,11 @@ namespace shared::common
 				break;
 
 			case D3DDECLUSAGE_POSITION:
-				if (el.Stream == 0)
+				if (el.Stream == 0 && el.UsageIndex == 0)
+				{
 					cur_decl_pos_off_ = el.Offset;
+					cur_decl_pos_type_ = el.Type;
+				}
 				break;
 
 			case D3DDECLUSAGE_NORMAL:
@@ -746,6 +844,7 @@ namespace shared::common
 		cur_decl_blend_indices_off_ = 0;
 		cur_decl_blend_indices_type_ = -1;
 		cur_decl_pos_off_ = 0;
+		cur_decl_pos_type_ = -1;
 		cur_decl_normal_off_ = 0;
 		cur_decl_normal_type_ = -1;
 		cur_decl_color_off_ = 0;
@@ -779,6 +878,7 @@ namespace shared::common
 		if (water_fallback_tex_) { water_fallback_tex_->Release(); water_fallback_tex_ = nullptr; }
 		cur_ps_is_water_surface_ = false;
 		cur_ps_light_flags_ = 0;
+		cur_ps_draw_tint_ = false;
 
 		log("FFP", "State reset");
 	}
@@ -1354,6 +1454,10 @@ namespace shared::common
 			mat4_transpose(vp, &vs_const_[vs_reg_view_start_ * 4]);
 			mat4_mul(cached_proj_, cam2world_rot, vp);
 
+			// The camera-relative view-projection the particle sprite path compares against.
+			std::memcpy(map_viewproj_rows_, &vs_const_[vs_reg_view_start_ * 4], sizeof(map_viewproj_rows_));
+			have_map_viewproj_ = true;
+
 			// Save the raw (uncleaned) projection — View × Proj_raw = VP exactly.
 			// Vertex capture needs this for correct back-transforms on shader draws.
 			std::memcpy(cached_proj_raw_, cached_proj_, sizeof(cached_proj_raw_));
@@ -1446,6 +1550,309 @@ namespace shared::common
 			dev->SetTextureStageState(s, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 			dev->SetTextureStageState(s, D3DTSS_TEXCOORDINDEX, s);
 		}
+	}
+
+	bool ffp_state::apply_draw_tint(IDirect3DDevice9* dev)
+	{
+		// Water reads c139 too, but as a UV scale (FRPG_WWS WaterWave), not a tint.
+		if (!dev || !cfg_ || !cfg_->draw_tint || !cur_ps_draw_tint_ || cur_ps_is_water_surface_)
+			return false;
+
+		const float* c = &ps_const_[139 * 4];
+		if (c[0] == 1.0f && c[1] == 1.0f && c[2] == 1.0f && c[3] == 1.0f)
+			return false; // the common case: keep the material identical to an untinted draw
+
+		auto to_byte = [](float v) -> DWORD
+		{
+			v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+			return static_cast<DWORD>(v * 255.0f + 0.5f);
+		};
+		const DWORD tfactor = D3DCOLOR_ARGB(to_byte(c[3]), to_byte(c[0]), to_byte(c[1]), to_byte(c[2]));
+
+		dev->SetRenderState(D3DRS_TEXTUREFACTOR, tfactor);
+		dev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		dev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
+		dev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+		dev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		dev->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+		dev->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_TFACTOR);
+		return true;
+	}
+
+	void ffp_state::clear_draw_tint(IDirect3DDevice9* dev)
+	{
+		if (!dev) return;
+		// Back to what setup_texture_stages left, so the TextureStages=1 latch
+		// (ffp_stages_applied_) stays true.
+		dev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		dev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+		dev->SetRenderState(D3DRS_TEXTUREFACTOR, game_tfactor_);
+	}
+
+	bool ffp_state::draw_sprite_up(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, UINT prim_count,
+		UINT min_index, UINT num_verts, const void* indices, D3DFORMAT index_format,
+		const void* vertices, UINT stride, bool unlit, HRESULT& hr)
+	{
+		auto reject = [](int reason, const char* why)
+		{
+			static uint32_t logged = 0;
+			if (!(logged & (1u << reason)))
+			{
+				logged |= 1u << reason;
+				log("Sfx", std::format("sprite not drawn fixed-function: {}", why));
+			}
+			return false;
+		};
+		const int base = cur_vs_viewproj_base_;
+		if (!dev || !vertices || !stride || !cfg_)
+			return reject(0, "no vertices");
+		if (!enabled_)
+			return reject(1, "FFP conversion not enabled yet");
+		if (base < 0 || base > 252)
+			return reject(2, "vertex shader has no known view-projection");
+		if (!have_map_viewproj_ || !view_proj_valid_)
+			return reject(3, "no map camera yet");
+		// Fixed-function points and lines do not reach the path tracer as surfaces.
+		if (prim != D3DPT_TRIANGLELIST && prim != D3DPT_TRIANGLESTRIP && prim != D3DPT_TRIANGLEFAN)
+			return reject(4, "points or lines");
+		if (cur_decl_pos_type_ != D3DDECLTYPE_FLOAT3 && cur_decl_pos_type_ != D3DDECLTYPE_FLOAT4)
+			return reject(5, "position not float3/float4");
+
+		// The particle's rows must be the map camera's but for their translation
+		// column (x, y and w rows; some sprite shaders compute z themselves).
+		const float* P = &vs_const_[base * 4];
+		const float* M = map_viewproj_rows_;
+		constexpr int rows[3] = { 0, 1, 3 };
+		float scale = 0.0f, diff = 0.0f;
+		for (int r : rows)
+			for (int c = 0; c < 3; c++)
+			{
+				scale = std::max(scale, std::abs(M[r * 4 + c]));
+				diff = std::max(diff, std::abs(M[r * 4 + c] - P[r * 4 + c]));
+			}
+		if (scale <= 0.0f || diff > 1e-3f * scale)
+		{
+			static int mismatch_log_budget = 4;
+			if (mismatch_log_budget > 0)
+			{
+				mismatch_log_budget--;
+				log("Sfx", std::format("sprite camera differs from the map camera (max diff {:.4f} of {:.4f}), vp base c{}", diff, scale, base));
+			}
+			return false;
+		}
+
+		// P.xyz = M.xyz and P.w = M.w - M.xyz . cam, so M.xyz . cam = M.w - P.w on each row.
+		double a[3][3], b[3];
+		for (int k = 0; k < 3; k++)
+		{
+			for (int c = 0; c < 3; c++)
+				a[k][c] = M[rows[k] * 4 + c];
+			b[k] = static_cast<double>(M[rows[k] * 4 + 3]) - P[rows[k] * 4 + 3];
+		}
+		const double det =
+			a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) -
+			a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
+			a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+		if (std::abs(det) < 1e-12)
+			return false;
+		double cam[3];
+		for (int c = 0; c < 3; c++)
+		{
+			double m[3][3];
+			std::memcpy(m, a, sizeof(m));
+			for (int k = 0; k < 3; k++)
+				m[k][c] = b[k];
+			cam[c] = (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+				m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+				m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])) / det;
+		}
+
+		// Into the space map pieces get: camera-relative, plus the injected camera
+		// position when world offsetting is on (see apply_transforms).
+		float world[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
+		world[12] = static_cast<float>(-cam[0]);
+		world[13] = static_cast<float>(-cam[1]);
+		world[14] = static_cast<float>(-cam[2]);
+		float ox = 0.0f, oy = 0.0f, oz = 0.0f;
+		const bool offset = offset_world_ && camera_override_fn_ && camera_override_fn_(ox, oy, oz);
+		if (offset)
+		{
+			world[12] += ox;
+			world[13] += oy;
+			world[14] += oz;
+		}
+		static int placement_log_budget = 4;
+		if (placement_log_budget > 0)
+		{
+			placement_log_budget--;
+			log("Sfx", std::format("sprite placement: vp base c{}, particle camera ({:.2f}, {:.2f}, {:.2f}), world offset {} ({:.2f}, {:.2f}, {:.2f}) -> translation ({:.2f}, {:.2f}, {:.2f})",
+				base, cam[0], cam[1], cam[2], offset ? "on" : "off", ox, oy, oz, world[12], world[13], world[14]));
+		}
+
+		// Repack: position, colour, uv.
+		UINT count = indices ? min_index + num_verts
+			: (prim == D3DPT_TRIANGLELIST ? prim_count * 3 : prim_count + 2);
+		struct sprite_vertex { float x, y, z; DWORD color; float u, v; };
+		sprite_vertices_.resize(static_cast<size_t>(count) * sizeof(sprite_vertex));
+		auto* out = reinterpret_cast<sprite_vertex*>(sprite_vertices_.data());
+		const auto* src = static_cast<const unsigned char*>(vertices);
+		const bool uv_float = cur_decl_has_texcoord_ &&
+			(cur_decl_texcoord_type_ == D3DDECLTYPE_FLOAT2 || cur_decl_texcoord_type_ == D3DDECLTYPE_FLOAT4);
+
+		// The Multi sprite shaders multiply the diffuse by masks on s1 and s3 with their
+		// own (scrolling) uvs; only their average survives the trip to Remix.
+		std::array<float, 4> mask = { 1.0f, 1.0f, 1.0f, 1.0f };
+		if (unlit)
+			for (DWORD s : { 1u, 3u })
+				if ((cur_ps_sampler_mask_ & (1u << s)) && cur_texture_[s])
+				{
+					const auto avg = texture_average(cur_texture_[s]);
+					for (int c = 0; c < 4; c++)
+						mask[c] *= avg[c];
+				}
+		const bool masked = mask[0] != 1.0f || mask[1] != 1.0f || mask[2] != 1.0f || mask[3] != 1.0f;
+
+		for (UINT v = 0; v < count; v++)
+		{
+			const unsigned char* sv = src + static_cast<size_t>(v) * stride;
+			const auto* pos = reinterpret_cast<const float*>(sv + cur_decl_pos_off_);
+			out[v].x = pos[0]; out[v].y = pos[1]; out[v].z = pos[2];
+			out[v].color = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
+			if (masked)
+			{
+				const DWORD c = out[v].color;
+				auto channel = [&](int shift, float m) { return static_cast<DWORD>(((c >> shift) & 0xFF) * m + 0.5f) << shift; };
+				out[v].color = channel(24, mask[3]) | channel(16, mask[0]) | channel(8, mask[1]) | channel(0, mask[2]);
+			}
+			if (uv_float)
+			{
+				const auto* tc = reinterpret_cast<const float*>(sv + cur_decl_texcoord_off_);
+				out[v].u = tc[0]; out[v].v = tc[1];
+			}
+			else
+			{
+				out[v].u = 0.0f; out[v].v = 0.0f;
+			}
+		}
+
+		IDirect3DVertexDeclaration9* game_decl = nullptr;
+		dev->GetVertexDeclaration(&game_decl);
+
+		with_cached_transforms([&] { engage(dev); });
+		// Like converted geometry: the sprite texture on stage 0, nothing else bound
+		// (the sprite shaders also sample the scene depth copy and leftovers, which
+		// Remix would read as the draw's textures).
+		dev->SetTexture(0, cur_texture_[0]);
+		for (DWORD ts = 1; ts < 8; ts++)
+			dev->SetTexture(ts, nullptr);
+		dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(world));
+		dev->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1);
+		DWORD blend = 0, atest = 0;
+		const bool debug_opaque = config::get().sfx.debug_opaque;
+		if (debug_opaque)
+		{
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+			dev->GetRenderState(D3DRS_ALPHATESTENABLE, &atest);
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		}
+		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled). Stage 0's constant is
+		// inert in rasterization: no stage argument references D3DTA_CONSTANT.
+		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
+		if (unlit)
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnlitMarker);
+		hr = indices
+			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
+			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
+		if (unlit)
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+		if (debug_opaque)
+		{
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, blend);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, atest);
+		}
+
+		dev->SetVertexDeclaration(game_decl);
+		if (game_decl) game_decl->Release();
+		for (DWORD ts = 1; ts < 8; ts++)
+			dev->SetTexture(ts, cur_texture_[ts]);
+		if (transforms_cached_)
+			dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(cached_world_));
+		return true;
+	}
+
+	std::array<float, 4> ffp_state::texture_average(IDirect3DBaseTexture9* texture)
+	{
+		if (auto it = texture_average_.find(texture); it != texture_average_.end())
+			return it->second;
+
+		// The smallest mip level is (close to) the texture's average. Formats DS1 uses
+		// for sprite masks: DXT1/3/5 and 8888; anything else counts as 1.
+		std::array<float, 4> avg = { 1.0f, 1.0f, 1.0f, 1.0f };
+		if (texture && texture->GetType() == D3DRTYPE_TEXTURE)
+		{
+			auto* t2d = static_cast<IDirect3DTexture9*>(texture);
+			const DWORD level = t2d->GetLevelCount() ? t2d->GetLevelCount() - 1 : 0;
+			D3DSURFACE_DESC desc {};
+			D3DLOCKED_RECT lr {};
+			if (SUCCEEDED(t2d->GetLevelDesc(level, &desc)) && SUCCEEDED(t2d->LockRect(level, &lr, nullptr, D3DLOCK_READONLY)) && lr.pBits)
+			{
+				const auto* p = static_cast<const unsigned char*>(lr.pBits);
+				auto rgb565 = [](uint16_t c, float* out)
+				{
+					out[0] = ((c >> 11) & 31) / 31.0f;
+					out[1] = ((c >> 5) & 63) / 63.0f;
+					out[2] = (c & 31) / 31.0f;
+				};
+				// Every block / texel of that level (a texture without mips is averaged whole).
+				double sum[4] = {};
+				size_t n = 0;
+				switch (desc.Format)
+				{
+				case D3DFMT_DXT1:
+				case D3DFMT_DXT3:
+				case D3DFMT_DXT5:
+				{
+					// Per block: the mean of its two endpoint colours. DXT3/5 put 8 bytes of
+					// alpha before the colour block.
+					const size_t block = desc.Format == D3DFMT_DXT1 ? 8 : 16;
+					const size_t colour = desc.Format == D3DFMT_DXT1 ? 0 : 8;
+					const UINT bw = std::max(1u, (desc.Width + 3) / 4), bh = std::max(1u, (desc.Height + 3) / 4);
+					for (UINT by = 0; by < bh; by++)
+						for (UINT bx = 0; bx < bw; bx++, n++)
+						{
+							const unsigned char* b = p + static_cast<size_t>(by) * lr.Pitch + bx * block;
+							float c0[3], c1[3];
+							rgb565(*reinterpret_cast<const uint16_t*>(b + colour), c0);
+							rgb565(*reinterpret_cast<const uint16_t*>(b + colour + 2), c1);
+							for (int c = 0; c < 3; c++)
+								sum[c] += 0.5 * (c0[c] + c1[c]);
+							sum[3] += desc.Format == D3DFMT_DXT5 ? 0.5 * (b[0] + b[1]) / 255.0
+								: desc.Format == D3DFMT_DXT3 ? (b[0] & 0xF) / 15.0 : 1.0;
+						}
+					break;
+				}
+				case D3DFMT_A8R8G8B8:
+				case D3DFMT_X8R8G8B8:
+					for (UINT y = 0; y < desc.Height; y++)
+						for (UINT x = 0; x < desc.Width; x++, n++)
+						{
+							const unsigned char* t = p + static_cast<size_t>(y) * lr.Pitch + x * 4;
+							sum[0] += t[2] / 255.0; sum[1] += t[1] / 255.0; sum[2] += t[0] / 255.0;
+							sum[3] += desc.Format == D3DFMT_A8R8G8B8 ? t[3] / 255.0 : 1.0;
+						}
+					break;
+				default:
+					break;
+				}
+				if (n)
+					for (int c = 0; c < 4; c++)
+						avg[c] = static_cast<float>(sum[c] / n);
+				t2d->UnlockRect(level);
+			}
+		}
+		texture_average_[texture] = avg;
+		return avg;
 	}
 
 	int ffp_state::secondary_blend_stage() const
@@ -1685,21 +2092,13 @@ namespace shared::common
 
 		const UINT dst_bytes = total_verts * rigid_vtx_size;
 
-		// The debris-chunk path below rewrites positions and normals from the VS
-		// constant bone palette, so its output is not a pure function of the source
-		// bytes: the same vertices with a moved palette must be re-expanded. Only
-		// the plain path is eligible for fingerprint reuse.
+		// Index-only (PIN*) shaders place each vertex with its own bone, c8[3 * index]:
+		// debris chunks, and multi-part objects such as a chest whose lid is a second
+		// bone. The draw's world matrix is bone 0, so vertices of any other bone are
+		// rewritten from the VS constant palette below.
 		const bool palette_possible =
 			cur_decl_has_blend_indices_ && !cur_decl_is_skinned_ &&
-			cur_decl_blend_indices_type_ == D3DDECLTYPE_UBYTE4 && cur_decl_pos_off_ == 0 &&
-			cur_decl_has_normal_ && cur_decl_normal_off_ == 16 && cur_decl_normal_type_ == D3DDECLTYPE_UBYTE4N &&
-			cur_decl_has_color_ && cur_decl_color_off_ == 20 && cur_decl_color_type_ == D3DDECLTYPE_UBYTE4N &&
-			cur_decl_has_texcoord_ && cur_decl_texcoord_off_ == 24 && cur_decl_texcoord_type_ == D3DDECLTYPE_SHORT2 &&
-			stride == 28 && cur_ib_ && (num_verts == 58 || num_verts == 80) && vs_regs_per_bone_ > 0;
-
-		const bool try_reuse = steps_ && steps_->expand_reuse && !palette_possible;
-		uint64_t pending_fp = 0;
-		bool have_pending_fp = false;
+			cur_decl_blend_indices_type_ == D3DDECLTYPE_UBYTE4 && vs_regs_per_bone_ > 0;
 
 		// Lock source VB
 		unsigned char* src_data = nullptr;
@@ -1709,6 +2108,21 @@ namespace shared::common
 				reinterpret_cast<void**>(&src_data), D3DLOCK_READONLY)))
 				return false;
 		}
+
+		// Most index-only draws (map pieces) use bone 0 throughout and keep the plain
+		// path. A palette rewrite is not a pure function of the source bytes (the same
+		// vertices with a moved palette must be re-expanded), so it is not eligible
+		// for fingerprint reuse.
+		bool palette_needed = false;
+		if (palette_possible)
+		{
+			for (UINT v = 0; v < total_verts && !palette_needed; v++)
+				palette_needed = src_data[v * stride + cur_decl_blend_indices_off_] != 0;
+		}
+
+		const bool try_reuse = steps_ && steps_->expand_reuse && !palette_needed;
+		uint64_t pending_fp = 0;
+		bool have_pending_fp = false;
 
 		if (try_reuse)
 		{
@@ -1767,7 +2181,7 @@ namespace shared::common
 		int n_type  = cur_decl_normal_type_;
 		int p_off   = cur_decl_pos_off_;
 
-		bool use_palette_indices = palette_possible;
+		bool use_palette_indices = palette_needed;
 		const int max_palette_matrices = use_palette_indices
 			? std::max(1, (256 - vs_reg_world_start_) / vs_regs_per_bone_)
 			: 1;

@@ -247,10 +247,19 @@ namespace lookdev::replay
 		uint32_t errors = 0;
 		uint32_t draws = 0;
 
+		// Called after every command that writes pixels (draws, clears, copies),
+		// with the record type; draws has already counted a draw. For tools such
+		// as the viewer's pixel history.
+		std::function<void(uint32_t)> after_command;
+
 		// A live host that has fallen behind still applies every state and data
 		// record (later frames are deltas against them) but skips the commands
 		// that only produce pixels.
 		bool skip_commands = false;
+
+		// Draw indices (within the frame, as analyze.py numbers them) to leave out,
+		// for bisecting which draw produces something in the Remix view.
+		std::unordered_set<uint32_t> drop_draws;
 
 		replayer() = default;
 		explicit replayer(const capture_file& c) : cap(&c) {}
@@ -578,6 +587,19 @@ namespace lookdev::replay
 		{
 			if (skip_commands && is_pixel_command(rec.type))
 				return false;
+			if (!drop_draws.empty() && rec.type >= REC_DRAW && rec.type <= REC_DRAW_INDEXED_UP && drop_draws.contains(draws))
+			{
+				draws++;
+				return false;
+			}
+			const bool present = apply_record(rec);
+			if (after_command && is_pixel_command(rec.type) && rec.type != REC_BEGIN_SCENE && rec.type != REC_END_SCENE)
+				after_command(rec.type);
+			return present;
+		}
+
+		bool apply_record(const record& rec)
+		{
 			{
 				const uint8_t* p = rec.payload;
 				switch (rec.type)

@@ -89,10 +89,12 @@ static void ImGui_ImplDX9_SetupRenderState(ImDrawData* draw_data)
     ImGui_ImplDX9_Data* bd = ImGui_ImplDX9_GetBackendData();
 
     // Setup viewport
+    // remix-comp: scaled by FramebufferScale, so a back buffer larger than the
+    // window (the proxy's Resolution module) is covered instead of its corner.
     D3DVIEWPORT9 vp;
     vp.X = vp.Y = 0;
-    vp.Width = (DWORD)draw_data->DisplaySize.x;
-    vp.Height = (DWORD)draw_data->DisplaySize.y;
+    vp.Width = (DWORD)(draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
+    vp.Height = (DWORD)(draw_data->DisplaySize.y * draw_data->FramebufferScale.y);
     vp.MinZ = 0.0f;
     vp.MaxZ = 1.0f;
 
@@ -259,6 +261,7 @@ void ImGui_ImplDX9_RenderDrawData(ImDrawData* draw_data)
     int global_vtx_offset = 0;
     int global_idx_offset = 0;
     ImVec2 clip_off = draw_data->DisplayPos;
+    ImVec2 clip_scale = draw_data->FramebufferScale; // remix-comp: see SetupRenderState
     for (int n = 0; n < draw_data->CmdListsCount; n++)
     {
         const ImDrawList* draw_list = draw_data->CmdLists[n];
@@ -277,8 +280,8 @@ void ImGui_ImplDX9_RenderDrawData(ImDrawData* draw_data)
             else
             {
                 // Project scissor/clipping rectangles into framebuffer space
-                ImVec2 clip_min(pcmd->ClipRect.x - clip_off.x, pcmd->ClipRect.y - clip_off.y);
-                ImVec2 clip_max(pcmd->ClipRect.z - clip_off.x, pcmd->ClipRect.w - clip_off.y);
+                ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x) * clip_scale.x, (pcmd->ClipRect.y - clip_off.y) * clip_scale.y);
+                ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x) * clip_scale.x, (pcmd->ClipRect.w - clip_off.y) * clip_scale.y);
                 if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
                     continue;
 

@@ -9,6 +9,7 @@
 #include "rt_tracker.hpp"
 #include "benchmark.hpp"
 #include "perf.hpp"
+#include "lookdev_capture.hpp"
 #include "shared/common/imgui_helper.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/config.hpp"
@@ -46,7 +47,8 @@ namespace comp
 			block = true;
 		}
 
-		if (block)
+		// Lookdev input freeze: keyboard, mouse and raw input never reach the game.
+		if (block || shared::globals::input_frozen)
 		{
 			if (message_type >= WM_KEYFIRST && message_type <= WM_KEYLAST)
 				return 0;
@@ -943,8 +945,45 @@ namespace comp
 		ImGui::End();
 	}
 
+	ImFont* g_hud_font = nullptr;
+
+	// Lookdev mode: a pill at the top of the game window saying whether the game
+	// takes input, and which key flips it. Sized in window pixels, so it reads
+	// the same whatever the back buffer resolution.
+	static void draw_lookdev_input_hud()
+	{
+		const bool frozen = shared::globals::input_frozen;
+		char key_name[32] = "?";
+		if (const UINT sc = MapVirtualKeyA(shared::common::config::get().lookdev.freeze_input_key, MAPVK_VK_TO_VSC); sc)
+			GetKeyNameTextA(static_cast<LONG>(sc << 16), key_name, sizeof(key_name));
+		const std::string text = frozen
+			? std::format("INPUT FROZEN  -  {} to release", key_name)
+			: std::format("Input live  -  {} to freeze", key_name);
+
+		// ImGui units are window pixels; grow with windows taller than 1080.
+		const auto& io = ImGui::GetIO();
+		const float scale = std::max(1.0f, io.DisplaySize.y / 1080.0f);
+		ImFont* font = g_hud_font ? g_hud_font : ImGui::GetFont();
+		const float size = (frozen ? 26.0f : 18.0f) * scale;
+		const ImVec2 text_size = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+		const ImVec2 pad(12.0f * scale, 5.0f * scale);
+		const ImVec2 p0((io.DisplaySize.x - text_size.x) * 0.5f - pad.x, 8.0f * scale);
+		const ImVec2 p1(p0.x + text_size.x + 2.0f * pad.x, p0.y + text_size.y + 2.0f * pad.y);
+
+		auto* dl = ImGui::GetForegroundDrawList();
+		dl->AddRectFilled(p0, p1, frozen ? IM_COL32(175, 25, 25, 225) : IM_COL32(0, 0, 0, 120), 6.0f * scale);
+		dl->AddText(font, size, ImVec2(p0.x + pad.x, p0.y + pad.y),
+			frozen ? IM_COL32(255, 255, 255, 255) : IM_COL32(210, 210, 210, 190), text.c_str());
+	}
+
 	void imgui::on_present()
 	{
+		// A capture file's reference image holds only what the game and the proxy
+		// rendered; and ImGui's own device calls never go into a capture or stream.
+		if (shared::common::config::get().lookdev.enabled && lookdev_capture::writing_file())
+			return;
+		lookdev_capture::private_scope private_draws;
+
 		if (auto* im = imgui::get(); im)
 		{
 			if (const auto dev = shared::globals::d3d_device; dev)
@@ -969,6 +1008,25 @@ namespace comp
 
 					ImGui_ImplDX9_NewFrame();
 					ImGui_ImplWin32_NewFrame();
+
+					// ImGui lays out in window pixels (the Win32 backend's DisplaySize, and
+					// the mouse), but the game may render a larger back buffer than its
+					// window (Resolution module). FramebufferScale makes the DX9 renderer
+					// stretch the UI over the whole back buffer instead of its corner.
+					{
+						auto& fio = ImGui::GetIO();
+						fio.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+						IDirect3DSurface9* bb = nullptr;
+						if (fio.DisplaySize.x > 0.0f && fio.DisplaySize.y > 0.0f &&
+							SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) && bb)
+						{
+							D3DSURFACE_DESC desc {};
+							if (SUCCEEDED(bb->GetDesc(&desc)))
+								fio.DisplayFramebufferScale = ImVec2(desc.Width / fio.DisplaySize.x, desc.Height / fio.DisplaySize.y);
+							bb->Release();
+						}
+					}
+
 					ImGui::NewFrame();
 
 					auto& io = ImGui::GetIO();
@@ -1025,6 +1083,8 @@ namespace comp
 					// Always-on HUD overlays (drawn regardless of menu state)
 					if (auto* gl = game_lights::get())
 						gl->draw_pos_hud();
+					if (shared::common::config::get().lookdev.enabled)
+						draw_lookdev_input_hud();
 
 					shared::globals::imgui_is_rendering = true;
 					ImGui::EndFrame();
@@ -1164,6 +1224,15 @@ namespace comp
 		//io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 
 		theme();
+
+		// Lookdev mode: a large font for the input-freeze pill (the default stays the menu font).
+		if (shared::common::config::get().lookdev.enabled)
+		{
+			auto& io = ImGui::GetIO();
+			io.Fonts->AddFontDefault();
+			if (GetFileAttributesA("C:\\Windows\\Fonts\\segoeuib.ttf") != INVALID_FILE_ATTRIBUTES)
+				g_hud_font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 48.0f);
+		}
 
 		ImGui_ImplWin32_Init(shared::globals::main_window);
 		g_game_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(shared::globals::main_window, GWLP_WNDPROC, LONG_PTR(wnd_proc_hk)));
