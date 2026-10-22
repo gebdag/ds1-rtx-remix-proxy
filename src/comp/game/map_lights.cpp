@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "map_lights.hpp"
+#include "host_feed.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -67,6 +68,9 @@ namespace comp::game::map_lights
 
 	unsigned current_map_id()
 	{
+		if (shared::globals::lookdev_host)
+			return host_feed::frame().map_id;
+
 		const DWORD entry = safe_read_dword(EXE_BASE + FIELD_AREA_ACTIVE_RVA);
 		if (!entry) return 0;
 

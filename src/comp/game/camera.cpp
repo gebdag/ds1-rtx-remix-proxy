@@ -2,6 +2,7 @@
 #include "camera.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "frustum_culling.hpp"
+#include "host_feed.hpp"
 
 using shared::common::log;
 using shared::common::LOG_TYPE;
@@ -47,6 +48,16 @@ namespace comp::game::camera
 		if (!s.use_game_camera)
 		{
 			return false;
+		}
+
+		// The lookdev host gets the game's result for this frame from the capture.
+		if (shared::globals::lookdev_host)
+		{
+			const auto& f = host_feed::frame();
+			if (!f.camera_valid) return false;
+			x = f.camera[0]; y = f.camera[1]; z = f.camera[2];
+			if (sourceLabel) *sourceLabel = "capture";
+			return true;
 		}
 
 		// The consumer works in the engine's raw {X, Z, Y} order. Frustum apexes already
@@ -277,11 +288,22 @@ namespace comp::game::camera
 
 	bool get_char_pos(float& x, float& y, float& z)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			const auto& f = host_feed::frame();
+			x = f.player[0]; y = f.player[1]; z = f.player[2];
+			return f.player_valid;
+		}
 		return read_player_pos(x, y, z);
 	}
 
 	bool get_char_heading(float& radians)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			radians = host_feed::frame().heading;
+			return host_feed::frame().heading_valid;
+		}
 		if (!world_chr_man_addr) return false;
 		const DWORD wcm = safe_read_ptr(world_chr_man_addr);
 		const DWORD player_entity = wcm ? safe_read_ptr(wcm + 0x18) : 0;

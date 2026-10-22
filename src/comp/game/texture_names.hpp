@@ -25,6 +25,9 @@ namespace comp::game::texture_names
 	// Name recovered for the texture, or empty.
 	std::string name_of(IDirect3DBaseTexture9* texture);
 
+	// Names a texture directly (the lookdev host, from the capture's name records).
+	void set_name(IDirect3DBaseTexture9* texture, const std::string& name);
+
 	struct stats
 	{
 		uint32_t named = 0;     // D3DX textures whose TPF name was recovered

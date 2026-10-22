@@ -97,6 +97,9 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 
 		// Load config from INI file next to the DLL. -lookdev (lookdev\lookdev.ps1)
 		// selects the lookdev INI instead: vanilla rendering plus frame capture.
+		// The lookdev host (-lookdev-host) renders like the game, so it reads the
+		// normal INI.
+		shared::globals::lookdev_host = shared::common::flags::has_flag("lookdev-host");
 		const char* ini_name = shared::common::flags::has_flag("lookdev")
 			? "\\remix-comp-proxy.lookdev.ini" : "\\remix-comp-proxy.ini";
 		shared::common::config::get().load(shared::globals::root_path + ini_name);
@@ -104,7 +107,9 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		// Apply fixed-address game patches as early as possible.
 		// Effect disabling lives in game/render_toggles.cpp now — schedule-level
 		// flag writes asserted per frame from Present, no init-time code patches.
-		comp::game::frustum_culling::init();
+		// None of it exists in the lookdev host.
+		if (!shared::globals::lookdev_host)
+			comp::game::frustum_culling::init();
 
 		// Pre-load DLLs (before the d3d9 chain is established)
 		d3d9_proxy::load_preload_dlls();
@@ -119,9 +124,14 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 			return TRUE;
 		}
 
-		// Setup memory addresses (eg. patterns)
-		comp::game::init_game_addresses();
-		comp::game::frustum_culling::install_hooks();
+		// Setup memory addresses (eg. patterns): the FPS unlock, intro skip, camera
+		// and cheat patches. Pattern scans in the host would search the host exe.
+		if (!shared::globals::lookdev_host)
+		{
+			comp::game::init_game_addresses();
+			comp::game::frustum_culling::install_hooks();
+		}
+		else shared::common::log("Main", "Lookdev host: game patches and hooks skipped", shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
 
 		// Find game window thread (registers modules once window is found)
 		if (const auto t = CreateThread(nullptr, 0, comp::find_game_window, nullptr, 0, nullptr); t) {

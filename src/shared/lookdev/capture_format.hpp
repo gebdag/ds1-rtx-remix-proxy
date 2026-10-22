@@ -124,6 +124,12 @@ namespace lookdev
 		// extras
 		REC_REFERENCE_IMAGE = 128, // image: the back buffer as the game presented it
 		REC_NOTE,                  // UTF-8 text
+
+		// game state for the lookdev host (comp::game::host_feed), written at the
+		// frame's first BeginScene, where the proxy updates its lights in game
+		REC_GAME_FRAME = 130,      // game_frame
+		REC_GAME_LIGHTS,           // game_lights + count * element_size (proxy's point_lights::light)
+		REC_TEXTURE_NAME,          // id_only + name (no terminator): the TPF name of a texture
 	};
 
 	// texture_data / buffer_data flags
@@ -267,6 +273,25 @@ namespace lookdev
 	{
 		uint32_t width, height, format;
 		uint32_t row_bytes;
+	};
+
+	constexpr uint32_t GAME_FRAME_CAMERA = 1;
+	constexpr uint32_t GAME_FRAME_PLAYER = 2;
+	constexpr uint32_t GAME_FRAME_HEADING = 4;
+
+	struct game_frame
+	{
+		uint32_t flags;      // GAME_FRAME_*: which values are valid
+		float camera[3];     // camera override position, engine raw {X, Z, Y}
+		float player[3];     // player position, raw
+		float heading;       // player heading, radians
+		uint32_t map_id;
+	};
+
+	struct game_lights
+	{
+		uint32_t count;
+		uint32_t element_size;
 	};
 
 #pragma pack(pop)

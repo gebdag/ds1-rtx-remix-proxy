@@ -58,9 +58,12 @@ namespace comp::game::fps_unlock
 		return VirtualProtect(reinterpret_cast<void*>(address), size, protection, &old) != 0;
 	}
 
-	// The step lives in read-only data: made writable once, then plain stores.
+	// The step lives in read-only data: made writable once, then plain stores. Only the game has it (the lookdev host's
+	// image is another exe).
 	static float* find_step()
 	{
+		if (shared::globals::lookdev_host)
+			return nullptr;
 		const DWORD address = at(kFrameStep);
 		if (!address || *reinterpret_cast<const float*>(address) != 1.0f / 30.0f || !unprotect(address, sizeof(float), PAGE_READWRITE))
 			return nullptr;

@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "point_lights.hpp"
+#include "host_feed.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -295,6 +296,8 @@ namespace comp::game::point_lights
 
 	bool is_available()
 	{
+		if (shared::globals::lookdev_host)
+			return !host_feed::lights().empty();
 		return safe_read_ptr(EXE_BASE + POINT_LIGHT_MAN_RVA) != 0;
 	}
 
@@ -334,6 +337,9 @@ namespace comp::game::point_lights
 
 	const std::vector<light>& harvest()
 	{
+		if (shared::globals::lookdev_host)
+			return host_feed::lights();   // the game's harvest of this frame, from the capture
+
 		s_lights.clear();
 		s_slots_live = 0;
 		s_slots_with_params = 0;

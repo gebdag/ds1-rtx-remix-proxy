@@ -12,3 +12,5 @@ EXPORTS
     D3DPERF_GetStatus
     DebugSetLevel
     DebugSetMute
+    lookdev_host_feed
+    lookdev_host_texture_name

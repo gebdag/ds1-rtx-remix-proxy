@@ -47,6 +47,7 @@ namespace shared::globals
 
 	IDirect3DDevice9* d3d_device = nullptr;
 	IDirect3DDevice9* d3d_device_real = nullptr;
+	bool lookdev_host = false;
 	IDirect3D9* d3d9_interface = nullptr;
 	HMODULE d3d9_chain_module = nullptr;
 

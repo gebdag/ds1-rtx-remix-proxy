@@ -134,7 +134,9 @@ namespace shared::common
 		std::call_once(log_file_once, []() {
 			const std::string dir_path = shared::globals::root_path + "\\rtx_comp";
 			std::filesystem::create_directories(dir_path);
-			const std::string file_path = dir_path + "\\console.log";
+			// The lookdev host shares the game's folder and may run beside it.
+			const bool host = std::wstring_view(GetCommandLineW()).find(L"-lookdev-host") != std::wstring_view::npos;
+			const std::string file_path = dir_path + (host ? "\\console_host.log" : "\\console.log");
 			log_file.open(file_path, std::ios::out | std::ios::trunc);
 		});
 	}

@@ -165,6 +165,7 @@ namespace comp::game::render_toggles
 
 		uint8_t* resolve_gamerend()
 		{
+			if (shared::globals::lookdev_host) return nullptr;
 			auto* hgman = *reinterpret_cast<uint8_t**>(rebase(HGMAN_SLOT_VA));
 			if (!plausible(hgman)) return nullptr;
 			auto* gamerend = *reinterpret_cast<uint8_t**>(hgman + GAMEREND_OFFSET);
@@ -173,6 +174,7 @@ namespace comp::game::render_toggles
 
 		uint8_t* resolve_drawenvman()
 		{
+			if (shared::globals::lookdev_host) return nullptr;
 			auto* dem = *reinterpret_cast<uint8_t**>(rebase(DRAWENVMAN_SLOT_VA));
 			return plausible(dem) ? dem : nullptr;
 		}
@@ -469,6 +471,7 @@ namespace comp::game::render_toggles
 
 	int shadow_map_size()
 	{
+		if (shared::globals::lookdev_host) return 0; // callers fall back to the stock 2048
 		return static_cast<int>(*reinterpret_cast<uint32_t*>(rebase(SHADOWMAP_SIZE_VA)));
 	}
 
@@ -511,6 +514,10 @@ namespace comp::game::render_toggles
 
 	void on_present()
 	{
+		// The toggles patch and write the game's scheduler: nothing to act on in the host.
+		if (shared::globals::lookdev_host)
+			return;
+
 		init_from_config();
 		install_stage_mask_hook();
 

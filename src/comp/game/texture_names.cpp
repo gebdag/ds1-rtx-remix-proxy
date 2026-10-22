@@ -246,6 +246,16 @@ namespace comp::game::texture_names
 		return it != g_entries.end() ? it->second.name : std::string{};
 	}
 
+	void set_name(IDirect3DBaseTexture9* texture, const std::string& name)
+	{
+		if (!texture || name.empty())
+			return;
+		entry e{ stem(name), false };
+		e.atmospheric = classify_atmospheric(e.name);
+		std::unique_lock lock(g_mutex);
+		g_entries[texture] = std::move(e);
+	}
+
 	stats get_stats()
 	{
 		return { g_named.load(), g_unnamed.load(), g_atmospheric.load() };

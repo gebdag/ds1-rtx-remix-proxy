@@ -17,7 +17,7 @@ namespace comp::game::intro_skip
 
 	void init()
 	{
-		if (!shared::common::config::get().intro_skip.enabled)
+		if (!shared::common::config::get().intro_skip.enabled || shared::globals::lookdev_host)
 			return;
 		auto* code = reinterpret_cast<unsigned char*>(kSetLogoFlag);
 		if (std::memcmp(code, kSetLogoFlagBytes, sizeof(kSetLogoFlagBytes)) != 0)

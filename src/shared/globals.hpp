@@ -24,6 +24,11 @@ namespace shared::globals
 	extern IDirect3DDevice9* d3d_device;
 	// The device the wrapper above forwards to (Remix bridge or system d3d9).
 	extern IDirect3DDevice9* d3d_device_real;
+
+	// Loaded by the lookdev host (-lookdev-host), not by DARKSOULS.exe: the game's
+	// memory and code do not exist in this process, so nothing may read, patch or
+	// hook it. Game state the modules need arrives through game::host_feed.
+	extern bool lookdev_host;
 	extern IDirect3D9* d3d9_interface;
 
 	// Module handle of the real d3d9 chain (Remix bridge or system d3d9.dll).

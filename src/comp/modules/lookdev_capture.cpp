@@ -5,6 +5,10 @@
 
 #include "shared/common/config.hpp"
 #include "shared/lookdev/capture_format.hpp"
+#include "../game/camera.hpp"
+#include "../game/map_lights.hpp"
+#include "../game/point_lights.hpp"
+#include "../game/texture_names.hpp"
 
 #include <atomic>
 #include <cctype>
@@ -197,6 +201,7 @@ namespace comp
 
 			shadow_state shadow;
 			std::vector<uint8_t> scratch;
+			bool game_state_written = false; // this frame's REC_GAME_FRAME / REC_GAME_LIGHTS
 
 			struct
 			{
@@ -648,6 +653,9 @@ namespace comp
 			c.textures[texture] = info;
 			c.stats.textures++;
 			c.w.rec(info.kind, d);
+			// the TPF name, which decides how the proxy treats atmospheric layers
+			if (const auto name = game::texture_names::name_of(texture); !name.empty())
+				c.w.rec(REC_TEXTURE_NAME, id_only { id }, name.data(), name.size());
 			if (info.kind == REC_TEXTURE)
 				ensure_texture_hooks(texture);
 			snapshot_texture(texture, info, DATA_INITIAL);
@@ -1276,11 +1284,46 @@ namespace comp
 			return s_color_fill_og(dev, surface, r, color);
 		}
 
+		// What the proxy's modules read from game memory, for the lookdev host
+		// (game::host_feed). Written at the frame's first BeginScene: in game the
+		// proxy updates its lights there, after the engine has culled the frame.
+		void write_game_state()
+		{
+			auto& c = *s_cap;
+			game_frame f {};
+			float x, y, z;
+			if (game::camera::get_override_pos(x, y, z))
+			{
+				f.flags |= GAME_FRAME_CAMERA;
+				f.camera[0] = x; f.camera[1] = y; f.camera[2] = z;
+			}
+			if (game::camera::get_char_pos(x, y, z))
+			{
+				f.flags |= GAME_FRAME_PLAYER;
+				f.player[0] = x; f.player[1] = y; f.player[2] = z;
+			}
+			if (float heading; game::camera::get_char_heading(heading))
+			{
+				f.flags |= GAME_FRAME_HEADING;
+				f.heading = heading;
+			}
+			f.map_id = game::map_lights::current_map_id();
+			c.w.rec(REC_GAME_FRAME, f);
+
+			const auto& lights = game::point_lights::harvest();
+			const lookdev::game_lights gl { static_cast<uint32_t>(lights.size()), sizeof(game::point_lights::light) };
+			c.w.rec(REC_GAME_LIGHTS, gl, lights.data(), lights.size() * sizeof(game::point_lights::light));
+			c.game_state_written = true;
+		}
+
 		HRESULT __stdcall begin_scene_hk(IDirect3DDevice9* dev)
 		{
 			if (recording(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				internal_scope in;
+				if (!s_cap->game_state_written)
+					write_game_state();
 				s_cap->w.rec(REC_BEGIN_SCENE);
 			}
 			return s_begin_scene_og(dev);
