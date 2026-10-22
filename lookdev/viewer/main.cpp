@@ -1,7 +1,10 @@
 // ds1_lookdev_viewer: replays a lookdev frame capture (.ds1cap) on a plain
 // x64 D3D9 device and compares the result with the frame the game presented.
 //
-//   ds1_lookdev_viewer.exe <capture.ds1cap> [--compare] [--out <dir>]
+//   ds1_lookdev_viewer.exe <capture.ds1cap> [--compare] [--out <dir>] [--ps-const <reg>.<xyzw>=<value>]...
+//
+// --ps-const forces one pixel shader constant component whenever the frame sets it,
+// e.g. --ps-const 110.w=0 replays the frame without the game's sky scattering.
 //
 // The replay is written next to the capture (or to --out) as vanilla.bmp,
 // replay.bmp, diff.bmp and result.txt. --compare exits after that with 0 when
@@ -82,11 +85,26 @@ int wmain(int argc, wchar_t** argv)
 	std::filesystem::path capture_path, out_dir;
 	bool compare_only = false;
 	int pixel_x = -1, pixel_y = -1;
+	std::vector<replayer::const_override> ps_const_overrides;
 	for (int i = 1; i < argc; i++)
 	{
 		const std::wstring a = argv[i];
 		if (a == L"--compare") compare_only = true;
 		else if (a == L"--out" && i + 1 < argc) out_dir = argv[++i];
+		else if (a == L"--ps-const" && i + 1 < argc)
+		{
+			// "<reg>.<component>=<value>", e.g. 110.w=0
+			const std::wstring spec = argv[++i];
+			const size_t dot = spec.find(L'.'), eq = spec.find(L'=');
+			const std::wstring comps = L"xyzw";
+			if (dot == std::wstring::npos || eq != dot + 2 || comps.find(spec[dot + 1]) == std::wstring::npos)
+			{
+				std::printf("bad --ps-const %ls (want <reg>.<xyzw>=<value>)\n", spec.c_str());
+				return 2;
+			}
+			ps_const_overrides.push_back({ static_cast<uint32_t>(_wtoi(spec.substr(0, dot).c_str())),
+				static_cast<uint32_t>(comps.find(spec[dot + 1])), static_cast<float>(_wtof(spec.c_str() + eq + 1)) });
+		}
 		else if (a == L"--pixel" && i + 2 < argc)
 		{
 			pixel_x = _wtoi(argv[++i]);
@@ -150,6 +168,7 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	replayer rp(cap);
+	rp.ps_const_overrides = ps_const_overrides;
 	rp.dev = dev;
 
 	// Pixel history: after every command that can write pixels, copy the pixel

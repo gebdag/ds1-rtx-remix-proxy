@@ -261,6 +261,11 @@ namespace lookdev::replay
 		// for bisecting which draw produces something in the Remix view.
 		std::unordered_set<uint32_t> drop_draws;
 
+		// Pixel shader constant components forced to a value whenever the frame sets
+		// them, to replay it with a game parameter changed (e.g. c110.w = 0: no haze).
+		struct const_override { uint32_t reg; uint32_t component; float value; };
+		std::vector<const_override> ps_const_overrides;
+
 		replayer() = default;
 		explicit replayer(const capture_file& c) : cap(&c) {}
 
@@ -749,7 +754,19 @@ namespace lookdev::replay
 					const auto r = read<const_range>(p);
 					const auto* f = reinterpret_cast<const float*>(p + sizeof(r));
 					if (rec.type == REC_VS_CONST_F) dev->SetVertexShaderConstantF(r.start, f, r.count);
-					else dev->SetPixelShaderConstantF(r.start, f, r.count);
+					else
+					{
+						dev->SetPixelShaderConstantF(r.start, f, r.count);
+						for (const auto& o : ps_const_overrides)
+						{
+							if (o.reg < r.start || o.reg >= r.start + r.count)
+								continue;
+							float v[4];
+							std::memcpy(v, f + (o.reg - r.start) * 4, sizeof(v));
+							v[o.component] = o.value;
+							dev->SetPixelShaderConstantF(o.reg, v, 1);
+						}
+					}
 					break;
 				}
 				case REC_VS_CONST_I:

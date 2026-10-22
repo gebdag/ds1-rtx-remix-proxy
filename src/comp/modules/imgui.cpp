@@ -953,12 +953,18 @@ namespace comp
 	static void draw_lookdev_input_hud()
 	{
 		const bool frozen = shared::globals::input_frozen;
-		char key_name[32] = "?";
-		if (const UINT sc = MapVirtualKeyA(shared::common::config::get().lookdev.freeze_input_key, MAPVK_VK_TO_VSC); sc)
-			GetKeyNameTextA(static_cast<LONG>(sc << 16), key_name, sizeof(key_name));
+		auto key_text = [](int vk)
+		{
+			char name[32] = "?";
+			if (const UINT sc = MapVirtualKeyA(vk, MAPVK_VK_TO_VSC); sc)
+				GetKeyNameTextA(static_cast<LONG>(sc << 16), name, sizeof(name));
+			return std::string(name);
+		};
+		const auto& lookdev = shared::common::config::get().lookdev;
+		const std::string freeze_key = key_text(lookdev.freeze_input_key), capture_key = key_text(lookdev.capture_key);
 		const std::string text = frozen
-			? std::format("INPUT FROZEN  -  {} to release", key_name)
-			: std::format("Input live  -  {} to freeze", key_name);
+			? std::format("INPUT FROZEN  -  {} to release  -  {} capture", freeze_key, capture_key)
+			: std::format("Input live  -  {} to freeze  -  {} capture", freeze_key, capture_key);
 
 		// ImGui units are window pixels; grow with windows taller than 1080.
 		const auto& io = ImGui::GetIO();
@@ -974,6 +980,18 @@ namespace comp
 		dl->AddRectFilled(p0, p1, frozen ? IM_COL32(175, 25, 25, 225) : IM_COL32(0, 0, 0, 120), 6.0f * scale);
 		dl->AddText(font, size, ImVec2(p0.x + pad.x, p0.y + pad.y),
 			frozen ? IM_COL32(255, 255, 255, 255) : IM_COL32(210, 210, 210, 190), text.c_str());
+
+		// Confirms a capture for a few seconds, under the status pill.
+		if (std::string name; lookdev_capture::recent_capture(name))
+		{
+			const std::string done = std::format("Captured {}", name);
+			const float done_size = 22.0f * scale;
+			const ImVec2 done_text = font->CalcTextSizeA(done_size, FLT_MAX, 0.0f, done.c_str());
+			const ImVec2 q0((io.DisplaySize.x - done_text.x) * 0.5f - pad.x, p1.y + 6.0f * scale);
+			const ImVec2 q1(q0.x + done_text.x + 2.0f * pad.x, q0.y + done_text.y + 2.0f * pad.y);
+			dl->AddRectFilled(q0, q1, IM_COL32(20, 120, 50, 230), 6.0f * scale);
+			dl->AddText(font, done_size, ImVec2(q0.x + pad.x, q0.y + pad.y), IM_COL32(255, 255, 255, 255), done.c_str());
+		}
 	}
 
 	void imgui::on_present()

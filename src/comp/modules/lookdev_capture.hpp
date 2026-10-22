@@ -37,5 +37,8 @@ namespace comp
 		// True while the frame being drawn goes into a capture file, whose
 		// reference image must show only what the game and proxy rendered.
 		static bool writing_file();
+
+		// True for a few seconds after a capture file was written; name = its name.
+		static bool recent_capture(std::string& name);
 	};
 }

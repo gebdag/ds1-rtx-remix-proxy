@@ -308,6 +308,8 @@ namespace comp
 		uint64_t s_frame_index = 0;
 		bool s_request = false;
 		std::string s_request_name;
+		std::string s_last_capture;                          // name of the last finished capture file
+		std::chrono::steady_clock::time_point s_last_capture_time;
 		ring_sink* s_ring = nullptr; // mapped live stream, while a host is attached
 
 		// ---- hook trampolines ----
@@ -1284,6 +1286,8 @@ namespace comp
 					"{} buffer / {} texture updates, {:.1f} MB in {} ms. Unreadable: {} (+{} depth, {} msaa, {} unknown formats)",
 					c->name, s.draws, s.clears, s.copies, s.textures, s.buffers, s.buffer_updates, s.texture_updates,
 					double(bytes) / (1024.0 * 1024.0), ms, s.unreadable, s.depth, s.msaa, s.unknown_format));
+				s_last_capture = c->name;
+				s_last_capture_time = std::chrono::steady_clock::now();
 			}
 			else log(std::format("Could not finalise {}", c->final_path), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 			delete c;
@@ -1652,14 +1656,21 @@ namespace comp
 				}
 				else if (s_request && s_cap && s_cap->streaming)
 				{
+					// A capture file is one whole frame from a fresh recorder: the stream
+					// pauses for it and resumes as a new session, which the host follows.
 					s_request = false;
-					log("Capture skipped: a live stream is running (close the host first)", shared::common::LOG_TYPE::LOG_TYPE_WARN);
+					std::lock_guard lock(s_mutex);
+					end_stream_session("file capture");
+					start_capture(dev, s_request_name);
 				}
 				if (!s_cap)
 				{
-					// streams start right after a Present too
+					// streams start (or resume after a file capture) right after a Present too
 					std::lock_guard lock(s_mutex);
-					poll_stream(dev);
+					if (s_ring)
+						start_stream_session(dev);
+					else
+						poll_stream(dev);
 				}
 			}
 			return hr;
@@ -2016,6 +2027,14 @@ namespace comp
 
 	lookdev_capture::private_scope::private_scope() : prev_(t_internal) { t_internal = true; }
 	lookdev_capture::private_scope::~private_scope() { t_internal = prev_; }
+
+	bool lookdev_capture::recent_capture(std::string& name)
+	{
+		if (s_last_capture.empty() || std::chrono::steady_clock::now() - s_last_capture_time > std::chrono::seconds(4))
+			return false;
+		name = s_last_capture;
+		return true;
+	}
 
 	bool lookdev_capture::writing_file()
 	{

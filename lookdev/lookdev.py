@@ -7,6 +7,8 @@
   python lookdev.py host --live         follow the running game (lookdev.ps1) through the proxy and RTX Remix
   python lookdev.py info [capture]      record statistics of a capture
   python lookdev.py list                captures, newest first
+  python lookdev.py look [capture]...   the game's look values (exposure, haze, grade, lights) in captures (look.py)
+  python lookdev.py suite ...           multi-scene regression: every suite capture in Remix next to the game (suite.py)
 
 [capture] is a .ds1cap path or a name in the game's rtx_comp\\lookdev folder;
 it defaults to the newest capture.
@@ -30,6 +32,7 @@ PROXY_BUILD = HERE.parent / "build" / "bin" / "release" / "d3d9.dll"
 # The host runs from DATA (Remix resolves rtx.conf and mods from the client exe's
 # folder) with its own copy of the proxy, so a running game's d3d9.dll is never touched.
 HOST_IN_GAME = GAME_DIR / "ds1_lookdev_host.exe"
+HOST_WINDOW_CLASS = "DARK SOULS lookdev host"   # host\main.cpp create_window
 PROXY_IN_GAME = GAME_DIR / "d3d9_lookdev.dll"
 
 MAGIC = 0x43315344
@@ -136,14 +139,38 @@ def running(image):
     return image.lower() in out.lower()
 
 
+def _wait_gone(image, timeout):
+    deadline = time.monotonic() + timeout
+    while running(image):
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.5)
+    return True
+
+
+def stop_host(timeout=45.0):
+    """Closes the host the way its window's close button does, so the device is released and the
+    bridge shuts Remix down cleanly: a killed Remix never writes its shader and pipeline caches,
+    and the next start compiles every shader again. Kills only what is still running after
+    `timeout` seconds (a hung host)."""
+    import ctypes
+    hwnd = ctypes.windll.user32.FindWindowW(HOST_WINDOW_CLASS, None)
+    if hwnd:
+        ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+    for image in (HOST_IN_GAME.name, "NvRemixBridge.exe"):
+        if not _wait_gone(image, timeout):
+            print(f"{image} did not exit within {timeout:.0f} s; killing it")
+            subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True)
+            _wait_gone(image, 5.0)
+
+
 def cmd_host(args):
     cap = None if args.live else resolve(args.capture)
     for exe in (HOST, PROXY_BUILD):
         if not exe.exists():
             sys.exit(f"missing {exe}: run build_lookdev.bat and ..\\build.bat release --name DarkSouls --no-deploy")
     if running(HOST_IN_GAME.name):
-        subprocess.run(["taskkill", "/IM", HOST_IN_GAME.name, "/F"], capture_output=True)
-        time.sleep(1.0)
+        stop_host()
     if running("NvRemixBridge.exe"):
         sys.exit("NvRemixBridge.exe is running: the normal game (or another Remix client) owns the bridge. Close it first.")
     import shutil
@@ -204,6 +231,12 @@ def main():
     p = sub.add_parser("host"); p.add_argument("capture", nargs="?"); p.add_argument("--live", action="store_true"); p.set_defaults(fn=cmd_host)
     p = sub.add_parser("info"); p.add_argument("capture", nargs="?"); p.set_defaults(fn=cmd_info)
     p = sub.add_parser("list"); p.set_defaults(fn=cmd_list)
+    import suite
+    suite.add_parser(sub)
+    import look
+    look.add_parser(sub)
+    import probe_fit
+    probe_fit.add_parser(sub)
     args = ap.parse_args()
     return args.fn(args)
 
