@@ -2,7 +2,10 @@
 setlocal enabledelayedexpansion
 
 :: remix-comp-proxy build script (d3d9.dll proxy)
-:: Usage: build.bat [release|debug] [--name OutputName] [--comp CompDir]
+:: Usage: build.bat [release|debug] [--name OutputName] [--comp CompDir] [--no-deploy]
+::
+:: --no-deploy leaves the game folder alone (deploy.conf is ignored), e.g. to
+:: build for the lookdev host while the game holds d3d9.dll.
 ::
 :: Examples:
 ::   build.bat                          Build release d3d9.dll
@@ -16,6 +19,7 @@ set "CONFIG=release"
 set "NAME=remix-comp-proxy"
 set "COMP_DIR=%ROOT%src\comp"
 set "CUSTOM_COMP=0"
+set "NO_DEPLOY=0"
 
 :: Parse args
 :parse_args
@@ -24,6 +28,7 @@ if /i "%~1"=="release" ( set "CONFIG=release" & shift & goto :parse_args )
 if /i "%~1"=="debug"   ( set "CONFIG=debug"   & shift & goto :parse_args )
 if /i "%~1"=="--name"  ( set "NAME=%~2-comp-proxy"  & shift & shift & goto :parse_args )
 if /i "%~1"=="--comp"  ( set "COMP_DIR=%~2" & set "CUSTOM_COMP=1" & shift & shift & goto :parse_args )
+if /i "%~1"=="--no-deploy" ( set "NO_DEPLOY=1" & shift & goto :parse_args )
 echo Unknown argument: %~1
 exit /b 1
 :args_done
@@ -226,7 +231,7 @@ if "!CUSTOM_COMP!"=="1" (
 
 :: Deploy to game directory if configured
 set "DEPLOY_TARGET="
-if exist "%ROOT%deploy.conf" (
+if exist "%ROOT%deploy.conf" if "!NO_DEPLOY!"=="0" (
     set /p DEPLOY_TARGET=<"%ROOT%deploy.conf"
 )
 if not "!DEPLOY_TARGET!"=="" (
