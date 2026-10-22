@@ -155,6 +155,7 @@ cl /nologo /c %CF% %INC% ^
     "%SRC%\shared\common\config.cpp" ^
     "%SRC%\shared\common\dinput_hook_v1.cpp" ^
     "%SRC%\shared\common\dinput_hook_v2.cpp" ^
+    "%SRC%\shared\common\ffp_prof.cpp" ^
     "%SRC%\shared\common\ffp_state.cpp" ^
     "%SRC%\shared\common\flags.cpp" ^
     "%SRC%\shared\common\imgui_helper.cpp" ^

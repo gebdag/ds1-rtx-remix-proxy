@@ -16,6 +16,7 @@
 #include "benchmark.hpp"
 #include "../game/render_toggles.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/ffp_prof.hpp"
 #include "shared/common/config.hpp"
 
 namespace comp::perf
@@ -299,6 +300,220 @@ namespace comp::perf
 			ImGui::SameLine(320);
 			ImGui::TextDisabled("%u draws", s_count_last[i]);
 		}
+
+		// ------ FFP conversion step profiler ------
+
+		void help_marker(const char* text)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+				ImGui::TextUnformatted(text);
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+
+		// Tri-state row: 2 = every draw (stock), 1 = only when changed, 0 = never.
+		void step_level_row(const char* label, int* value, const char* help)
+		{
+			const char* items[] = { "never", "when changed", "every draw" };
+			ImGui::SetNextItemWidth(150.0f);
+			ImGui::Combo(label, value, items, 3);
+			help_marker(help);
+		}
+
+		void ffp_steps_ui()
+		{
+			namespace prof = shared::common::ffp_prof;
+			auto& cfg = shared::common::config::get();
+			auto& ffp = shared::common::ffp_state::get();
+
+			ImGui::TextWrapped(
+				"Converting one draw to fixed-function replaces a single DrawIndexedPrimitive "
+				"with ~60 D3D9 calls plus a full CPU rebuild of that draw's vertices into a "
+				"proxy-owned vertex buffer. The rebuilt buffer is memcpy'd into the bridge IPC "
+				"channel on every Unlock and re-uploaded by the runtime, so the conversion can "
+				"cost far more than the shader draw it replaces.");
+			ImGui::Spacing();
+
+			bool ffp_on = ffp.is_enabled();
+			if (ImGui::Checkbox("FFP conversion enabled (master A/B)", &ffp_on))
+				ffp.set_enabled(ffp_on);
+			ImGui::SameLine(360);
+			bool profiling = prof::profiling();
+			if (ImGui::Checkbox("Profile steps", &profiling))
+			{
+				prof::set_profiling(profiling);
+				cfg.ffp_steps.profile = profiling;
+			}
+			help_marker(
+				"Times each step with QueryPerformanceCounter. The scopes cost a bool test "
+				"when off. NOTE: the bridge is asynchronous, so server-side and GPU cost do "
+				"NOT appear in the ms column - use the MB/frame figure and the frame rate "
+				"response to the switches below to attribute those.");
+
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			const double frame = prof::frame_ms();
+			ImGui::Text("Frame: %.2f ms (%.0f fps)", frame, frame > 0.0 ? 1000.0 / frame : 0.0);
+			ImGui::SameLine(260);
+			ImGui::Text("converted: %u", prof::converted_draws());
+			ImGui::SameLine(400);
+			ImGui::Text("passthrough: %u", prof::passthrough_draws());
+
+			const double total = prof::total_ms();
+			ImGui::Text("Proxy CPU in FFP steps: %.2f ms/frame", total);
+			if (frame > 0.0)
+			{
+				ImGui::SameLine(300);
+				ImGui::TextDisabled("(%.0f%% of the frame)", 100.0 * total / frame);
+			}
+
+			ImGui::Text("Vertex data pushed at the bridge: %.2f MB/frame", prof::expand_mb());
+			help_marker(
+				"Bytes the expanded vertex buffers hand to the bridge on Unlock. This is the "
+				"proxy-side stand-in for Remix/GPU cost, which the ms column cannot see. If "
+				"this number is large, buffer reuse is the lever that matters.");
+			if (cfg.ffp_steps.expand_reuse)
+			{
+				ImGui::Text("  avoided by reuse: %.2f MB/frame", prof::saved_mb());
+				ImGui::SameLine(320);
+				const UINT hits = prof::reuse_hits(), misses = prof::reuse_misses();
+				const UINT tot = hits + misses;
+				ImGui::TextDisabled("hit rate %u/%u (%.0f%%)", hits, tot,
+					tot ? 100.0 * hits / tot : 0.0);
+			}
+
+			ImGui::Spacing();
+
+			if (!prof::profiling())
+			{
+				ImGui::TextDisabled("Enable 'Profile steps' for the per-step breakdown.");
+			}
+			else if (ImGui::BeginTable("ffp_steps", 5,
+				ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit))
+			{
+				ImGui::TableSetupColumn("Step", ImGuiTableColumnFlags_WidthFixed, 190.0f);
+				ImGui::TableSetupColumn("self ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableSetupColumn("share", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+				ImGui::TableSetupColumn("calls", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableSetupColumn("us/call", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableHeadersRow();
+
+				for (int i = 0; i < prof::STEP_COUNT; i++)
+				{
+					const auto st = static_cast<prof::step>(i);
+					const double ms = prof::self_ms(st);
+					const UINT n = prof::calls(st);
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					if (prof::is_child(st))
+						ImGui::TextDisabled("  %s", prof::label(st));
+					else
+						ImGui::TextUnformatted(prof::label(st));
+
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+						ImGui::TextUnformatted(prof::describe(st));
+						ImGui::PopTextWrapPos();
+						ImGui::EndTooltip();
+					}
+
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Text("%.3f", ms);
+
+					ImGui::TableSetColumnIndex(2);
+					const float share = (total > 0.0) ? static_cast<float>(ms / total) : 0.0f;
+					ImGui::ProgressBar(share, ImVec2(-1.0f, 0.0f), "");
+
+					ImGui::TableSetColumnIndex(3);
+					ImGui::Text("%u", n);
+
+					ImGui::TableSetColumnIndex(4);
+					if (n > 0)
+						ImGui::Text("%.2f", (ms * 1000.0) / static_cast<double>(n));
+					else
+						ImGui::TextDisabled("--");
+				}
+				ImGui::EndTable();
+			}
+
+			ImGui::Spacing();
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Step switches");
+			ImGui::TextWrapped(
+				"Every default here is stock behaviour except buffer reuse, which is on. "
+				"Flip one at a time and watch the frame rate - that is the only way to see cost "
+				"that lands on the bridge server or the GPU rather than in the proxy.");
+			ImGui::Spacing();
+
+			ImGui::Checkbox("Reuse expanded vertex buffers", &cfg.ffp_steps.expand_reuse);
+			help_marker(
+				"THE BIG ONE. Stock always re-expands and re-uploads every draw's vertices, "
+				"because a VB can be destroyed and re-created at the same address and a "
+				"pointer-keyed cache hit would then serve garbage. With this on, a hit is "
+				"validated against a content fingerprint of the source bytes instead, and a "
+				"match skips the destination lock, the conversion and the Unlock entirely - "
+				"so nothing reaches the bridge and Remix sees no upload. The fingerprint is "
+				"sampled, not exhaustive: strong in practice, not a proof. On by default; "
+				"turn it off first if a rigid mesh freezes, stretches or shows wrong UVs.");
+
+			step_level_row("Texture stage setup", &cfg.ffp_steps.tex_stages,
+				"29 SetTextureStageState per converted draw, setting stage 0 to MODULATE and "
+				"disabling stages 1-7. The configuration is identical for nearly every draw, "
+				"so 'when changed' applies it once and re-applies only after the game itself "
+				"touches a stage (tracked through the device wrapper).");
+
+			step_level_row("Transform upload", &cfg.ffp_steps.transforms,
+				"SetTransform(VIEW/PROJECTION/WORLD). Stock re-applies all three on every draw "
+				"even when no VS constant changed; 'when changed' skips the redundant ones. "
+				"'never' is diagnostic only - geometry will be placed with a stale transform.");
+
+			step_level_row("Restore textures", &cfg.ffp_steps.restore_textures,
+				"8 SetTexture putting the game's bindings back after a converted draw. "
+				"'when changed' restores only the stages the conversion actually rebound.");
+
+			ImGui::Checkbox("Null texture stages 1-7 for albedo", &cfg.ffp_steps.albedo_null_stages);
+			help_marker(
+				"Stock unbinds stages 1-7 so Remix cannot pick up the game's shadow maps and "
+				"LUTs as material inputs. Turning it off halves the SetTexture traffic per "
+				"draw, relying on the stage COLOROP/ALPHAOP disables instead. Watch for wrong "
+				"materials if you do.");
+
+			ImGui::Checkbox("Blended-decal state query", &cfg.ffp_steps.decal_query);
+			help_marker(
+				"3 GetRenderState per draw detecting the game's own alpha-blended edge-fade "
+				"strips so they can be tagged as decals. Off, those strips reach Remix as "
+				"unordered translucency (dark fringes) - a measurement switch, not a setting "
+				"to ship off.");
+
+			ImGui::Checkbox("Save overlay states only when needed", &cfg.ffp_steps.overlay_save_lazy);
+			help_marker(
+				"save_overlay_render_states costs 7 GetRenderState and is currently called on "
+				"EVERY converted draw, even though only two-layer map materials ever run an "
+				"overlay pass. On, the save is deferred until the draw is known to need one. "
+				"This is a straight win with no visual change.");
+
+			ImGui::Checkbox("Two-layer overlay pass", &cfg.ffp.texture_layer_blend);
+			help_marker(
+				"The coplanar decal re-draw for two-layer map materials. It doubles the draw "
+				"count AND the expanded-vertex traffic for every affected mesh, so it is the "
+				"second-biggest lever after buffer reuse. Off loses the second diffuse layer.");
+
+			ImGui::Checkbox("Per-draw Z-write query", &cfg.ffp.zwrite_query_per_draw);
+			help_marker(
+				"GetRenderState(D3DRS_ZWRITEENABLE) per draw feeding the depth-prepass gate. "
+				"Served from the bridge's client-side shadow so it does not round-trip, but it "
+				"still takes the bridge device lock. Off uses the passively tracked value, "
+				"which misses changes applied through StateBlock::Apply.");
+		}
 	}
 
 	void tab_imgui()
@@ -394,6 +609,9 @@ namespace comp::perf
 			game_toggle_row(toggle::postfx_downsample);
 			game_toggle_row(toggle::postfx_combine);
 		}
+
+		if (ImGui::CollapsingHeader("FFP Conversion Steps (why FFP costs what it costs)"))
+			ffp_steps_ui();
 
 		if (ImGui::CollapsingHeader("Proxy Draw Filters (D3D-level, still pays bridge cost)"))
 		{

@@ -74,6 +74,71 @@ namespace shared::common
 			bool zwrite_query_per_draw = true;
 		} ffp;
 
+		/*
+		 * Per-step switches for the FFP conversion pipeline ([FFPSteps]).
+		 *
+		 * Every default here reproduces the stock behaviour exactly, so the
+		 * section is inert until something is changed. They exist so each step
+		 * of the conversion can be turned off (or made lazy) live from the Perf
+		 * tab and its real cost read off the frame rate — the proxy-side timer
+		 * cannot see the bridge server or the GPU, so measuring by subtraction
+		 * is the only honest way to attribute cost.
+		 *
+		 * The tri-state ints all follow the same scale:
+		 *   2 = every draw (stock)   1 = only when it changed   0 = never
+		 * Level 1 is a genuine optimisation, not just a probe: if it costs
+		 * nothing visually it can simply be left on.
+		 */
+		struct ffp_step_settings
+		{
+			// Master switch for the profiler itself. Off by default — the
+			// scopes cost a bool test when disabled, two QPC reads when on.
+			bool profile = false;
+
+			// setup_texture_stages: 29 SetTextureStageState per draw. The state
+			// is identical for nearly every converted draw, so level 1 applies
+			// it once and only re-applies after something else has disturbed it.
+			int tex_stages = 2;
+
+			// apply_transforms: re-applies VIEW/PROJECTION/WORLD on every draw
+			// even when no VS constant changed. Level 1 skips the redundant
+			// SetTransform calls.
+			int transforms = 2;
+
+			// restore_textures: 8 SetTexture after every converted draw.
+			// Level 1 restores only the stages the conversion actually touched.
+			int restore_textures = 2;
+
+			// Null stages 1-7 in setup_albedo_or_fallback. Off binds stage 0
+			// only and leaves the rest, relying on the stage-disable state from
+			// setup_texture_stages to keep them out of the material.
+			bool albedo_null_stages = true;
+
+			// Serve a cached expanded VB when the source vertex range is
+			// unchanged, instead of re-locking, re-converting and re-uploading
+			// it every draw. This is the single biggest lever: a re-written VB
+			// is memcpy'd into the bridge IPC channel on Unlock and re-uploaded
+			// by the runtime every frame.
+			//
+			// Correctness note: the stock code deliberately never serves cached
+			// data because the game can destroy and re-create a VB at the same
+			// address, which would make a pointer-keyed hit return garbage. The
+			// reuse path therefore validates with a cheap content fingerprint
+			// (sampled bytes + geometry dimensions) rather than trusting the
+			// pointer. That is strong but not a proof — turn it off first when
+			// any geometry corruption is reported.
+			bool expand_reuse = true;
+
+			// apply_blended_decal_marker's 3 GetRenderState per draw.
+			bool decal_query = true;
+
+			// save_overlay_render_states is currently called before the overlay
+			// pass is known to be needed, so all 7 GetRenderState are paid on
+			// every converted draw. When true they are saved only once the
+			// overlay is actually going to be drawn.
+			bool overlay_save_lazy = false;
+		} ffp_steps;
+
 		struct postfx_settings
 		{
 			std::unordered_set<int> skip_passes; // pass indices to skip

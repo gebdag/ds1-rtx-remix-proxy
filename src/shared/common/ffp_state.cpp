@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "ffp_state.hpp"
+#include "ffp_prof.hpp"
 #include <cstdio>
 
 namespace shared::common
@@ -69,6 +70,8 @@ namespace shared::common
 	void ffp_state::init(IDirect3DDevice9* /*real_device*/)
 	{
 		cfg_ = &config::get().ffp;
+		steps_ = &config::get().ffp_steps;
+		ffp_prof::set_profiling(steps_->profile);
 		enabled_ = cfg_->enabled && !cfg_->auto_enable;
 		create_tick_ = GetTickCount();
 
@@ -412,6 +415,7 @@ namespace shared::common
 		if (!cfg_ || !cfg_->zwrite_query_per_draw)
 			return; // rely on the value tracked via on_set_render_state()
 
+		ffp_prof::scope prof(ffp_prof::step::zwrite_query);
 		DWORD val = TRUE;
 		dev->GetRenderState(D3DRS_ZWRITEENABLE, &val);
 		cur_zwrite_enabled_ = (val != 0);
@@ -423,6 +427,13 @@ namespace shared::common
 			cur_zwrite_enabled_ = (value != 0);
 		else if (state == D3DRS_ALPHABLENDENABLE)
 			cur_alpha_blend_enabled_ = (value != 0);
+	}
+
+	void ffp_state::on_set_texture_stage_state(DWORD /*stage*/, D3DTEXTURESTAGESTATETYPE /*type*/, DWORD /*value*/)
+	{
+		// The game touched a texture stage, so the FFP stage configuration set
+		// by setup_texture_stages can no longer be assumed resident.
+		ffp_stages_applied_ = false;
 	}
 
 	void ffp_state::on_set_render_target(DWORD index, IDirect3DSurface9* rt)
@@ -876,10 +887,16 @@ namespace shared::common
 		if (tex_ptr == 0)
 			return false;
 
+		ffp_prof::scope prof(ffp_prof::step::albedo);
+
 		// Bind the per-mesh albedo and clear other stages
 		dev->SetTexture(0, tex);
-		for (DWORD ts = 1; ts < 8; ts++)
-			dev->SetTexture(ts, nullptr);
+		if (!steps_ || steps_->albedo_null_stages)
+		{
+			for (DWORD ts = 1; ts < 8; ts++)
+				dev->SetTexture(ts, nullptr);
+			nulled_high_stages_ = true;
+		}
 		return true;
 	}
 
@@ -951,9 +968,14 @@ namespace shared::common
 				reinterpret_cast<uintptr_t>(chosen)));
 		}
 
+		ffp_prof::scope prof(ffp_prof::step::albedo);
 		dev->SetTexture(0, chosen);
-		for (DWORD ts = 1; ts < 8; ts++)
-			dev->SetTexture(ts, nullptr);
+		if (!steps_ || steps_->albedo_null_stages)
+		{
+			for (DWORD ts = 1; ts < 8; ts++)
+				dev->SetTexture(ts, nullptr);
+			nulled_high_stages_ = true;
+		}
 		return true;
 	}
 
@@ -963,15 +985,44 @@ namespace shared::common
 	{
 		if (!cfg_ || !enabled_ || !dev) return;
 
+		ffp_prof::scope prof(ffp_prof::step::engage);
+
 		if (!ffp_active_)
 		{
 			dev->SetVertexShader(nullptr);
 			dev->SetPixelShader(nullptr);
 			ffp_active_ = true;
+			// Shaders were just nulled; whatever stage state the game left is
+			// not the FFP configuration.
+			ffp_stages_applied_ = false;
 		}
 
-		apply_transforms(dev);
-		setup_texture_stages(dev);
+		// TransformsLevel 2 = re-apply every draw (stock), 1 = only when a VS
+		// constant actually changed, 0 = never (diagnostic only — the geometry
+		// will be placed with whatever transform was last set).
+		const int tf_level = steps_ ? steps_->transforms : 2;
+		if (tf_level >= 2 || (tf_level == 1 && (view_proj_dirty_ || world_dirty_ || !transforms_cached_)))
+		{
+			ffp_prof::scope tprof(ffp_prof::step::transforms);
+			apply_transforms(dev);
+		}
+		else if (tf_level == 1)
+		{
+			// Nothing changed since the last upload, so the device already holds
+			// the right matrices. Scoped anyway so the call count shows how often
+			// the stock path was re-uploading them for nothing.
+			ffp_prof::scope tprof(ffp_prof::step::transforms);
+		}
+
+		// TextureStagesLevel 2 = every draw (stock), 1 = only after the game
+		// disturbed the stages, 0 = never.
+		const int ts_level = steps_ ? steps_->tex_stages : 2;
+		if (ts_level >= 2 || (ts_level == 1 && !ffp_stages_applied_))
+		{
+			ffp_prof::scope sprof(ffp_prof::step::tex_stages);
+			setup_texture_stages(dev);
+			ffp_stages_applied_ = true;
+		}
 
 		if (!ffp_setup_)
 		{
@@ -984,12 +1035,15 @@ namespace shared::common
 	{
 		bool was_ffp = ffp_active_;
 
+		ffp_prof::scope prof(ffp_prof::step::disengage);
+
 		if (ffp_active_ && dev)
 		{
 			dev->SetVertexShader(last_vs_);
 			dev->SetPixelShader(last_ps_);
 			dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 			ffp_active_ = false;
+			ffp_stages_applied_ = false;
 		}
 
 		// Ensure D3D transforms match current VS constants for the upcoming shader draw.
@@ -1030,8 +1084,22 @@ namespace shared::common
 	{
 		if (!dev) return;
 
-		for (DWORD ts = 0; ts < 8; ts++)
-			dev->SetTexture(ts, cur_texture_[ts]);
+		ffp_prof::scope prof(ffp_prof::step::restore_tex);
+
+		// RestoreTexturesLevel 2 = all 8 stages (stock), 1 = only the stages the
+		// conversion actually rebound, 0 = none. Level 1 is safe as long as the
+		// albedo path is the only thing that touches bindings, which it is:
+		// stage 0 is always overwritten, stages 1-7 only when AlbedoNullStages.
+		const int level = steps_ ? steps_->restore_textures : 2;
+		if (level == 0) return;
+
+		dev->SetTexture(0, cur_texture_[0]);
+		if (level >= 2 || nulled_high_stages_)
+		{
+			for (DWORD ts = 1; ts < 8; ts++)
+				dev->SetTexture(ts, cur_texture_[ts]);
+		}
+		nulled_high_stages_ = false;
 	}
 
 	// ---- Camera position extraction ----
@@ -1394,9 +1462,13 @@ namespace shared::common
 	{
 		if (!dev) return false;
 
+		// Cheap rejects first — most draws are single-layer and must not pay for
+		// the profiler scope or anything below it.
 		const int overlay_stage = secondary_blend_stage();
 		if (overlay_stage < 0)
 			return false;
+
+		ffp_prof::scope prof(ffp_prof::step::overlay_setup);
 
 		auto* overlay_texture = cur_texture_[overlay_stage];
 		if (!overlay_texture)
@@ -1411,6 +1483,7 @@ namespace shared::common
 		dev->SetTexture(0, overlay_texture);
 		for (DWORD ts = 1; ts < 8; ts++)
 			dev->SetTexture(ts, nullptr);
+		nulled_high_stages_ = true;
 
 		// Albedo = overlay texture tinted by vertex RGB (same as the base layer);
 		// opacity = painted vertex alpha — Remix evaluates these per hit from the
@@ -1445,6 +1518,15 @@ namespace shared::common
 		if (!dev || !cfg_ || !cfg_->texture_layer_blend)
 			return false;
 
+		// [FFPSteps] DecalQuery=0 drops the 3 state reads. The game's own
+		// alpha-blended edge-fade strips then reach Remix as unordered
+		// translucency (dark fringes), so this is a measurement switch rather
+		// than something to ship off.
+		if (steps_ && !steps_->decal_query)
+			return false;
+
+		ffp_prof::scope prof(ffp_prof::step::decal_query);
+
 		// Classic decal signature only: straight alpha blending. Additive and other
 		// blend modes (glows, effects) are handled by Remix's emissive blend paths.
 		// Queried from the device because DS1 applies blend state via
@@ -1472,9 +1554,56 @@ namespace shared::common
 
 	// ---- Rigid vertex expansion ----
 
+	uint64_t ffp_state::fingerprint_source(const unsigned char* src, UINT total_verts,
+		UINT stride, bool overlay_uv) const
+	{
+		// FNV-1a over the geometry dimensions, the declaration layout the
+		// expansion decodes with, and up to 16 evenly spaced 8-byte samples of the
+		// source range. Reading ~128 bytes instead of the whole range keeps this
+		// far cheaper than the conversion it guards, while still changing if the
+		// buffer was destroyed and re-created at the same address with different
+		// contents, or the same bytes are drawn through another declaration.
+		uint64_t h = 1469598103934665603ull;
+		auto mix = [&h](uint64_t v)
+		{
+			for (int b = 0; b < 8; b++)
+			{
+				h ^= static_cast<unsigned char>(v >> (b * 8));
+				h *= 1099511628211ull;
+			}
+		};
+
+		mix(total_verts);
+		mix(stride);
+		mix(overlay_uv ? 1ull : 0ull);
+		mix(static_cast<uint64_t>(cur_decl_pos_off_));
+		mix(cur_decl_has_normal_ ? ((static_cast<uint64_t>(cur_decl_normal_off_) << 8) | (cur_decl_normal_type_ & 0xFF)) : ~0ull);
+		mix(cur_decl_has_color_ ? ((static_cast<uint64_t>(cur_decl_color_off_) << 8) | (cur_decl_color_type_ & 0xFF)) : ~0ull);
+		mix(cur_decl_has_texcoord_ ? ((static_cast<uint64_t>(cur_decl_texcoord_off_) << 8) | (cur_decl_texcoord_type_ & 0xFF)) : ~0ull);
+
+		const UINT span = total_verts * stride;
+		if (span == 0) return h;
+
+		constexpr UINT SAMPLES = 16;
+		const UINT step_bytes = (span > SAMPLES * 8) ? (span - 8) / (SAMPLES - 1) : 0;
+		for (UINT i = 0; i < SAMPLES; i++)
+		{
+			const UINT off = (step_bytes == 0)
+				? std::min<UINT>(i * 8, (span > 8) ? span - 8 : 0)
+				: i * step_bytes;
+			if (off + 8 > span) break;
+			uint64_t chunk = 0;
+			std::memcpy(&chunk, src + off, 8);
+			mix(chunk);
+		}
+		return h;
+	}
+
 	bool ffp_state::expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts, bool overlay_uv)
 	{
 		if (num_verts == 0) return false;
+
+		ffp_prof::scope prof(ffp_prof::step::expand);
 
 		// The overlay UV pair only exists in 4-component texcoord layouts.
 		if (overlay_uv &&
@@ -1518,10 +1647,13 @@ namespace shared::common
 		auto& entry = overlay_uv ? rigid_overlay_cache_[cache_key] : rigid_exp_cache_[cache_key];
 		entry.last_frame = frame_count_;
 
-		// Always re-expand from source — never serve cached data.
-		// The game can destroy and re-create VBs at the same address (pointer
-		// reuse), which makes stale cache hits return garbage vertex data.
-		// The cache still provides allocation reuse to avoid create/release churn.
+		// The stock path always re-expands and never serves cached data: the game
+		// can destroy and re-create a VB at the same address, so a pointer-keyed
+		// hit could return garbage. That safety costs a full rebuild plus a
+		// destination Unlock on every draw, and it is that Unlock which memcpy's
+		// the range into the bridge IPC channel and forces a GPU re-upload.
+		// [FFPSteps] ExpandReuse=1 keeps the safety but validates with a content
+		// fingerprint instead of trusting the pointer.
 
 		// Need to expand: allocate/grow MANAGED VB if needed
 		if (!entry.vb || entry.capacity < total_verts)
@@ -1537,21 +1669,83 @@ namespace shared::common
 			}
 			entry.capacity = new_cap;
 			entry.expanded = 0;
+			entry.has_fingerprint = false; // fresh allocation holds no valid data
 		}
+
+		const UINT dst_bytes = total_verts * rigid_vtx_size;
+
+		// The debris-chunk path below rewrites positions and normals from the VS
+		// constant bone palette, so its output is not a pure function of the source
+		// bytes: the same vertices with a moved palette must be re-expanded. Only
+		// the plain path is eligible for fingerprint reuse.
+		const bool palette_possible =
+			cur_decl_has_blend_indices_ && !cur_decl_is_skinned_ &&
+			cur_decl_blend_indices_type_ == D3DDECLTYPE_UBYTE4 && cur_decl_pos_off_ == 0 &&
+			cur_decl_has_normal_ && cur_decl_normal_off_ == 16 && cur_decl_normal_type_ == D3DDECLTYPE_UBYTE4N &&
+			cur_decl_has_color_ && cur_decl_color_off_ == 20 && cur_decl_color_type_ == D3DDECLTYPE_UBYTE4N &&
+			cur_decl_has_texcoord_ && cur_decl_texcoord_off_ == 24 && cur_decl_texcoord_type_ == D3DDECLTYPE_SHORT2 &&
+			stride == 28 && cur_ib_ && (num_verts == 58 || num_verts == 80) && vs_regs_per_bone_ > 0;
+
+		const bool try_reuse = steps_ && steps_->expand_reuse && !palette_possible;
+		uint64_t pending_fp = 0;
+		bool have_pending_fp = false;
 
 		// Lock source VB
 		unsigned char* src_data = nullptr;
-		if (FAILED(src_vb->Lock(byte_offset, total_verts * stride,
-			reinterpret_cast<void**>(&src_data), D3DLOCK_READONLY)))
-			return false;
+		{
+			ffp_prof::scope lprof(ffp_prof::step::exp_lock);
+			if (FAILED(src_vb->Lock(byte_offset, total_verts * stride,
+				reinterpret_cast<void**>(&src_data), D3DLOCK_READONLY)))
+				return false;
+		}
+
+		if (try_reuse)
+		{
+			const uint64_t fp = fingerprint_source(src_data, total_verts, stride, overlay_uv);
+			const bool hit = entry.has_fingerprint &&
+				entry.fingerprint == fp &&
+				entry.src_verts == total_verts &&
+				entry.src_stride == stride &&
+				entry.expanded >= total_verts;
+
+			if (hit)
+			{
+				// The expanded VB already holds exactly this data. Skip the
+				// destination lock, the conversion and above all the Unlock —
+				// nothing is pushed at the bridge and Remix sees no upload.
+				{
+					ffp_prof::scope uprof(ffp_prof::step::exp_unlock);
+					src_vb->Unlock();
+				}
+				ffp_prof::add_saved_bytes(dst_bytes);
+				ffp_prof::count_expand_reuse_hit();
+
+				ffp_prof::scope bprof(ffp_prof::step::exp_bind);
+				dev->SetVertexDeclaration(rigid_exp_decl_);
+				dev->SetStreamSource(0, entry.vb, 0, rigid_vtx_size);
+				rigid_exp_active_ = true;
+				return true;
+			}
+
+			ffp_prof::count_expand_reuse_miss();
+			pending_fp = fp;
+			have_pending_fp = true;
+		}
+		// Until the expansion below completes, the cached buffer does not hold
+		// this range. Clear the claim so a failure part-way cannot be served as
+		// a hit next frame.
+		entry.has_fingerprint = false;
 
 		// Lock destination VB
 		unsigned char* dst_data = nullptr;
-		if (FAILED(entry.vb->Lock(0, total_verts * rigid_vtx_size,
-			reinterpret_cast<void**>(&dst_data), 0)))
 		{
-			src_vb->Unlock();
-			return false;
+			ffp_prof::scope lprof(ffp_prof::step::exp_lock);
+			if (FAILED(entry.vb->Lock(0, dst_bytes,
+				reinterpret_cast<void**>(&dst_data), 0)))
+			{
+				src_vb->Unlock();
+				return false;
+			}
 		}
 
 		constexpr float kScale = 1.0f / 1024.0f;
@@ -1562,15 +1756,7 @@ namespace shared::common
 		int n_type  = cur_decl_normal_type_;
 		int p_off   = cur_decl_pos_off_;
 
-		const bool rigid_chunk_layout = cur_decl_has_blend_indices_ && !cur_decl_is_skinned_ &&
-			cur_decl_blend_indices_type_ == D3DDECLTYPE_UBYTE4 && cur_decl_pos_off_ == 0 &&
-			cur_decl_has_normal_ && cur_decl_normal_off_ == 16 && cur_decl_normal_type_ == D3DDECLTYPE_UBYTE4N &&
-			cur_decl_has_color_ && cur_decl_color_off_ == 20 && cur_decl_color_type_ == D3DDECLTYPE_UBYTE4N &&
-			cur_decl_has_texcoord_ && cur_decl_texcoord_off_ == 24 && cur_decl_texcoord_type_ == D3DDECLTYPE_SHORT2 &&
-			stride == 28;
-		const bool debris_chunk_size = cur_ib_ && (num_verts == 58 || num_verts == 80);
-
-		bool use_palette_indices = rigid_chunk_layout && debris_chunk_size && vs_regs_per_bone_ > 0;
+		bool use_palette_indices = palette_possible;
 		const int max_palette_matrices = use_palette_indices
 			? std::max(1, (256 - vs_reg_world_start_) / vs_regs_per_bone_)
 			: 1;
@@ -1630,6 +1816,8 @@ namespace shared::common
 
 		const int tc_src = overlay_uv ? 2 : 0;
 
+		{
+		ffp_prof::scope cprof(ffp_prof::step::exp_convert);
 		for (UINT v = 0; v < total_verts; v++)
 		{
 			const auto* sv = &src_data[v * stride];
@@ -1731,12 +1919,33 @@ namespace shared::common
 			}
 		}
 
-		entry.vb->Unlock();
-		src_vb->Unlock();
-		entry.expanded = total_verts;
+		} // exp_convert
 
-		dev->SetVertexDeclaration(rigid_exp_decl_);
-		dev->SetStreamSource(0, entry.vb, 0, rigid_vtx_size);
+		{
+			// The destination Unlock is where the bridge client memcpy's the
+			// written range into the IPC channel (LockableBuffer::unlock) and
+			// where the runtime marks the buffer for GPU re-upload. Everything
+			// FFP conversion costs on the Remix side is paid here.
+			ffp_prof::scope uprof(ffp_prof::step::exp_unlock);
+			entry.vb->Unlock();
+			src_vb->Unlock();
+		}
+		entry.expanded = total_verts;
+		ffp_prof::add_expand_bytes(dst_bytes);
+		if (have_pending_fp)
+		{
+			// The buffer now genuinely holds this source range.
+			entry.fingerprint = pending_fp;
+			entry.src_verts = total_verts;
+			entry.src_stride = stride;
+			entry.has_fingerprint = true;
+		}
+
+		{
+			ffp_prof::scope bprof(ffp_prof::step::exp_bind);
+			dev->SetVertexDeclaration(rigid_exp_decl_);
+			dev->SetStreamSource(0, entry.vb, 0, rigid_vtx_size);
+		}
 		rigid_exp_active_ = true;
 		return true;
 	}
@@ -1744,6 +1953,8 @@ namespace shared::common
 	void ffp_state::restore_rigid_source(IDirect3DDevice9* dev)
 	{
 		if (!rigid_exp_active_ && !skinned_exp_active_) return;
+
+		ffp_prof::scope prof(ffp_prof::step::restore_stream);
 
 		if (last_decl_) dev->SetVertexDeclaration(last_decl_);
 		dev->SetStreamSource(0, stream_vb_[0], stream_offset_[0], stream_stride_[0]);

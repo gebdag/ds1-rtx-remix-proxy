@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "renderer.hpp"
+#include "shared/common/ffp_prof.hpp"
 
 namespace comp
 {
@@ -203,6 +204,8 @@ namespace comp
 
 	void drawcall_mod_context::restore_all(IDirect3DDevice9* device)
 	{
+		shared::common::ffp_prof::scope prof(shared::common::ffp_prof::step::ctx_restore);
+
 		for (auto& rs : saved_render_state_) {
 			device->SetRenderState(rs.first, rs.second);
 		}

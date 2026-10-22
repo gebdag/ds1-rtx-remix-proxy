@@ -42,6 +42,11 @@ namespace shared::common
 		void sync_zwrite(IDirect3DDevice9* dev);
 		// Passive render-state tracking (currently only D3DRS_ZWRITEENABLE).
 		void on_set_render_state(D3DRENDERSTATETYPE state, DWORD value);
+		// Invalidate the cached "FFP texture stage state is applied" latch used
+		// by [FFPSteps] TextureStages=1. Called from the device wrapper, which
+		// only ever sees the GAME's calls — the proxy talks to the real device
+		// directly, so its own stage writes cannot falsely invalidate this.
+		void on_set_texture_stage_state(DWORD stage, D3DTEXTURESTAGESTATETYPE type, DWORD value);
 		void on_present();
 		void on_begin_scene();
 		void on_reset();
@@ -241,6 +246,18 @@ namespace shared::common
 		// should re-issue the draw; call clear_decal_marker afterwards.
 		bool setup_overlay_decal_pass(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts);
 
+		// True when the current draw is a two-layer material that will actually
+		// run the overlay pass. Pure state inspection — no device calls — so the
+		// caller can decide whether saving the overlay render states is worth it
+		// ([FFPSteps] OverlaySaveLazy). Deliberately a conservative superset of
+		// what setup_overlay_decal_pass modifies: it may still bail afterwards on
+		// a failed expansion, which costs a redundant save but never a lost state.
+		bool overlay_pass_applicable() const
+		{
+			const int stage = secondary_blend_stage();
+			return stage >= 0 && cur_texture_[stage] != nullptr;
+		}
+
 		// Tag the current FFP draw as a decal when the game itself renders it
 		// alpha-blended (terrain edge-fade strips blending onto the geometry
 		// beneath). Without the tag Remix treats such draws as unordered
@@ -418,7 +435,31 @@ namespace shared::common
 			UINT capacity = 0;      // allocated size in vertices
 			UINT expanded = 0;      // vertices with valid data
 			UINT last_frame = 0;
+			// Reuse validation ([FFPSteps] ExpandReuse). The stock path never
+			// serves cached data because a VB can be destroyed and re-created at
+			// the same address; these fields let a hit be validated against the
+			// source bytes instead of trusting the pointer.
+			uint64_t fingerprint = 0;   // sampled hash of the source range
+			UINT     src_verts = 0;     // vertex count the fingerprint covers
+			UINT     src_stride = 0;    // source stride at expansion time
+			bool     has_fingerprint = false;
 		};
+
+		// Cheap fingerprint of everything a rigid expansion reads: evenly spaced
+		// 8-byte samples of the source range, its dimensions, and the current
+		// declaration's layout. Reads ~128 bytes instead of the whole range, so it
+		// is far cheaper than re-converting, while still catching a buffer that was
+		// recreated at the same address or drawn through a different declaration.
+		uint64_t fingerprint_source(const unsigned char* src, UINT total_verts,
+			UINT stride, bool overlay_uv) const;
+
+		// True when the FFP texture stage state set by setup_texture_stages is
+		// still resident, so TextureStages=1 can skip re-applying it.
+		bool ffp_stages_applied_ = false;
+		// True when this draw unbound stages 1-7. RestoreTextures=1 must restore
+		// them if and only if something actually nulled them — the albedo path
+		// does so only under AlbedoNullStages, but the overlay pass always does.
+		bool nulled_high_stages_ = false;
 		std::unordered_map<uint64_t, rigid_vb_entry> rigid_exp_cache_;
 		std::unordered_map<uint64_t, rigid_vb_entry> rigid_overlay_cache_;
 
@@ -484,6 +525,9 @@ namespace shared::common
 
 		// Cached config
 		const config::ffp_settings* cfg_ = nullptr;
+		// [FFPSteps] switches. A sibling of ffp_settings in config, so it needs
+		// its own pointer rather than hanging off cfg_.
+		const config::ffp_step_settings* steps_ = nullptr;
 
 		// Internal helpers
 		void apply_transforms(IDirect3DDevice9* dev);

@@ -7,6 +7,7 @@
 #include "rt_tracker.hpp"
 #include "skinning.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/texture_names.hpp"
@@ -83,8 +84,22 @@ namespace comp
 		return ctx;
 	}
 
+	// Saving the overlay blend state costs 7 GetRenderState. The stock code pays
+	// that on every converted draw even though only two-layer map materials ever
+	// run an overlay pass, so [FFPSteps] OverlaySaveLazy=1 defers it until the
+	// draw is known to need one.
+	bool should_save_overlay_states(shared::common::ffp_state& ffp)
+	{
+		auto& cfg = shared::common::config::get();
+		if (!cfg.ffp_steps.overlay_save_lazy)
+			return true;
+		return ffp.overlay_pass_applicable();
+	}
+
 	void save_overlay_render_states(drawcall_mod_context& ctx, IDirect3DDevice9* dev)
 	{
+		shared::common::ffp_prof::scope prof(shared::common::ffp_prof::step::overlay_save);
+
 		const D3DRENDERSTATETYPE states[] = {
 			D3DRS_ZWRITEENABLE,
 			D3DRS_ALPHATESTENABLE,
@@ -118,7 +133,12 @@ namespace comp
 		rt_tracker::on_draw();
 
 		// Perf category accounting + optional per-category drop.
-		if (perf::classify_and_filter())
+		bool route_drop;
+		{
+			shared::common::ffp_prof::scope rprof(shared::common::ffp_prof::step::route);
+			route_drop = perf::classify_and_filter();
+		}
+		if (route_drop)
 		{
 			ctx.restore_all(dev);
 			ctx.reset_context();
@@ -183,7 +203,11 @@ namespace comp
 				// atmospheric layers are not: a decal only survives on a surface
 				// behind it, so mist or a backdrop card in front of the sky vanished.
 				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
-				hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
+				{
+					shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
+					hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
+				}
+				shared::common::ffp_prof::count_converted_draw();
 				if (base_decal)
 					ffp.clear_decal_marker(dev);
 
@@ -191,9 +215,11 @@ namespace comp
 				// alpha-blended decal pass (composited by Remix decal blending).
 				if (SUCCEEDED(hr))
 				{
-					save_overlay_render_states(ctx, dev);
+					if (should_save_overlay_states(ffp))
+						save_overlay_render_states(ctx, dev);
 					if (ffp.setup_overlay_decal_pass(dev, StartVertex, 0, num_verts))
 					{
+						shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
 						auto overlay_hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
 						ffp.clear_decal_marker(dev);
 						if (FAILED(overlay_hr))
@@ -231,6 +257,7 @@ namespace comp
 				dp_expanded = ffp.expand_skinned_texcoords(dev, StartVertex, 0, num_verts);
 			}
 			hr = dev->DrawPrimitive(PrimitiveType, dp_expanded ? 0 : StartVertex, PrimitiveCount);
+			shared::common::ffp_prof::count_passthrough_draw();
 			if (dp_expanded) ffp.restore_rigid_source(dev);
 			im->m_stats._drawcall_prim.track_single();
 			im->m_stats._drawcall_using_vs.track_single();
@@ -270,7 +297,12 @@ namespace comp
 		}
 
 		// Perf category accounting + optional per-category drop.
-		if (perf::classify_and_filter())
+		bool route_drop;
+		{
+			shared::common::ffp_prof::scope rprof(shared::common::ffp_prof::step::route);
+			route_drop = perf::classify_and_filter();
+		}
+		if (route_drop)
 		{
 			ctx.restore_all(dev);
 			ctx.reset_context();
@@ -284,7 +316,10 @@ namespace comp
 				ffp.cur_ps_light_flags(), ffp.cur_decl_is_skinned());
 
 		// Track draw key for dedup learning (all draw types — rigid and skinned).
-		ffp.record_draw_key(ffp.stream_vb(0), ffp.cur_ib(), BaseVertexIndex, startIndex, primCount);
+		{
+			shared::common::ffp_prof::scope rprof(shared::common::ffp_prof::step::route);
+			ffp.record_draw_key(ffp.stream_vb(0), ffp.cur_ib(), BaseVertexIndex, startIndex, primCount);
+		}
 
 		// Log ALL draws (including dedup-skipped) so diagnostics can compare passes
 		if (auto* d = diagnostics::get()) d->on_draw_indexed_prim(ffp.draw_call_count(), dev, PrimitiveType, BaseVertexIndex, startIndex, NumVertices, primCount, false);
@@ -337,6 +372,7 @@ namespace comp
 			// Transforms not ready: passthrough.
 			ffp.disengage(dev);
 			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			shared::common::ffp_prof::count_passthrough_draw();
 			im->m_stats._drawcall_indexed_prim.track_single();
 			im->m_stats._drawcall_indexed_prim_using_vs.track_single();
 		}
@@ -355,6 +391,7 @@ namespace comp
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, SKY_MARKER);
 			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+			shared::common::ffp_prof::count_passthrough_draw();
 			im->m_stats._drawcall_indexed_prim.track_single();
 			im->m_stats._drawcall_indexed_prim_using_vs.track_single();
 		}
@@ -407,6 +444,7 @@ namespace comp
 			// Remove or modify this check if your game's world geometry lacks NORMAL elements.
 			ffp.disengage(dev);
 			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			shared::common::ffp_prof::count_passthrough_draw();
 			im->m_stats._drawcall_indexed_prim.track_single();
 			im->m_stats._drawcall_indexed_prim_using_vs.track_single();
 		}
@@ -494,7 +532,11 @@ namespace comp
 					// atmospheric layers are not: a decal only survives on a surface
 					// behind it, so mist or a backdrop card in front of the sky vanished.
 					const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
-					hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+					{
+						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
+						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+					}
+					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal)
 						ffp.clear_decal_marker(dev);
 
@@ -513,9 +555,11 @@ namespace comp
 					// alpha-blended decal pass (composited by Remix decal blending).
 					if (SUCCEEDED(hr))
 					{
-						save_overlay_render_states(ctx, dev);
+						if (should_save_overlay_states(ffp))
+							save_overlay_render_states(ctx, dev);
 						if (ffp.setup_overlay_decal_pass(dev, BaseVertexIndex, MinVertexIndex, NumVertices))
 						{
+							shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
 							auto overlay_hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 							ffp.clear_decal_marker(dev);
 							if (FAILED(overlay_hr))

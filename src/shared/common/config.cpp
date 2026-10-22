@@ -85,6 +85,23 @@ namespace shared::common
 		ffp.water_fallback_albedo = get_bool("FFP", "WaterFallbackAlbedo", true);
 		ffp.zwrite_query_per_draw = get_bool("FFP", "ZWriteQueryPerDraw", true);
 
+		// [FFPSteps] — per-step switches for the conversion pipeline. Every
+		// default reproduces stock behaviour, so the section is inert until
+		// something is changed from the Perf tab.
+		auto level = [this](const char* key, int def)
+		{
+			int v = get_int("FFPSteps", key, def);
+			return (v < 0) ? 0 : (v > 2 ? 2 : v);
+		};
+		ffp_steps.profile           = get_bool("FFPSteps", "Profile", false);
+		ffp_steps.tex_stages        = level("TextureStages", 2);
+		ffp_steps.transforms        = level("Transforms", 2);
+		ffp_steps.restore_textures  = level("RestoreTextures", 2);
+		ffp_steps.albedo_null_stages = get_bool("FFPSteps", "AlbedoNullStages", true);
+		ffp_steps.expand_reuse      = get_bool("FFPSteps", "ExpandReuse", true);
+		ffp_steps.decal_query       = get_bool("FFPSteps", "DecalQuery", true);
+		ffp_steps.overlay_save_lazy = get_bool("FFPSteps", "OverlaySaveLazy", false);
+
 		// [PostFX] Comma-separated list of pass indices to skip (empty = skip all)
 		postfx.skip_passes_str = get_string("PostFX", "SkipPasses", "");
 		postfx.parse_skip_string();

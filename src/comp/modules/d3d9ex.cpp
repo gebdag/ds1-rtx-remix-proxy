@@ -17,6 +17,7 @@
 using comp::tracer;
 #include "tracer_dispatch.inc"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/ffp_prof.hpp"
 #include "shared/common/config.hpp"
 #include "../game/fps_unlock.hpp"
 #include "../game/render_toggles.hpp"
@@ -252,6 +253,7 @@ namespace comp
 		crash_context::on_present(ffp.draw_call_count());
 		rt_tracker::on_present();
 		perf::on_present();
+		shared::common::ffp_prof::on_present();
 		game::render_toggles::on_present();
 		ffp.on_present();
 		game::fps_unlock::on_present();
@@ -642,6 +644,10 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::SetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value)
 	{
 		TRACE_IF_ACTIVE(trace_SetTextureStageState, Stage, Type, Value);
+		// Only the GAME reaches this wrapper — the proxy's own conversion calls go
+		// straight to m_pIDirect3DDevice9 — so this is a reliable signal that the
+		// FFP stage configuration has been disturbed ([FFPSteps] TextureStages=1).
+		shared::common::ffp_state::get().on_set_texture_stage_state(Stage, Type, Value);
 		return m_pIDirect3DDevice9->SetTextureStageState(Stage, Type, Value);
 	}
 
