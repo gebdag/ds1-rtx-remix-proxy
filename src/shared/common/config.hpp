@@ -262,7 +262,8 @@ namespace shared::common
 			float range = 7.0f;          // dwindle end: sets the radiance, like the other lights
 			bool use_game_radius = true;
 			float radius = 0.5f;         // emitter sphere radius
-			float intensity = 1.0f;      // radiance multiplier
+			float intensity = 1.0f;      // radiance multiplier (inverse-square light)
+			float falloff_intensity = 1.0f; // with the game's falloff: 1 = the game's brightness
 			// How Offset is applied: 0 world axes (x, y, z); 1 view: turns with the camera
 			// heading (right, up, forward); 2 character: turns with the body (right, up,
 			// forward). View and character use the heading only, so the light stays level.

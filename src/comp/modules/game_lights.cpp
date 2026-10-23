@@ -722,12 +722,13 @@ namespace comp
 		remixapi_Float3D radiance;
 		if (game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)])
 		{
-			// The game's falloff, as for the map lights: the game's colour over its own range
-			// (0..3 for the head light), radiance colour^2.2 / pi. Intensity and Range in
-			// [PlayerLight] were set against inverse square and do not apply.
-			const float game_begin = game ? std::max(0.0f, src->dwindle_begin) : 0.0f;
-			const float game_end = game ? std::max(0.01f, src->dwindle_end) : range;
-			const float scale = mult / 3.14159265f;
+			// The game's falloff, as for the map lights: radiance colour^2.2 / pi over the
+			// range (the game's, 0..3 for the head light, unless Game range is off), with its
+			// own intensity, FalloffIntensity (1 = the game's brightness): Intensity was tuned
+			// for the inverse-square light, where 0.02 was about right.
+			const float game_end = range;
+			const float game_begin = game ? std::min(std::max(0.0f, src->dwindle_begin), game_end * 0.99f) : 0.0f;
+			const float scale = c.falloff_intensity * mult / 3.14159265f;
 			radiance = {
 				std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
 				std::pow(std::max(colour[1], 0.0f), 2.2f) * scale,
@@ -861,11 +862,11 @@ namespace comp
 		std::string s = std::format(
 			"lights {} {:.3f} {:.3f} {} {}\n"
 			"sun {} {:.3f} {:.3f} {}\n"
-			"player {} {} {} {} {:.3f} {} {:.3f} {:.3f} {} {}\n",
+			"player {} {} {} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {} {}\n",
 			enabled, intensity_scale, radius_scale, game::point_lights::resolve_entities(), game::map_lights::enabled(),
 			sun_enabled, sun_intensity_scale, sun_angular_diameter, format_float3(sun_fallback_colour),
 			p.enabled, p.use_game_colour, format_float3(p.colour), p.use_game_range, p.range, p.use_game_radius,
-			p.radius, p.intensity, p.offset_frame, format_float3(p.offset));
+			p.radius, p.intensity, p.falloff_intensity, p.offset_frame, format_float3(p.offset));
 
 		std::vector<std::pair<uint64_t, const light_override*>> saved;
 		for (const auto& [key, o] : overrides_)
@@ -905,6 +906,7 @@ namespace comp
 		ok &= cfg.set_string("PlayerLight", "UseGameRadius", flag(p.use_game_radius));
 		ok &= cfg.set_string("PlayerLight", "Radius", std::format("{:.3f}", p.radius));
 		ok &= cfg.set_string("PlayerLight", "Intensity", std::format("{:.3f}", p.intensity));
+		ok &= cfg.set_string("PlayerLight", "FalloffIntensity", std::format("{:.3f}", p.falloff_intensity));
 		ok &= cfg.set_string("PlayerLight", "OffsetFrame", kFrameNames[std::clamp(p.offset_frame, 0, 2)]);
 		ok &= cfg.set_string("PlayerLight", "Offset", format_float3(p.offset));
 
@@ -965,6 +967,7 @@ namespace comp
 		p.use_game_radius = cfg.get_bool("PlayerLight", "UseGameRadius", true);
 		p.radius = std::max(0.01f, cfg.get_float("PlayerLight", "Radius", 0.5f));
 		p.intensity = std::max(0.0f, cfg.get_float("PlayerLight", "Intensity", 1.0f));
+		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 1.0f));
 		const auto frame = cfg.get_string("PlayerLight", "OffsetFrame", "View");
 		p.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0 : _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
 		p.offset[0] = p.offset[1] = p.offset[2] = 0.0f;
@@ -1374,7 +1377,15 @@ namespace comp
 		ImGui::SliderFloat("Emitter radius##pl", &c.radius, 0.01f, 2.0f, "%.2f");
 		ImGui::EndDisabled();
 
-		ImGui::SliderFloat("Intensity##pl", &c.intensity, 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+		if (game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)])
+		{
+			ImGui::SliderFloat("Intensity##plf", &c.falloff_intensity, 0.0f, 10.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("With the game's falloff (Lights > Game falloff): 1 = the game's brightness.\n"
+					"Saved as [PlayerLight] FalloffIntensity, apart from the inverse-square Intensity.");
+		}
+		else
+			ImGui::SliderFloat("Intensity##pl", &c.intensity, 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
 
 		ImGui::SetNextItemWidth(130.0f);
 		ImGui::Combo("Offset frame##pl", &c.offset_frame, kFrameNames, 3);
