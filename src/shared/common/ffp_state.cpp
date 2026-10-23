@@ -126,46 +126,25 @@ namespace shared::common
 			vs_const_write_log_[start_reg + i] = 1;
 
 		// Bone palette detection (for skinning module)
-		// For skinned meshes the world matrix (c8-c10) IS bone 0. A single
-		// SetVSConstantF(8, data, 114) covers the full palette: bone0 at c8,
-		// bone1 at c11, ... bone37 at c119.  Partial updates (e.g. start=11
-		// count=6) refresh specific bones without changing the palette layout.
+		// For skinned meshes the world matrix (c8-c10) IS bone 0, and the skinned
+		// vertex shaders always read bone i at c8 + 3i (c8[a0.x], a0 = 3 * index).
+		// A single SetVSConstantF(8, data, 114) covers the full palette: bone0 at c8,
+		// bone1 at c11, ... bone37 at c119. The game also writes only the bones
+		// that changed since the previous draw (e.g. start=11 count=21 refreshes
+		// bones 1-7); the rest keep their earlier values in the constant shadow,
+		// which the shader reads as well. So the palette never moves: it starts at
+		// world_start, and a write only tells how far it reaches.
 		if (config::get().skinning.enabled)
 		{
 			UINT bone_thresh = static_cast<UINT>(vs_reg_bone_threshold_);
 			UINT rpb = static_cast<UINT>(vs_regs_per_bone_);
-			UINT min_regs = static_cast<UINT>(vs_bone_min_regs_);
 			UINT world_start = static_cast<UINT>(vs_reg_world_start_);
 
-			UINT pal_start, pal_count;
-			if (start_reg >= bone_thresh)
+			if (end_reg > bone_thresh && end_reg > world_start && rpb > 0)
 			{
-				// Write entirely past threshold (partial bone update)
-				pal_start = start_reg;
-				pal_count = count;
-			}
-			else if (end_reg > bone_thresh)
-			{
-				// Write spans world + bone region — palette starts at world_start
-				pal_start = (start_reg <= world_start) ? world_start : start_reg;
-				pal_count = end_reg - pal_start;
-			}
-			else
-			{
-				pal_start = 0;
-				pal_count = 0;
-			}
-
-			if (pal_count >= min_regs && (pal_count % rpb) == 0)
-			{
-				int new_bones = static_cast<int>(pal_count) / vs_regs_per_bone_;
-				// Only accept full palette writes or partial updates that don't
-				// shrink the tracked palette (partial writes refresh a subset).
-				if (new_bones >= num_bones_ || pal_start <= world_start)
-				{
-					bone_start_reg_ = static_cast<int>(pal_start);
-					num_bones_ = new_bones;
-				}
+				const int reach = static_cast<int>((end_reg - world_start + rpb - 1) / rpb);
+				bone_start_reg_ = static_cast<int>(world_start);
+				num_bones_ = std::max(num_bones_, reach);
 			}
 		}
 	}
