@@ -39,12 +39,12 @@ def main() -> int:
     tag = args[0] if args else "redeploy"
     t0 = time.time()
     lookdev.stop_host()
-    deployed = TREX / "d3d9.dll"
-    if RUNTIME_BUILD.stat().st_mtime > deployed.stat().st_mtime:
-        shutil.copy2(RUNTIME_BUILD, deployed)
+    # The runtime the host loads is the game's (.trex), so a deployed runtime reaches both.
+    state = lookdev.deploy_file(RUNTIME_BUILD, TREX / "d3d9.dll")
+    if state != "current":
         if RUNTIME_PDB.exists():
-            shutil.copy2(RUNTIME_PDB, TREX / "d3d9.pdb")
-        print(f"runtime {time.strftime('%H:%M:%S', time.localtime(RUNTIME_BUILD.stat().st_mtime))} deployed")
+            lookdev.deploy_file(RUNTIME_PDB, TREX / "d3d9.pdb")
+        print(f"runtime {time.strftime('%H:%M:%S', time.localtime(RUNTIME_BUILD.stat().st_mtime))} {state}")
     subprocess.run([sys.executable, str(Path(__file__).with_name("lookdev.py")), "host",
                     *([capture] if capture else ["--live"])], check=True)
     deadline = time.time() + 180

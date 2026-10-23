@@ -63,6 +63,7 @@ def stop_host() -> None:
 def start_host(source: list[str]) -> None:
     shutil.copy2(lookdev.HOST, lookdev.HOST_IN_GAME)
     shutil.copy2(lookdev.PROXY_BUILD, lookdev.PROXY_IN_GAME)
+    lookdev.deploy_game_proxy()
     subprocess.Popen([str(lookdev.HOST_IN_GAME), *source, "--proxy", lookdev.PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
                      cwd=str(lookdev.GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE)
 

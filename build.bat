@@ -236,10 +236,18 @@ if exist "%ROOT%deploy.conf" if "!NO_DEPLOY!"=="0" (
 )
 if not "!DEPLOY_TARGET!"=="" (
     if exist "!DEPLOY_TARGET!" (
-        copy /y "%GAME_OUT%\d3d9.dll" "!DEPLOY_TARGET!\d3d9.dll" >nul
+        rem A DLL the game has loaded can't be overwritten but can be renamed: the running copy
+        rem moves aside and the next launch loads the new one. Moved-aside copies go once free.
+        del /q "!DEPLOY_TARGET!\d3d9.dll.old-*" >nul 2>&1
+        copy /y "%GAME_OUT%\d3d9.dll" "!DEPLOY_TARGET!\d3d9.dll" >nul 2>&1
         if errorlevel 1 (
-            echo ERROR: could not copy d3d9.dll to the game folder - is the game still running?
-            goto :fail
+            ren "!DEPLOY_TARGET!\d3d9.dll" "d3d9.dll.old-!RANDOM!!RANDOM!" >nul 2>&1
+            copy /y "%GAME_OUT%\d3d9.dll" "!DEPLOY_TARGET!\d3d9.dll" >nul
+            if errorlevel 1 (
+                echo ERROR: could not deploy d3d9.dll to the game folder
+                goto :fail
+            )
+            echo Deployed past the running game: it keeps the old d3d9.dll until it restarts.
         )
         :: PDB travels with the DLL (its embedded name), so crash dumps stay symbolizable.
         copy /y "%GAME_OUT%\%NAME%.pdb" "!DEPLOY_TARGET!\%NAME%.pdb" >nul

@@ -30,10 +30,49 @@ VIEWER = HERE / "bin" / "ds1_lookdev_viewer.exe"
 HOST = HERE / "bin" / "ds1_lookdev_host.exe"
 PROXY_BUILD = HERE.parent / "build" / "bin" / "release" / "d3d9.dll"
 # The host runs from DATA (Remix resolves rtx.conf and mods from the client exe's
-# folder) with its own copy of the proxy, so a running game's d3d9.dll is never touched.
+# folder) with its own copy of the proxy.
 HOST_IN_GAME = GAME_DIR / "ds1_lookdev_host.exe"
 HOST_WINDOW_CLASS = "DARK SOULS lookdev host"   # host\main.cpp create_window
 PROXY_IN_GAME = GAME_DIR / "d3d9_lookdev.dll"
+# The normal game's proxy. Every host start deploys the same build there (deploy_game_proxy),
+# so what lookdev shows is what the game runs on its next launch.
+PROXY_FOR_GAME = GAME_DIR / "d3d9.dll"
+PROXY_PDB_BUILD = PROXY_BUILD.with_name("DarkSouls-comp-proxy.pdb")
+
+
+def deploy_file(src, dst):
+    """Copy src over dst unless they already match (size and time; copy2 keeps the time).
+
+    A DLL a running process has loaded can't be overwritten but can be renamed: a locked dst moves
+    aside as dst.old-<time>, the new file takes its name, and the next launch loads it. Earlier
+    moved-aside copies are removed once nothing has them loaded."""
+    import shutil
+    for old in dst.parent.glob(dst.name + ".old-*"):
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    s = src.stat()
+    if dst.exists():
+        d = dst.stat()
+        if d.st_size == s.st_size and int(d.st_mtime) == int(s.st_mtime):
+            return "current"
+    try:
+        shutil.copy2(src, dst)
+        return "deployed"
+    except PermissionError:
+        dst.rename(dst.with_name(f"{dst.name}.old-{int(time.time())}"))
+        shutil.copy2(src, dst)
+        return "deployed; a running game keeps the old one until it restarts"
+
+
+def deploy_game_proxy():
+    """The proxy build -> the game's d3d9.dll (and its PDB, for crash dumps)."""
+    state = deploy_file(PROXY_BUILD, PROXY_FOR_GAME)
+    if PROXY_PDB_BUILD.exists():
+        deploy_file(PROXY_PDB_BUILD, GAME_DIR / PROXY_PDB_BUILD.name)
+    stamp = datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime)
+    print(f"game proxy {PROXY_FOR_GAME.name} ({stamp:%H:%M:%S}): {state}")
 
 MAGIC = 0x43315344
 HEADER_SIZE = 156
@@ -177,6 +216,7 @@ def cmd_host(args):
     shutil.copy2(HOST, HOST_IN_GAME)
     shutil.copy2(PROXY_BUILD, PROXY_IN_GAME)
     print(f"proxy {PROXY_BUILD} ({datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime):%H:%M:%S}) -> {PROXY_IN_GAME.name}")
+    deploy_game_proxy()
     source = ["--live"] if args.live else [str(cap)]
     subprocess.Popen([str(HOST_IN_GAME), *source, "--proxy", PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
                      cwd=str(GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE)
