@@ -251,6 +251,7 @@ namespace shared::common
 		lookdev.capture_key = get_int("Lookdev", "CaptureKey", VK_F9);
 		lookdev.freeze_input_key = get_int("Lookdev", "FreezeInputKey", VK_F8);
 		lookdev.output_dir = get_string("Lookdev", "OutputDir", "rtx_comp\\lookdev");
+		lookdev.stream_budget_kb = std::max(256, get_int("Lookdev", "StreamBudgetKB", 2048));
 
 		// [Perf] is read lazily by comp::game::render_toggles (the keys map 1:1
 		// to its toggle table) — nothing to parse here.

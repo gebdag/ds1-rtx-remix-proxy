@@ -99,61 +99,67 @@ namespace comp
 
 		// ---- writer: a capture file, or the live stream's ring ----
 
+		// Set while a capture or stream session records. Cleared early when a
+		// stream frame overflows the ring: the rest of that frame passes through.
+		std::atomic<bool> s_capturing = false;
+
+		// A 64-bit position shared with the host. Both are 32-bit processes, where
+		// a plain 64-bit load can tear.
+		int64_t load64(volatile int64_t* p) { return InterlockedCompareExchange64(p, 0, 0); }
+
 		// The game end of the live stream (capture_format.hpp, stream_header).
+		// Never waits for the host: a frame is written past write_pos into the space
+		// the host has freed and published at Present. A frame that does not fit
+		// is dropped unpublished (overflow); the caller then ends the session.
 		struct ring_sink
 		{
 			HANDLE mapping = nullptr;
 			stream_header* hdr = nullptr;
 			uint8_t* data = nullptr;
 			uint32_t size = 0;
-			int64_t pos = 0;          // written, published or not
+			int64_t published = 0;    // write_pos: everything before it is the host's to read
+			int64_t pos = 0;          // written; the current frame is [published, pos)
+			int64_t limit = 0;        // read_pos + size when last read: writes below it fit
 			uint32_t epoch = 0;       // consumer_epoch this session serves
-			bool broken = false;      // the host stopped reading
+			bool overflow = false;    // the current frame did not fit
 
-			void publish()
+			void commit()
 			{
 				MemoryBarrier();
+				published = pos;
 				InterlockedExchange64(&hdr->write_pos, pos);
 			}
 
-			bool consumer_alive() const
+			// Forgets the unpublished part of the frame.
+			void rollback()
 			{
-				return GetTickCount() - hdr->consumer_heartbeat < 3000 && hdr->consumer_epoch == epoch;
+				pos = published;
+				overflow = false;
 			}
 
-			// The ring is full: hand over what is written and wait for the host.
-			bool wait_for_space()
+			bool write(const void* src, size_t n)
 			{
-				publish();
-				const int64_t read = hdr->read_pos;
-				while (hdr->read_pos == read)
+				if (overflow)
+					return false;
+				if (pos + int64_t(n) > limit)
 				{
-					if (!consumer_alive())
-						return false;
-					Sleep(1);
-				}
-				return true;
-			}
-
-			void write(const void* src, size_t n)
-			{
-				auto* p = static_cast<const uint8_t*>(src);
-				while (n && !broken)
-				{
-					const int64_t free = int64_t(size) - (pos - hdr->read_pos);
-					if (free <= 0)
+					// read_pos only grows, so the cached limit is safe; re-read it only
+					// when it is not enough
+					limit = load64(&hdr->read_pos) + size;
+					if (pos + int64_t(n) > limit)
 					{
-						if (!wait_for_space())
-							broken = true;
-						continue;
+						overflow = true;
+						return false;
 					}
-					const size_t offset = static_cast<size_t>(pos % size);
-					const size_t chunk = std::min({ n, static_cast<size_t>(free), size - offset });
-					std::memcpy(data + offset, p, chunk);
-					pos += chunk;
-					p += chunk;
-					n -= chunk;
 				}
+				const auto* p = static_cast<const uint8_t*>(src);
+				const size_t offset = static_cast<size_t>(pos % size);
+				const size_t first = std::min<size_t>(n, size - offset);
+				std::memcpy(data + offset, p, first);
+				if (first < n)
+					std::memcpy(data, p + first, n - first);
+				pos += n;
+				return true;
 			}
 		};
 
@@ -166,8 +172,8 @@ namespace comp
 			void raw(const void* data, size_t size)
 			{
 				if (!size) return;
-				if (ring) ring->write(data, size);
-				else fwrite(data, 1, size, file);
+				if (!ring) fwrite(data, 1, size, file);
+				else if (!ring->write(data, size)) s_capturing = false; // dropped at Present
 				bytes += size;
 			}
 
@@ -193,6 +199,14 @@ namespace comp
 
 		// ---- capture state ----
 
+		// How an object's contents are taken.
+		enum contents_kind : uint8_t
+		{
+			CONTENTS_NONE,     // nothing to send: depth, unreadable, or (streams) a render target too large to read back
+			CONTENTS_LOCK,     // a CPU-side copy (managed / system memory / dynamic)
+			CONTENTS_READBACK, // GetRenderTargetData, or a lock on a default-pool buffer: waits for the GPU
+		};
+
 		struct texture_info
 		{
 			uint32_t kind; // REC_TEXTURE / REC_CUBE_TEXTURE / REC_VOLUME_TEXTURE
@@ -200,6 +214,9 @@ namespace comp
 			D3DPOOL pool;
 			DWORD usage;
 			UINT levels;
+			uint64_t bytes = 0;           // all faces and levels, packed
+			uint8_t contents = CONTENTS_NONE;
+			bool pending = false;         // stream: initial contents not sent yet
 		};
 
 		struct surface_info
@@ -207,6 +224,18 @@ namespace comp
 			IDirect3DBaseTexture9* texture = nullptr; // set for texture levels
 			UINT face = 0;
 			UINT level = 0;
+			// standalone surfaces and the back buffer (levels go through their texture)
+			uint64_t bytes = 0;
+			uint8_t contents = CONTENTS_NONE;
+			bool pending = false;
+		};
+
+		struct buffer_info
+		{
+			UINT size = 0;
+			uint64_t bytes = 0;
+			uint8_t contents = CONTENTS_LOCK;
+			bool pending = false;
 		};
 
 		struct pending_lock
@@ -274,7 +303,7 @@ namespace comp
 			std::vector<IUnknown*> refs; // one reference on everything recorded
 			std::unordered_map<const void*, texture_info> textures;
 			std::unordered_map<const void*, surface_info> surfaces;
-			std::unordered_map<const void*, UINT> buffers; // -> size
+			std::unordered_map<const void*, buffer_info> buffers;
 			std::unordered_set<const void*> objects;       // shaders, declarations
 			std::unordered_map<const void*, pending_lock> locks;
 			std::map<std::tuple<UINT, UINT, D3DFORMAT>, IDirect3DSurface9*> staging;
@@ -283,11 +312,25 @@ namespace comp
 			std::vector<uint8_t> scratch;
 			bool game_state_written = false; // this frame's REC_GAME_FRAME / REC_GAME_LIGHTS
 
+			// Live streams pace initial contents (pace()). Reset at every Present.
+			int64_t budget = 0;          // content bytes left this frame
+			int64_t sent = 0;            // content bytes sent this frame
+			uint32_t pending = 0;        // objects whose initial contents are still to come
+			bool frame_incomplete = false; // this frame used one of them
+			bool in_sync = false;        // a complete frame has been published
+			uint64_t contents_max = ~0ull; // larger objects are never sent (they might never fit in the ring)
+			// Streams: whether this frame records its commands and state, or only
+			// what changes resources (a "no-draw" frame, while the host is behind).
+			// Captures always draw.
+			bool draw_frame = true;
+			uint32_t drawn_frames = 0;
+
 			struct
 			{
 				uint32_t draws = 0, clears = 0, copies = 0;
 				uint32_t textures = 0, buffers = 0, buffer_updates = 0, texture_updates = 0;
 				uint32_t unreadable = 0, depth = 0, msaa = 0, unknown_format = 0;
+				uint32_t not_sent = 0, deferred = 0;
 			} stats;
 
 			std::chrono::steady_clock::time_point started;
@@ -295,7 +338,6 @@ namespace comp
 
 		std::recursive_mutex s_mutex;
 		capture* s_cap = nullptr;
-		std::atomic<bool> s_capturing = false;
 		thread_local bool t_internal = false; // our own device/resource calls
 
 		struct internal_scope
@@ -366,6 +408,33 @@ namespace comp
 		{
 			return s_capturing.load(std::memory_order_relaxed) && !t_internal && s_cap && s_cap->dev == dev;
 		}
+
+		// Commands that only produce pixels (draws, clears, GPU copies) and the
+		// state they read. Skipped in a stream's no-draw frames.
+		bool recording_draws(IDirect3DDevice9* dev)
+		{
+			return recording(dev) && s_cap->draw_frame;
+		}
+
+		// ---- stream cost ----
+		//
+		// QueryPerformanceCounter around everything the recorder does on the game's
+		// threads, summed per frame and logged as min / avg / max every 10 s.
+
+		int64_t qpc()
+		{
+			LARGE_INTEGER t;
+			QueryPerformanceCounter(&t);
+			return t.QuadPart;
+		}
+
+		int64_t s_frame_ticks = 0; // recorder time in the current frame
+
+		struct cost_timer
+		{
+			int64_t t0 = qpc();
+			~cost_timer() { s_frame_ticks += qpc() - t0; }
+		};
 
 		// ---- contents ----
 
@@ -560,14 +629,18 @@ namespace comp
 		void on_buffer_lock(IUnknown* self, UINT offset, UINT size, const void* data, DWORD flags)
 		{
 			std::lock_guard lock(s_mutex);
+			cost_timer cost;
 			if (!s_cap || (flags & D3DLOCK_READONLY) || !s_cap->buffers.contains(self))
 				return;
 			s_cap->locks[self] = { offset, size, data };
 		}
 
+		// The game's own write, copied from the pointer it wrote through: no lock of
+		// ours, so nothing that could wait for the GPU.
 		void on_buffer_unlock(IUnknown* self)
 		{
 			std::lock_guard lock(s_mutex);
+			cost_timer cost;
 			if (!s_cap)
 				return;
 			auto& c = *s_cap;
@@ -576,7 +649,7 @@ namespace comp
 				return;
 			const auto [offset, size, data] = it->second;
 			c.locks.erase(it);
-			const UINT total = c.buffers[self];
+			const UINT total = c.buffers[self].size;
 			if (offset >= total)
 				return;
 			const UINT bytes = (size == 0 || offset + size > total) ? total - offset : size;
@@ -587,10 +660,15 @@ namespace comp
 		void on_texture_unlock(IDirect3DTexture9* self, UINT level)
 		{
 			std::lock_guard lock(s_mutex);
+			cost_timer cost;
 			if (!s_cap)
 				return;
 			const auto it = s_cap->textures.find(self);
 			if (it == s_cap->textures.end())
+				return;
+			// Re-reading a default-pool (dynamic) texture can wait for the GPU: a
+			// stream never does. DS1 captures contain none of these.
+			if (s_cap->streaming && it->second.pool == D3DPOOL_DEFAULT)
 				return;
 			internal_scope in;
 			snapshot_texture_level(self, it->second, 0, level, 0);
@@ -692,26 +770,173 @@ namespace comp
 		{
 			auto& c = *s_cap;
 			bool known = false;
-			if (c.textures.erase(obj))
+			auto erase = [&](auto& map)
+			{
+				const auto it = map.find(obj);
+				if (it == map.end())
+					return false;
+				if (it->second.pending)
+					c.pending--;
+				map.erase(it);
+				return true;
+			};
+			std::vector<uint64_t> levels; // the texture's surfaces, gone with it
+			if (erase(c.textures))
 			{
 				known = true;
-				std::erase_if(c.surfaces, [obj](const auto& kv) { return kv.second.texture == obj; });
+				std::erase_if(c.surfaces, [obj, &levels](const auto& kv)
+				{
+					if (kv.second.texture != obj)
+						return false;
+					levels.push_back(id_of(kv.first));
+					return true;
+				});
 			}
-			known |= c.surfaces.erase(obj) > 0;
-			known |= c.buffers.erase(obj) > 0;
+			known |= erase(c.surfaces);
+			known |= erase(c.buffers);
 			known |= c.objects.erase(obj) > 0;
 			c.locks.erase(obj);
-			if (known)
-				c.w.rec(REC_DESTROY, id_only { id_of(obj) });
+			if (!known)
+				return;
+			const auto id = id_of(obj);
+			c.w.rec(REC_DESTROY, id_only { id });
+
+			// Nothing is bound under these ids on the host any more: a new object at
+			// the same address must be bound again even though its id is the same.
+			auto& sh = c.shadow;
+			auto gone = [&](uint64_t v) { return v == id || std::find(levels.begin(), levels.end(), v) != levels.end(); };
+			auto drop = [&](auto& slot) { if (slot && gone(*slot)) slot.reset(); };
+			for (auto& t : sh.texture) drop(t);
+			for (auto& r : sh.rt) drop(r);
+			drop(sh.ds);
+			drop(sh.vs);
+			drop(sh.ps);
+			drop(sh.decl);
+			drop(sh.indices);
+			for (auto& s : sh.stream)
+				if (s && s->id == id) s.reset();
 		}
 
-		uint64_t ref_texture(IDirect3DBaseTexture9* texture)
+		// ---- contents pacing (live streams) ----
+		//
+		// A capture file takes every object's contents at its first use. A stream
+		// session starts the same way, and its first frame uses everything at once:
+		// some 300 MB at 4K, two thirds of it render targets read back from the GPU.
+		// A stream never reads anything back from the GPU: render targets, the back
+		// buffer and every other default-pool object are described but get no
+		// contents (the host fills them by replaying frames; dynamic buffers get the
+		// game's own writes). The rest, CPU-side copies of managed and system-memory
+		// objects, is paced with a byte budget per frame: an object over budget is
+		// described at once (its bindings resolve) and its contents follow at a
+		// later use, usually the next frame. Each frame that used an object still
+		// waiting for them is flagged PRESENT_INCOMPLETE, and the host does not
+		// draw it.
+
+		uint64_t packed_bytes(D3DFORMAT format, UINT width, UINT height, UINT depth)
+		{
+			uint32_t rows, row_bytes;
+			if (!slice_layout(format, width, height, rows, row_bytes))
+			{
+				rows = height;
+				row_bytes = width * 4; // unknown format: an estimate, for pacing only
+			}
+			return uint64_t(rows) * row_bytes * depth;
+		}
+
+		uint64_t texture_bytes(const texture_info& info, UINT width, UINT height, UINT depth)
+		{
+			uint64_t total = 0;
+			for (UINT l = 0; l < info.levels; l++)
+				total += packed_bytes(info.format, std::max(1u, width >> l), std::max(1u, height >> l),
+					info.kind == REC_VOLUME_TEXTURE ? std::max(1u, depth >> l) : 1u);
+			return total * (info.kind == REC_CUBE_TEXTURE ? 6 : 1);
+		}
+
+		// What snapshot_texture_level does with this texture.
+		uint8_t texture_contents(const texture_info& info)
+		{
+			const bool default_static = info.pool == D3DPOOL_DEFAULT && !(info.usage & D3DUSAGE_DYNAMIC);
+			if (info.kind == REC_VOLUME_TEXTURE)
+				return default_static ? CONTENTS_NONE : info.pool == D3DPOOL_DEFAULT ? CONTENTS_READBACK : CONTENTS_LOCK;
+			if (info.usage & D3DUSAGE_DEPTHSTENCIL)
+				return CONTENTS_NONE;
+			if (info.pool == D3DPOOL_DEFAULT && (info.usage & D3DUSAGE_RENDERTARGET))
+				return CONTENTS_READBACK;
+			if (default_static)
+				return CONTENTS_NONE;
+			// a read-only lock of a default-pool dynamic texture can wait for the GPU
+			return info.pool == D3DPOOL_DEFAULT ? CONTENTS_READBACK : CONTENTS_LOCK;
+		}
+
+		// Whether contents of this size may go out now. Always in a capture, and
+		// when forced: the source of a copy (system memory), whose result the host
+		// would otherwise get wrong in a frame that is not flagged. One object over
+		// the budget still goes when it is the first of its frame, so everything
+		// gets sent.
+		bool pace(uint64_t bytes, bool force)
+		{
+			auto& c = *s_cap;
+			if (!c.streaming)
+				return true;
+			if (c.w.ring->overflow)
+				return false; // the frame is dropped anyway
+			if (!force && c.sent && int64_t(bytes) > c.budget)
+				return false;
+			c.budget -= int64_t(bytes);
+			c.sent += int64_t(bytes);
+			return true;
+		}
+
+		// Sends a pending object's initial contents if the pace allows.
+		template <class Info, class Snapshot>
+		void send_contents(Info& info, bool force, Snapshot&& snapshot)
+		{
+			auto& c = *s_cap;
+			if (!pace(info.bytes, force))
+			{
+				c.frame_incomplete = true;
+				return;
+			}
+			snapshot();
+			info.pending = false;
+			c.pending--;
+		}
+
+		// An object seen for the first time: its contents go now, later, or never.
+		template <class Info, class Snapshot>
+		void first_contents(Info& info, bool force, Snapshot&& snapshot)
+		{
+			auto& c = *s_cap;
+			if (info.contents == CONTENTS_NONE)
+			{
+				snapshot(); // counts what cannot be read
+				return;
+			}
+			// A stream never waits for the GPU, and never sends what might not fit.
+			if (c.streaming && (info.contents == CONTENTS_READBACK || info.bytes > c.contents_max))
+			{
+				info.contents = CONTENTS_NONE;
+				c.stats.not_sent++;
+				return;
+			}
+			info.pending = true;
+			c.pending++;
+			send_contents(info, force, snapshot);
+			if (info.pending)
+				c.stats.deferred++;
+		}
+
+		uint64_t ref_texture(IDirect3DBaseTexture9* texture, bool force = false)
 		{
 			if (!texture) return 0;
 			auto& c = *s_cap;
 			const auto id = id_of(texture);
-			if (c.textures.contains(texture))
+			if (const auto it = c.textures.find(texture); it != c.textures.end())
+			{
+				if (it->second.pending)
+					send_contents(it->second, force, [&] { snapshot_texture(texture, it->second, DATA_INITIAL); });
 				return id;
+			}
 
 			texture_info info {};
 			texture_desc d {};
@@ -754,8 +979,11 @@ namespace comp
 			d.format = static_cast<uint32_t>(info.format);
 			d.pool = static_cast<uint32_t>(info.pool);
 
+			info.contents = texture_contents(info);
+			info.bytes = texture_bytes(info, d.width, d.height, d.depth);
+
 			keep(texture);
-			c.textures[texture] = info;
+			auto& stored = c.textures[texture] = info;
 			c.stats.textures++;
 			c.w.rec(info.kind, d);
 			// the TPF name, which decides how the proxy treats atmospheric layers
@@ -763,30 +991,44 @@ namespace comp
 				c.w.rec(REC_TEXTURE_NAME, id_only { id }, name.data(), name.size());
 			if (info.kind == REC_TEXTURE)
 				ensure_texture_hooks(texture);
-			snapshot_texture(texture, info, DATA_INITIAL);
+			first_contents(stored, force,
+				[&] { snapshot_texture(texture, stored, DATA_INITIAL); });
 			return id;
 		}
 
-		uint64_t ref_surface(IDirect3DSurface9* surface)
+		uint64_t ref_surface(IDirect3DSurface9* surface, bool force = false)
 		{
 			if (!surface) return 0;
 			auto& c = *s_cap;
 			const auto id = id_of(surface);
 			if (const auto it = c.surfaces.find(surface); it != c.surfaces.end())
 			{
+				auto& known = it->second;
+				if (!known.texture)
+				{
+					if (known.pending)
+						send_contents(known, force, [&] { snapshot_surface(surface, DATA_INITIAL); });
+					return id;
+				}
 				// A level of a texture freed since could be at this address now, as
 				// a level of another texture. Streams only; captures hold their refs.
-				if (!c.streaming || !it->second.texture)
+				if (!c.streaming)
 					return id;
 				void* container = nullptr;
 				const bool same = (SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DTexture9), &container)) ||
-					SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DCubeTexture9), &container))) && container == it->second.texture;
+					SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DCubeTexture9), &container))) && container == known.texture;
 				if (container)
 					static_cast<IUnknown*>(container)->Release();
 				if (same)
+				{
+					ref_texture(known.texture, force); // the level's contents are the texture's
 					return id;
+				}
 				c.surfaces.erase(it);
 				c.w.rec(REC_DESTROY, id_only { id });
+				for (auto& r : c.shadow.rt)
+					if (r && *r == id) r.reset(); // bound again below, as the new surface
+				if (c.shadow.ds && *c.shadow.ds == id) c.shadow.ds.reset();
 			}
 
 			surface_info info {};
@@ -794,7 +1036,7 @@ namespace comp
 			if (SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DTexture9), &container)) && container)
 			{
 				auto* tex = static_cast<IDirect3DTexture9*>(container);
-				ref_texture(tex);
+				ref_texture(tex, force);
 				info.texture = tex;
 				for (UINT l = 0, n = tex->GetLevelCount(); l < n; l++)
 				{
@@ -811,7 +1053,7 @@ namespace comp
 			else if (SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DCubeTexture9), &container)) && container)
 			{
 				auto* cube = static_cast<IDirect3DCubeTexture9*>(container);
-				ref_texture(cube);
+				ref_texture(cube, force);
 				info.texture = cube;
 				bool found = false;
 				for (UINT f = 0; f < 6 && !found; f++)
@@ -829,24 +1071,27 @@ namespace comp
 			}
 
 			keep(surface);
-			c.surfaces[surface] = info;
+			auto& stored = c.surfaces[surface] = info;
 			if (info.texture)
 			{
 				c.w.rec(REC_SURFACE_LEVEL, surface_level { id, id_of(info.texture), info.face, info.level });
+				return id;
 			}
-			else if (surface == c.backbuffer)
-			{
+
+			D3DSURFACE_DESC sd;
+			if (FAILED(surface->GetDesc(&sd)))
+				sd = {};
+			if (surface == c.backbuffer)
 				c.w.rec(REC_BACKBUFFER, id_only { id });
-				snapshot_surface(surface, DATA_INITIAL);
-			}
 			else
-			{
-				D3DSURFACE_DESC sd;
-				surface->GetDesc(&sd);
 				c.w.rec(REC_SURFACE, surface_desc { id, sd.Width, sd.Height, static_cast<uint32_t>(sd.Format),
 					sd.Usage, static_cast<uint32_t>(sd.Pool), static_cast<uint32_t>(sd.MultiSampleType), sd.MultiSampleQuality });
-				snapshot_surface(surface, DATA_INITIAL);
-			}
+			// as snapshot_surface takes them
+			const bool render_target = surface == c.backbuffer || (sd.Usage & D3DUSAGE_RENDERTARGET);
+			stored.contents = (sd.Usage & D3DUSAGE_DEPTHSTENCIL) ? CONTENTS_NONE
+				: (render_target || sd.Pool == D3DPOOL_DEFAULT) ? CONTENTS_READBACK : CONTENTS_LOCK;
+			stored.bytes = packed_bytes(sd.Format, sd.Width, sd.Height, 1);
+			first_contents(stored, force, [&] { snapshot_surface(surface, DATA_INITIAL); });
 			return id;
 		}
 
@@ -855,13 +1100,23 @@ namespace comp
 		void refresh_surface(IDirect3DSurface9* surface)
 		{
 			auto& c = *s_cap;
-			const auto& info = c.surfaces[surface];
+			auto& info = c.surfaces[surface];
+			// a stream never re-reads what it does not send (GPU-side or too large)
+			auto readable = [&c](uint8_t contents) { return !c.streaming || contents != CONTENTS_NONE; };
 			if (info.texture)
 			{
-				if (const auto it = c.textures.find(info.texture); it != c.textures.end())
+				if (const auto it = c.textures.find(info.texture); it != c.textures.end() && readable(it->second.contents))
 					snapshot_texture_level(info.texture, it->second, info.face, info.level, 0);
 			}
-			else snapshot_surface(surface, 0);
+			else if (readable(info.contents))
+			{
+				snapshot_surface(surface, 0);
+				if (info.pending)
+				{
+					info.pending = false;
+					c.pending--;
+				}
+			}
 		}
 
 		template <class Buffer, class Desc>
@@ -870,8 +1125,22 @@ namespace comp
 			if (!buffer) return 0;
 			auto& c = *s_cap;
 			const auto id = id_of(buffer);
-			if (c.buffers.contains(buffer))
+			auto snapshot = [buffer, id](UINT size)
+			{
+				void* data = nullptr;
+				if (SUCCEEDED(buffer->Lock(0, 0, &data, D3DLOCK_READONLY)) && data)
+				{
+					s_cap->w.rec(REC_BUFFER_DATA, buffer_data { id, DATA_INITIAL, 0, size }, data, size);
+					buffer->Unlock();
+				}
+				else s_cap->stats.unreadable++;
+			};
+			if (const auto it = c.buffers.find(buffer); it != c.buffers.end())
+			{
+				if (it->second.pending)
+					send_contents(it->second, false, [&] { snapshot(it->second.size); });
 				return id;
+			}
 
 			Desc d;
 			buffer->GetDesc(&d);
@@ -880,18 +1149,15 @@ namespace comp
 			else format = static_cast<uint32_t>(d.Format);
 
 			keep(buffer);
-			c.buffers[buffer] = d.Size;
+			auto& stored = c.buffers[buffer];
+			stored.size = d.Size;
+			stored.bytes = d.Size;
+			// reading a default-pool buffer can wait for the GPU like a read-back
+			stored.contents = d.Pool == D3DPOOL_DEFAULT ? CONTENTS_READBACK : CONTENTS_LOCK;
 			c.stats.buffers++;
 			c.w.rec(type, buffer_desc { id, d.Size, d.Usage, format, static_cast<uint32_t>(d.Pool) });
 			ensure_buffer_hooks(buffer);
-
-			void* data = nullptr;
-			if (SUCCEEDED(buffer->Lock(0, 0, &data, D3DLOCK_READONLY)) && data)
-			{
-				c.w.rec(REC_BUFFER_DATA, buffer_data { id, DATA_INITIAL, 0, d.Size }, data, d.Size);
-				buffer->Unlock();
-			}
-			else c.stats.unreadable++;
+			first_contents(stored, false, [&] { snapshot(d.Size); });
 			return id;
 		}
 
@@ -1310,22 +1576,108 @@ namespace comp
 			s_ring = nullptr;
 		}
 
-		void end_stream_session(const char* why)
+		double mb(int64_t bytes) { return double(bytes) / (1024.0 * 1024.0); }
+
+		// Ends the session. Anything written since the last Present is dropped.
+		void end_stream_session(const std::string& why)
 		{
 			auto* c = s_cap;
 			s_capturing = false;
 			s_cap = nullptr;
+			if (s_ring)
+				s_ring->rollback();
 			if (c)
 			{
 				release_staging(c);
 				if (c->backbuffer) c->backbuffer->Release();
-				log(std::format("Live stream ended ({}) after {} frames, {:.1f} MB", why, c->frames, double(c->w.bytes) / (1024.0 * 1024.0)));
+				log(std::format("Live stream ended ({}) after {} frames ({} drawn), {:.1f} MB; {} objects' contents sent in later frames, {} GPU-side objects not read",
+					why, c->frames, c->drawn_frames, mb(int64_t(c->w.bytes)), c->stats.deferred, c->stats.not_sent));
 				delete c;
 			}
 		}
 
+		// ---- back-off ----
+		//
+		// A host too slow for the game overflows the ring now and then. Each new
+		// session costs a resync, so after an overflow the next session waits until
+		// the host has been caught up for a while: 2 s, doubling per consecutive
+		// overflow up to 60 s. A session that lasts 3 minutes clears the count, and
+		// so does a new host.
+		uint32_t s_overflows = 0;        // consecutive sessions ended by an overflow
+		DWORD s_backoff_ms = 0;          // how long the host must be caught up before the next session
+		DWORD s_caught_up_since = 0;     // tick it was first seen caught up, 0 = not yet
+
+		void note_overflow()
+		{
+			s_overflows++;
+			s_backoff_ms = std::min<DWORD>(2000u << std::min<uint32_t>(s_overflows - 1, 5), 60000u);
+			s_caught_up_since = 0;
+		}
+
+		// ---- stream cost (see cost_timer) ----
+
+		struct cost_window
+		{
+			uint32_t frames = 0;
+			double sum = 0.0, min = 0.0, max = 0.0;
+
+			void add(double ms)
+			{
+				if (!frames || ms < min) min = ms;
+				if (!frames || ms > max) max = ms;
+				sum += ms;
+				frames++;
+			}
+
+			std::string text() const
+			{
+				return frames ? std::format("{} frames, {:.2f} / {:.2f} / {:.2f} ms", frames, min, sum / frames, max) : "none";
+			}
+		};
+
+		cost_window s_cost_drawn, s_cost_nodraw;
+		int64_t s_cost_bytes = 0;
+		DWORD s_cost_since = 0;
+
+		// Ends the frame's cost measurement (present_hk, after stream_present).
+		void account_stream_cost(bool drawn, int64_t bytes)
+		{
+			static const double ms_per_tick = []
+			{
+				LARGE_INTEGER f;
+				QueryPerformanceFrequency(&f);
+				return 1000.0 / double(f.QuadPart);
+			}();
+			const double ms = double(s_frame_ticks) * ms_per_tick;
+			s_frame_ticks = 0;
+			(drawn ? s_cost_drawn : s_cost_nodraw).add(ms);
+			s_cost_bytes += bytes;
+
+			const DWORD now = GetTickCount();
+			if (!s_cost_since)
+				s_cost_since = now;
+			if (now - s_cost_since < 10000)
+				return;
+			const double seconds = double(now - s_cost_since) / 1000.0;
+			log(std::format("Live stream cost (min / avg / max per frame) over {:.0f} s: drawn {}; no-draw {}; {:.1f} MB/s",
+				seconds, s_cost_drawn.text(), s_cost_nodraw.text(), mb(s_cost_bytes) / seconds));
+			s_cost_drawn = {};
+			s_cost_nodraw = {};
+			s_cost_bytes = 0;
+			s_cost_since = now;
+		}
+
+		void start_frame_budget(capture& c)
+		{
+			const auto& cfg = shared::common::config::get().lookdev;
+			c.budget = int64_t(cfg.stream_budget_kb) << 10;
+			c.sent = 0;
+			c.frame_incomplete = false;
+		}
+
 		// A session starts from nothing, as a capture does: everything the frame
-		// uses is sent at first use. The host skips to session_start.
+		// uses is sent at first use, its contents paced (pace()). The host skips
+		// to session_start.
 		void start_stream_session(IDirect3DDevice9* dev)
 		{
 			auto& ring = *s_ring;
@@ -1333,25 +1685,64 @@ namespace comp
 			c->dev = dev;
 			c->streaming = true;
 			c->w.ring = &ring;
+			c->contents_max = ring.size / 4;
+			start_frame_budget(*c);
 
 			ring.epoch = ring.hdr->consumer_epoch;
-			ring.broken = false;
-			ring.pos = ring.hdr->write_pos;
+			ring.published = ring.pos = load64(&ring.hdr->write_pos);
+			ring.limit = 0; // read read_pos at the first write
+			ring.overflow = false;
 			ring.hdr->producer_pid = GetCurrentProcessId();
 			ring.hdr->frames_written = 0;
+			ring.hdr->frames_consumed = 0; // the host zeroes it too, when it takes the session
 			InterlockedExchange64(&ring.hdr->session_start, ring.pos);
 			MemoryBarrier();
 			InterlockedIncrement(reinterpret_cast<volatile LONG*>(&ring.hdr->session));
 
+			// published with the session's first frame
 			const auto h = describe_device(dev, c);
 			c->w.rec(REC_STREAM_BEGIN, h);
-			ring.publish();
 
 			c->started = std::chrono::steady_clock::now();
 			s_cap = c;
 			s_capturing = true;
+			s_frame_ticks = 0;
+			s_backoff_ms = 0;
+			s_caught_up_since = 0;
 			const uint32_t session = ring.hdr->session, host_pid = ring.hdr->consumer_pid;
 			log(std::format("Live stream session {} started (host pid {})", session, host_pid));
+		}
+
+		// After a Present with no session running: whether one may start. The host
+		// must be alive and have taken everything published, so the new session
+		// finds the ring empty, and after an overflow it must have stayed caught up
+		// for the back-off time. A host that attached since the last session
+		// started (new epoch) skips to the new session's start and need not catch up.
+		bool host_ready()
+		{
+			auto& ring = *s_ring;
+			if (GetTickCount() - ring.hdr->consumer_heartbeat > 3000)
+			{
+				log("Live stream: the host is gone");
+				close_ring();
+				return false;
+			}
+			if (ring.hdr->consumer_epoch != ring.epoch)
+			{
+				s_overflows = 0;
+				return true;
+			}
+			if (load64(&ring.hdr->read_pos) < ring.published)
+			{
+				s_caught_up_since = 0;
+				return false;
+			}
+			if (!s_backoff_ms)
+				return true;
+			const DWORD now = GetTickCount();
+			if (!s_caught_up_since)
+				s_caught_up_since = now | 1;
+			return now - s_caught_up_since >= s_backoff_ms;
 		}
 
 		// A host announces itself by creating the stream mapping. Checked every
@@ -1386,32 +1777,71 @@ namespace comp
 			start_stream_session(dev);
 		}
 
-		// End of a streamed frame: hand it over, then follow the host (a new
-		// epoch means it restarted and needs everything again; a broken ring or a
-		// stale heartbeat means it is gone).
-		void stream_present(IDirect3DDevice9* dev)
+		// End of a streamed frame: publish it whole, or drop it when it did not fit
+		// in the space the host has freed. A dropped frame ends the session (the
+		// game's record of what the host has no longer holds); present_hk starts
+		// the next one once the host has caught up. Then follow the host: a new
+		// epoch means it restarted and needs everything again, a stale heartbeat
+		// that it is gone. Nothing here waits for it.
+		//
+		// It also decides what the next frame records. While the host has more
+		// than one published frame still to process, the game sends no-draw frames:
+		// only what changes resources (creations, contents, the game's buffer
+		// writes, CPU-side copies, REC_DESTROY), no per-draw state and no commands.
+		// The state shadow keeps what the host has, so the next drawn frame sends
+		// the net state changes. The game then records full frames at the rate the
+		// host draws them, and does almost no work for the others.
+		//
+		// Returns the bytes this frame published (0 when dropped).
+		int64_t stream_present()
 		{
 			auto* c = s_cap;
 			auto& ring = *s_ring;
-			c->w.rec(REC_PRESENT);
-			c->frames++;
-			c->game_state_written = false;
-			ring.publish();
-			InterlockedIncrement(reinterpret_cast<volatile LONG*>(&ring.hdr->frames_written));
 			// Read-back staging surfaces are only needed when something new is first
-			// used; keeping a 4K one per format alive costs the game address space.
+			// used; keeping one per size and format alive costs the game address space.
 			release_staging(c);
 
-			if (ring.broken || GetTickCount() - ring.hdr->consumer_heartbeat > 3000)
+			const present_info info { (c->frame_incomplete ? PRESENT_INCOMPLETE : 0u) | (c->draw_frame ? 0u : PRESENT_NO_DRAW), c->pending };
+			c->w.rec(REC_PRESENT, info);
+			if (ring.overflow)
 			{
-				end_stream_session("host stopped reading");
+				const int64_t unread = ring.published - load64(&ring.hdr->read_pos);
+				note_overflow();
+				end_stream_session(std::format("frame {} did not fit: the host had {:.1f} MB still to read. "
+					"The frame is dropped; a new session starts once the host has been caught up for {} s",
+					c->frames + 1, mb(unread), s_backoff_ms / 1000));
+				return 0;
+			}
+			const int64_t bytes = ring.pos - ring.published;
+			ring.commit();
+			InterlockedIncrement(reinterpret_cast<volatile LONG*>(&ring.hdr->frames_written));
+			c->frames++;
+			if (c->draw_frame)
+				c->drawn_frames++;
+			c->game_state_written = false;
+			if (c->draw_frame && !c->frame_incomplete && !c->in_sync)
+			{
+				c->in_sync = true;
+				log(std::format("Live stream in sync after {} frames ({} drawn), {:.1f} MB ({} objects' contents sent in later frames, {} GPU-side objects not read)",
+					c->frames, c->drawn_frames, mb(int64_t(c->w.bytes)), c->stats.deferred, c->stats.not_sent));
+			}
+			start_frame_budget(*c);
+			if (s_overflows && std::chrono::steady_clock::now() - c->started > std::chrono::minutes(3))
+			{
+				log("Live stream: 3 minutes without an overflow, back-off cleared");
+				s_overflows = 0;
+			}
+			// the host is at most one frame behind: record the next frame in full
+			c->draw_frame = int32_t(c->frames - ring.hdr->frames_consumed) <= 1;
+
+			if (GetTickCount() - ring.hdr->consumer_heartbeat > 3000)
+			{
+				end_stream_session("host stopped");
 				close_ring();
 			}
 			else if (ring.hdr->consumer_epoch != ring.epoch)
-			{
 				end_stream_session("host restarted");
-				start_stream_session(dev);
-			}
+			return bytes;
 		}
 
 		// ---- input freeze ----
@@ -1622,22 +2052,134 @@ namespace comp
 			}
 		}
 
+		// ---- game snapshot (lookdev snap.py) ----
+		//
+		// rtx_comp\lookdev\snap.request asks for the frame the game presents, without the
+		// proxy's overlays, as snap_game.bmp. The back buffer is scaled down on the GPU and
+		// read back only once an event query says the copy is done, so the game never
+		// waits on it.
+
+		enum class snap_stage { idle, armed, copying };
+		snap_stage s_snap = snap_stage::idle;
+		IDirect3DSurface9* s_snap_rt = nullptr;
+		IDirect3DSurface9* s_snap_sys = nullptr;
+		IDirect3DQuery9* s_snap_query = nullptr;
+		UINT s_snap_w = 0, s_snap_h = 0;
+		unsigned int s_snap_frames = 0;
+
+		void snap_release()
+		{
+			if (s_snap_query) { s_snap_query->Release(); s_snap_query = nullptr; }
+			if (s_snap_sys) { s_snap_sys->Release(); s_snap_sys = nullptr; }
+			if (s_snap_rt) { s_snap_rt->Release(); s_snap_rt = nullptr; }
+			s_snap = snap_stage::idle;
+		}
+
+		void snap_poll()
+		{
+			if (s_snap == snap_stage::idle && s_frame_index % 10 == 0
+				&& GetFileAttributesA((output_dir() + "\\snap.request").c_str()) != INVALID_FILE_ATTRIBUTES)
+				s_snap = snap_stage::armed;   // this frame's overlays are skipped (writing_file)
+		}
+
+		// Before Present: the armed frame's back buffer, scaled to at most 1920 wide.
+		void snap_copy(IDirect3DDevice9* dev)
+		{
+			if (s_snap != snap_stage::armed)
+				return;
+			IDirect3DSurface9* bb = nullptr;
+			D3DSURFACE_DESC desc {};
+			if (FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) || !bb || FAILED(bb->GetDesc(&desc)))
+			{
+				if (bb) bb->Release();
+				snap_release();
+				return;
+			}
+			s_snap_w = std::min<UINT>(desc.Width, 1920);
+			s_snap_h = desc.Height * s_snap_w / desc.Width;
+			const bool ok = SUCCEEDED(dev->CreateRenderTarget(s_snap_w, s_snap_h, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE, &s_snap_rt, nullptr))
+				&& SUCCEEDED(dev->CreateOffscreenPlainSurface(s_snap_w, s_snap_h, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &s_snap_sys, nullptr))
+				&& SUCCEEDED(dev->StretchRect(bb, nullptr, s_snap_rt, nullptr, D3DTEXF_LINEAR))
+				&& SUCCEEDED(dev->CreateQuery(D3DQUERYTYPE_EVENT, &s_snap_query))
+				&& SUCCEEDED(s_snap_query->Issue(D3DISSUE_END));
+			bb->Release();
+			if (!ok)
+			{
+				snap_release();
+				return;
+			}
+			s_snap = snap_stage::copying;
+			s_snap_frames = 0;
+		}
+
+		// After each Present: read the copy back once the GPU has finished it.
+		void snap_finish(IDirect3DDevice9* dev)
+		{
+			if (s_snap != snap_stage::copying)
+				return;
+			// Flush only if the query is still pending after a few frames (it never is in practice).
+			const DWORD flags = ++s_snap_frames > 8 ? D3DGETDATA_FLUSH : 0;
+			if (s_snap_query->GetData(nullptr, 0, flags) != S_OK)
+				return;
+			D3DLOCKED_RECT lr {};
+			if (SUCCEEDED(dev->GetRenderTargetData(s_snap_rt, s_snap_sys)) && SUCCEEDED(s_snap_sys->LockRect(&lr, nullptr, D3DLOCK_READONLY)))
+			{
+				const auto tmp = output_dir() + "\\snap_game.tmp";
+				if (FILE* f = nullptr; !fopen_s(&f, tmp.c_str(), "wb") && f)
+				{
+					const uint32_t row = s_snap_w * 4, image = row * s_snap_h;
+#pragma pack(push, 1)
+					struct { uint16_t type; uint32_t size, reserved, offset; uint32_t hsize; int32_t w, h; uint16_t planes, bpp; uint32_t comp, isize; int32_t xr, yr; uint32_t used, important; } hdr
+						{ 0x4D42, 54 + image, 0, 54, 40, int32_t(s_snap_w), -int32_t(s_snap_h), 1, 32, 0, image, 2835, 2835, 0, 0 };
+#pragma pack(pop)
+					fwrite(&hdr, sizeof(hdr), 1, f);
+					for (UINT y = 0; y < s_snap_h; y++)
+						fwrite(static_cast<const uint8_t*>(lr.pBits) + size_t(y) * lr.Pitch, 1, row, f);
+					fclose(f);
+					const auto out = output_dir() + "\\snap_game.bmp";
+					MoveFileExA(tmp.c_str(), out.c_str(), MOVEFILE_REPLACE_EXISTING);
+				}
+				s_snap_sys->UnlockRect();
+			}
+			DeleteFileA((output_dir() + "\\snap.request").c_str());
+			snap_release();
+		}
+
 		// ---- device hooks ----
 
 		HRESULT __stdcall present_hk(IDirect3DDevice9* dev, const RECT* src, const RECT* dst, HWND wnd, const RGNDATA* dirty)
 		{
-			if (recording(dev))
+			// Not recording(): a stream frame that overflowed the ring stops
+			// recording early but still ends here, where it is dropped.
+			if (!t_internal && s_cap && s_cap->dev == dev)
 			{
 				std::lock_guard lock(s_mutex);
 				internal_scope in;
-				if (s_cap->streaming)
-					stream_present(dev);
-				else
+				if (s_cap && s_cap->dev == dev)
 				{
-					write_reference_image();
-					s_cap->w.rec(REC_PRESENT);
-					finish_capture();
+					if (s_cap->streaming)
+					{
+						const bool drawn = s_cap->draw_frame;
+						int64_t bytes;
+						{
+							cost_timer cost;
+							bytes = stream_present();
+						}
+						account_stream_cost(drawn, bytes);
+					}
+					else
+					{
+						write_reference_image();
+						s_cap->w.rec(REC_PRESENT);
+						finish_capture();
+					}
 				}
+			}
+
+			if (!t_internal)
+			{
+				internal_scope in;
+				snap_copy(dev);
 			}
 
 			const auto hr = s_present_og(dev, src, dst, wnd, dirty);
@@ -1645,6 +2187,11 @@ namespace comp
 			if (!t_internal)
 			{
 				s_frame_index++;
+				{
+					internal_scope in;
+					snap_finish(dev);
+				}
+				snap_poll();
 				poll_freeze_key();
 				poll_request();
 				if (s_request && !s_cap)
@@ -1665,12 +2212,13 @@ namespace comp
 				}
 				if (!s_cap)
 				{
-					// streams start (or resume after a file capture) right after a Present too
+					// Streams start (or resume after a file capture or a dropped frame)
+					// right after a Present too, once the host is ready for them.
 					std::lock_guard lock(s_mutex);
-					if (s_ring)
-						start_stream_session(dev);
-					else
+					if (!s_ring)
 						poll_stream(dev);
+					else if (host_ready())
+						start_stream_session(dev);
 				}
 			}
 			return hr;
@@ -1681,10 +2229,11 @@ namespace comp
 			if (recording(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				const bool known = s_cap->surfaces.contains(src);
 				update_surface u {};
-				u.src = ref_surface(src);
+				u.src = ref_surface(src, true); // a copy's source is never left for later
 				if (known && src) refresh_surface(src);
 				u.dst = ref_surface(dst);
 				if (src_rect) { u.has_rect = 1; u.r = to_rect(*src_rect); }
@@ -1700,11 +2249,21 @@ namespace comp
 			if (recording(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
-				const auto it = s_cap->textures.find(src);
-				if (it != s_cap->textures.end())
+				// A copy's source is never left for later: re-read in full if known
+				// (which settles pending contents too), else sent in full now.
+				if (const auto it = s_cap->textures.find(src); it != s_cap->textures.end()
+					&& (!s_cap->streaming || it->second.contents != CONTENTS_NONE)) // a stream never re-reads what it does not send
+				{
 					snapshot_texture(src, it->second, 0);
-				const update_texture u { ref_texture(src), ref_texture(dst) };
+					if (it->second.pending)
+					{
+						it->second.pending = false;
+						s_cap->pending--;
+					}
+				}
+				const update_texture u { ref_texture(src, true), ref_texture(dst) };
 				s_cap->w.rec(REC_UPDATE_TEXTURE, u);
 				s_cap->stats.copies++;
 			}
@@ -1713,9 +2272,10 @@ namespace comp
 
 		HRESULT __stdcall stretch_rect_hk(IDirect3DDevice9* dev, IDirect3DSurface9* src, const RECT* src_rect, IDirect3DSurface9* dst, const RECT* dst_rect, D3DTEXTUREFILTERTYPE filter)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				stretch_rect s {};
 				s.src = ref_surface(src);
@@ -1731,9 +2291,10 @@ namespace comp
 
 		HRESULT __stdcall color_fill_hk(IDirect3DDevice9* dev, IDirect3DSurface9* surface, const RECT* r, D3DCOLOR color)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				color_fill f {};
 				f.surface = ref_surface(surface);
@@ -1779,9 +2340,10 @@ namespace comp
 
 		HRESULT __stdcall begin_scene_hk(IDirect3DDevice9* dev)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				if (!s_cap->game_state_written)
 					write_game_state();
@@ -1792,9 +2354,10 @@ namespace comp
 
 		HRESULT __stdcall end_scene_hk(IDirect3DDevice9* dev)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				s_cap->w.rec(REC_END_SCENE);
 			}
 			return s_end_scene_og(dev);
@@ -1802,9 +2365,10 @@ namespace comp
 
 		HRESULT __stdcall clear_hk(IDirect3DDevice9* dev, DWORD count, const D3DRECT* rects, DWORD flags, D3DCOLOR color, float z, DWORD stencil)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				snapshot_state(dev, true);
 				const DWORD n = rects ? count : 0;
@@ -1816,9 +2380,10 @@ namespace comp
 
 		HRESULT __stdcall draw_hk(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT start, UINT count)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				snapshot_state(dev, false);
 				s_cap->w.rec(REC_DRAW, draw { static_cast<uint32_t>(type), start, count });
@@ -1829,9 +2394,10 @@ namespace comp
 
 		HRESULT __stdcall draw_indexed_hk(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, INT base, UINT min_index, UINT num_vertices, UINT start_index, UINT count)
 		{
-			if (recording(dev))
+			if (recording_draws(dev))
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				snapshot_state(dev, false);
 				s_cap->w.rec(REC_DRAW_INDEXED, draw_indexed { static_cast<uint32_t>(type), base, min_index, num_vertices, start_index, count });
@@ -1842,9 +2408,10 @@ namespace comp
 
 		HRESULT __stdcall draw_up_hk(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT count, const void* vertices, UINT stride)
 		{
-			if (recording(dev) && vertices)
+			if (recording_draws(dev) && vertices)
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				snapshot_state(dev, false);
 				const UINT bytes = primitive_vertex_count(type, count) * stride;
@@ -1859,9 +2426,10 @@ namespace comp
 		HRESULT __stdcall draw_indexed_up_hk(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT min_index, UINT num_vertices, UINT count,
 			const void* indices, D3DFORMAT index_format, const void* vertices, UINT stride)
 		{
-			if (recording(dev) && indices && vertices)
+			if (recording_draws(dev) && indices && vertices)
 			{
 				std::lock_guard lock(s_mutex);
+				cost_timer cost;
 				internal_scope in;
 				snapshot_state(dev, false);
 				const UINT index_bytes = primitive_vertex_count(type, count) * (index_format == D3DFMT_INDEX32 ? 4u : 2u);
@@ -1893,6 +2461,7 @@ namespace comp
 			if (!obj || !s_capturing.load(std::memory_order_relaxed) || t_internal)
 				return;
 			std::lock_guard lock(s_mutex);
+			cost_timer cost;
 			if (s_cap && s_cap->streaming)
 				forget(obj);
 		}
@@ -2038,7 +2607,7 @@ namespace comp
 
 	bool lookdev_capture::writing_file()
 	{
-		return s_capturing.load(std::memory_order_relaxed) && s_cap && !s_cap->streaming;
+		return (s_capturing.load(std::memory_order_relaxed) && s_cap && !s_cap->streaming) || s_snap == snap_stage::armed;
 	}
 
 	lookdev_capture::~lookdev_capture() = default;

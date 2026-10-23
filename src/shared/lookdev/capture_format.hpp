@@ -120,7 +120,7 @@ namespace lookdev
 		REC_UPDATE_TEXTURE,      // update_texture
 		REC_BEGIN_SCENE,         // empty
 		REC_END_SCENE,           // empty
-		REC_PRESENT,             // empty: end of the frame
+		REC_PRESENT,             // end of the frame: empty in files, present_info in live streams
 
 		// extras
 		REC_REFERENCE_IMAGE = 128, // image: the back buffer as the game presented it
@@ -304,14 +304,37 @@ namespace lookdev
 	// frame. The game (lookdev_capture) polls for it and writes; the host reads.
 	// Positions are running byte totals; ring offset = position % ring_size.
 	//
-	// Sessions: the host writes a new consumer_epoch whenever it attaches. The
-	// game then starts a new session at its next Present: it forgets everything
-	// it sent, sets session_start (where REC_STREAM_BEGIN goes) and bumps
-	// session. A host that sees a new session skips to session_start. A record
-	// may be larger than the ring; the host consumes it in pieces.
+	// The game never waits for the host. It writes a frame past write_pos and
+	// publishes it (moves write_pos) at its Present, whole frames only. A frame
+	// that does not fit in the space the host has freed is dropped unpublished
+	// and the session ends.
+	//
+	// Sessions: the game starts one after a Present when the host is alive and
+	// has taken everything published, or has newly attached (a new
+	// consumer_epoch: the host writes one whenever it attaches). It forgets
+	// everything it sent, sets session_start (where REC_STREAM_BEGIN goes) and
+	// bumps session. A host that sees a new session skips to session_start and
+	// starts from nothing, in the same epoch or a new one.
+	//
+	// A session sends what a frame uses at first use, like a capture, but never
+	// reads anything back from the GPU: render targets and other default-pool
+	// objects come without contents (the host fills them by replaying frames).
+	// The other contents (texels, buffer bytes) are paced by a byte budget per
+	// frame. Contents over budget follow in later frames, and every frame that
+	// used an object still waiting for its contents is flagged PRESENT_INCOMPLETE.
+	//
+	// While the host has more than one published frame left to process
+	// (frames_written - frames_consumed > 1), the game sends PRESENT_NO_DRAW
+	// frames: resource changes only, no state and no commands. The next full
+	// frame carries the net state changes. So the game records full frames at
+	// the host's pace, and the host should draw only the newest full, complete
+	// frame it has and pass over the rest without drawing.
+	//
+	// 64-bit positions are read with an interlocked operation: both ends are
+	// 32-bit processes, where a plain 64-bit load can tear.
 
 	constexpr uint32_t STREAM_MAGIC = 0x4D525453; // "STRM"
-	constexpr uint32_t STREAM_VERSION = 1;
+	constexpr uint32_t STREAM_VERSION = 1; // REC_PRESENT payloads are optional, so v1 hosts and games still pair
 	constexpr const wchar_t* STREAM_NAME = L"Local\\ds1_lookdev_stream";
 	constexpr uint32_t STREAM_RING_SIZE = 128u << 20;
 
@@ -330,8 +353,18 @@ namespace lookdev
 		volatile uint32_t producer_pid;
 		volatile uint32_t consumer_heartbeat; // host: GetTickCount, while it is alive
 		volatile uint32_t frames_written;  // game: REC_PRESENT records published this session
-		volatile uint32_t frames_consumed; // host: REC_PRESENT records processed this session
+		volatile uint32_t frames_consumed; // host: REC_PRESENT records processed this session (drawn or not); paces the game's full frames
 		uint32_t reserved[15];
+	};
+
+	// REC_PRESENT payload in live streams.
+	constexpr uint32_t PRESENT_INCOMPLETE = 1; // the frame used objects whose contents have not been sent yet: do not draw it
+	constexpr uint32_t PRESENT_NO_DRAW = 2;    // the game sent only resource changes (the host was behind): nothing to draw
+
+	struct present_info
+	{
+		uint32_t flags;   // PRESENT_*
+		uint32_t pending; // objects still waiting for their contents at this Present
 	};
 
 #pragma pack(pop)

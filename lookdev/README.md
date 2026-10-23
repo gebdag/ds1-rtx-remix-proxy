@@ -82,14 +82,53 @@ Changes to `rtx.conf` and Remix settings work live through Alt+X.
 
 ### Live stream
 
+The game must never slow down because of the host. Everything below follows from that.
+
 - The host creates a 128 MB shared-memory ring (`Local\ds1_lookdev_stream`). The game
   polls for it every 30 frames and, once found, streams every frame into it.
-- The first frame sends everything in use. After that only state changes, new
-  resources, buffer and texture writes, and resources whose address was reused
-  (`REC_DESTROY`) are sent.
-- While the host is behind, the game waits for ring space, and the host applies state
-  without drawing until it has caught up.
+- The game never waits for the host. It writes each frame into the space the host has
+  already read and publishes it at its Present, whole frames only.
+- **Full and no-draw frames.** The game sends a full frame (state and draws) only when
+  the host has at most one published frame left to process (`frames_consumed`).
+  Otherwise it sends a no-draw frame (`PRESENT_NO_DRAW`), which carries only what
+  changes resources: creations, contents, the game's buffer writes, `UpdateSurface` and
+  `UpdateTexture`, and `REC_DESTROY`. A no-draw frame skips the per-draw state
+  read-back entirely, so it costs the game almost nothing. The next full frame carries
+  the net state changes. The game therefore records full frames at the rate the host
+  draws them.
+- **Host skipping.** The host draws only the newest full, complete frame it has. It
+  passes over the others, including older full frames, no-draw frames and incomplete
+  frames. For those it creates resources and uploads texel contents, but it keeps
+  state, constants, bindings and buffer writes in the replayer's shadow. The shadow is
+  flushed as net changes before the next frame it draws. At each frame boundary it
+  takes everything published, which frees the ring for the game.
+- **Overflow and back-off.** A frame that does not fit in the ring is dropped
+  unpublished, and the session ends. The game keeps running. The next session (a
+  resync) starts only once the host is alive, has read everything, and has stayed
+  caught up for a back-off time. The back-off is 2 s and doubles with each consecutive
+  overflow, up to 60 s. A session that lasts 3 minutes resets it, and so does a new
+  host. A hung host costs the game nothing: the stream stops until the host catches
+  up or is restarted.
+- **No GPU read-backs.** The stream never reads anything back from the GPU. Render
+  targets, the back buffer and every other default-pool object are described but get
+  no contents. The host fills them by replaying frames, and dynamic buffers get the
+  game's own writes. File captures still read everything back.
+- **Pacing.** The other contents, CPU-side copies of managed and system-memory
+  objects, are paced by `[Lookdev] StreamBudgetKB` per frame (default 2048). If nothing
+  else has gone that frame, one larger object may still go. An object over budget is
+  described at once, and its contents follow at a later use. A resync (about 60 MB)
+  takes about 30 full frames.
+- **Copy sources.** The source of an `UpdateSurface` or `UpdateTexture` (system memory)
+  is always sent in full at once.
+- **Incomplete frames.** `PRESENT_INCOMPLETE` marks a frame that used an object whose
+  contents are still to come. The host does not draw it, and its title shows
+  "syncing". The game's log reports "Live stream in sync after N frames".
+- **Cost log.** Every 10 s the game logs the recorder's own time per frame to
+  `rtx_comp\console.log`: min / avg / max ms for full and no-draw frames, and MB/s.
+  The line starts with "Live stream cost".
 - Restarting the host makes the game resend everything.
+- Both processes are 32-bit, so the shared 64-bit positions are read with interlocked
+  operations. Plain 64-bit loads can tear.
 
 ## Known gaps
 
@@ -99,6 +138,10 @@ Changes to `rtx.conf` and Remix settings work live through Alt+X.
   re-read instead.
 - The host keeps every resource the game frees until its address is reused, so its
   memory grows over a long session.
+- Live stream: render targets and other default-pool objects start empty on the host.
+  A frame the host does not draw also skips `StretchRect` and `ColorFill`, and a
+  no-draw frame has none to skip. A target the game fills only once, in such a frame,
+  stays wrong on the host until the game draws it again.
 
 ## Build
 

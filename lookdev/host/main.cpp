@@ -280,6 +280,10 @@ namespace
 
 	// ---- live stream ----
 
+	// A 64-bit position shared with the game: this is a 32-bit process, where a
+	// plain 64-bit load can tear.
+	int64_t load64(volatile int64_t* p) { return InterlockedCompareExchange64(p, 0, 0); }
+
 	struct stream_reader
 	{
 		HANDLE mapping = nullptr;
@@ -292,6 +296,11 @@ namespace
 		int64_t pos = 0;              // next byte to take from the ring
 		std::vector<uint8_t> pending; // taken, not yet parsed
 		size_t parsed = 0;
+		// Frames in `pending`, indexed as they arrive: the REC_PRESENT offset of
+		// the newest one worth drawing (full and complete), npos if none.
+		static constexpr size_t npos = SIZE_MAX;
+		size_t indexed = 0;
+		size_t newest_drawable = npos;
 		std::atomic<bool> stop = false;
 		std::thread heartbeat;
 
@@ -334,7 +343,7 @@ namespace
 
 			// A new epoch makes the game start a new session for this host.
 			stale_session = hdr->session;
-			pos = hdr->read_pos;
+			pos = load64(&hdr->read_pos);
 			epoch = hdr->consumer_epoch + 1;
 			MemoryBarrier();
 			hdr->consumer_epoch = epoch;
@@ -354,7 +363,9 @@ namespace
 			if (mapping) CloseHandle(mapping);
 		}
 
-		// A session the game started after this host attached.
+		// A session the game started after this host attached. The game starts a
+		// new one in the same epoch too, after it dropped a frame this host was too
+		// far behind to take: whatever is left of the old one is discarded.
 		bool new_session() const
 		{
 			const uint32_t s = hdr->session;
@@ -365,18 +376,44 @@ namespace
 		{
 			session = hdr->session;
 			MemoryBarrier();
-			const int64_t start = hdr->session_start;
+			const int64_t start = load64(&hdr->session_start);
 			pending.clear();
 			parsed = 0;
+			indexed = 0;
+			newest_drawable = npos;
 			pos = std::max<int64_t>(pos, start);
 			InterlockedExchange64(&hdr->read_pos, pos);
+			hdr->frames_consumed = 0; // paces the game's full frames
+		}
+
+		static bool drawable(const present_info& info)
+		{
+			return !(info.flags & (PRESENT_INCOMPLETE | PRESENT_NO_DRAW));
+		}
+
+		void index_frames()
+		{
+			while (pending.size() - indexed >= sizeof(record_header))
+			{
+				const auto h = read<record_header>(pending.data() + indexed);
+				if (pending.size() - indexed - sizeof(record_header) < h.size)
+					break;
+				if (h.type == REC_PRESENT)
+				{
+					present_info info {};
+					if (h.size >= sizeof(info)) info = read<present_info>(pending.data() + indexed + sizeof(record_header));
+					if (drawable(info))
+						newest_drawable = indexed;
+				}
+				indexed += sizeof(record_header) + h.size;
+			}
 		}
 
 		// Takes everything published, which frees the ring for the game.
 		// Returns false when a new session started (the caller resets first).
 		bool pull()
 		{
-			const int64_t end = hdr->write_pos;   // before the session check, see stream_header
+			const int64_t end = load64(&hdr->write_pos);   // before the session check, see stream_header
 			MemoryBarrier();
 			if (new_session())
 				return false;
@@ -386,6 +423,8 @@ namespace
 			if (parsed > (64u << 20) || (parsed && parsed == pending.size()))
 			{
 				pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(parsed));
+				indexed -= parsed;
+				newest_drawable = (newest_drawable != npos && newest_drawable >= parsed) ? newest_drawable - parsed : npos;
 				parsed = 0;
 			}
 			while (pos < end)
@@ -396,6 +435,7 @@ namespace
 				pos += chunk;
 			}
 			InterlockedExchange64(&hdr->read_pos, pos);
+			index_frames();
 			return true;
 		}
 
@@ -410,6 +450,39 @@ namespace
 			out = { h.type, h.size, pending.data() + parsed + sizeof(record_header) };
 			parsed += sizeof(record_header) + h.size;
 			return true;
+		}
+
+		// The REC_PRESENT payload of the frame being read, looked up ahead, and
+		// whether a later frame worth drawing is already here. The game publishes
+		// whole frames only, so once a frame's first record is here, so is the
+		// rest of it. Empty (complete, full) for a game that sends none.
+		present_info frame_info(const record& first, bool& newer_drawable) const
+		{
+			present_info info {};
+			size_t at = npos; // offset of this frame's REC_PRESENT header
+			if (first.type == REC_PRESENT)
+			{
+				if (first.size >= sizeof(info)) info = read<present_info>(first.payload);
+				at = parsed - sizeof(record_header) - first.size;
+			}
+			else
+			{
+				for (size_t p = parsed; pending.size() - p >= sizeof(record_header);)
+				{
+					const auto h = read<record_header>(pending.data() + p);
+					if (pending.size() - p - sizeof(record_header) < h.size)
+						break;
+					if (h.type == REC_PRESENT)
+					{
+						if (h.size >= sizeof(info)) info = read<present_info>(pending.data() + p + sizeof(record_header));
+						at = p;
+						break;
+					}
+					p += sizeof(record_header) + h.size;
+				}
+			}
+			newer_drawable = at != npos && newest_drawable != npos && newest_drawable > at;
+			return info;
 		}
 	};
 
@@ -432,7 +505,8 @@ namespace
 		uint32_t frames_done = 0;
 		bool frame_start = true;
 		fps_meter fps;
-		uint32_t behind = 0;
+		uint32_t passed_over = 0; // frames applied without drawing since the last title update
+		uint64_t last_title = 0;
 
 		while (pump())
 		{
@@ -449,6 +523,11 @@ namespace
 				Sleep(20);
 				continue;
 			}
+
+			// At a frame boundary, take everything published: it frees the ring for
+			// the game, and shows whether a newer frame is here to draw instead.
+			if (frame_start && !in.pull())
+				continue;              // a new session: picked up at the top
 
 			record rec;
 			if (!in.next(rec))
@@ -480,10 +559,26 @@ namespace
 
 			if (frame_start)
 			{
-				// Behind by more than this frame: catch up without drawing.
-				behind = in.hdr->frames_written - frames_done;
-				rp.skip_commands = behind > 1;
+				// Draw only the newest frame worth drawing. The others (older ones,
+				// the game's no-draw frames, and frames that use objects whose contents
+				// have not arrived yet) are applied without drawing: resources and
+				// their contents go to the device, state is kept in the replayer's
+				// shadow and flushed before the next drawn frame. That makes passing
+				// over a frame far cheaper than the game makes one, so the host always
+				// catches up.
+				bool newer = false;
+				const auto info = in.frame_info(rec, newer);
+				const bool incomplete = (info.flags & PRESENT_INCOMPLETE) != 0;
+				rp.skip_commands = newer || !stream_reader::drawable(info);
 				frame_start = false;
+				if (incomplete && GetTickCount64() - last_title > 500)
+				{
+					last_title = GetTickCount64();
+					wchar_t title[256];
+					swprintf_s(title, L"DS1 lookdev - Remix - live, session %u - syncing: %u objects still to come - F4 proxy, Alt+X Remix",
+						in.session, info.pending);
+					SetWindowTextW(hwnd, title);
+				}
 			}
 
 			if (rp.apply(rec))
@@ -494,11 +589,13 @@ namespace
 					if (fps.tick())
 					{
 						wchar_t title[256];
-						swprintf_s(title, L"DS1 lookdev - Remix - live, session %u - %.1f fps - %u behind - map %08X, %u game lights, camera %ls - F4 proxy, Alt+X Remix",
-							in.session, fps.fps, behind > 0 ? behind - 1 : 0, proxy.map_id, proxy.lights, proxy.camera ? L"ok" : L"MISSING");
+						swprintf_s(title, L"DS1 lookdev - Remix - live, session %u - %.1f fps - %u game frames passed over - map %08X, %u game lights, camera %ls - F4 proxy, Alt+X Remix",
+							in.session, fps.fps, passed_over, proxy.map_id, proxy.lights, proxy.camera ? L"ok" : L"MISSING");
 						SetWindowTextW(hwnd, title);
+						passed_over = 0;
 					}
 				}
+				else passed_over++;
 				in.hdr->frames_consumed = ++frames_done;
 				frame_start = true;
 			}

@@ -351,6 +351,9 @@ namespace shared::common
 			int capture_key = VK_F9;
 			int freeze_input_key = VK_F8;
 			std::string output_dir = "rtx_comp\\lookdev";
+			// Live stream pacing: resource contents sent per frame, so a resync
+			// (everything in use at once) is spread over frames instead of hitching.
+			int stream_budget_kb = 2048; // texel / buffer bytes per frame (one larger object still goes when it is the frame's first)
 		} lookdev;
 
 	private:

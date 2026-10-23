@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -252,10 +253,54 @@ namespace lookdev::replay
 		// as the viewer's pixel history.
 		std::function<void(uint32_t)> after_command;
 
-		// A live host that has fallen behind still applies every state and data
+		// A live host that has fallen behind still takes every state and data
 		// record (later frames are deltas against them) but skips the commands
-		// that only produce pixels.
+		// that only produce pixels. While skipping it also keeps device state and
+		// buffer writes in a local shadow (deferred) instead of calling the device:
+		// through the proxy and the Remix bridge every call costs, and a host that
+		// skips must be much faster than the game. The first record applied with
+		// skip_commands off flushes the net changes to the device.
 		bool skip_commands = false;
+
+		struct deferred_record
+		{
+			uint32_t type = 0;
+			std::vector<uint8_t> payload;
+		};
+		std::map<uint64_t, deferred_record> deferred; // latest record per piece of state, flushed in key order
+
+		// Shader constants, per register.
+		struct const_bank
+		{
+			uint32_t reg_bytes = 16;
+			std::vector<uint8_t> values;
+			std::vector<uint8_t> dirty;
+			bool any = false;
+
+			void store(uint32_t start, uint32_t count, const uint8_t* src, uint32_t regs)
+			{
+				if (values.empty())
+				{
+					values.resize(size_t(regs) * reg_bytes);
+					dirty.resize(regs);
+				}
+				if (start >= regs) return;
+				count = std::min(count, regs - start);
+				std::memcpy(values.data() + size_t(start) * reg_bytes, src, size_t(count) * reg_bytes);
+				std::memset(dirty.data() + start, 1, count);
+				any = true;
+			}
+		};
+		const_bank vs_f { 16 }, ps_f { 16 }, vs_i { 16 }, ps_i { 16 }, vs_b { 4 }, ps_b { 4 };
+
+		// Buffer writes: the buffer's bytes and the range written since the flush.
+		struct deferred_buffer
+		{
+			std::vector<uint8_t> bytes;
+			uint32_t lo = UINT32_MAX, hi = 0;
+		};
+		std::unordered_map<uint64_t, deferred_buffer> deferred_buffers;
+		bool has_deferred = false;
 
 		// Draw indices (within the frame, as analyze.py numbers them) to leave out,
 		// for bisecting which draw produces something in the Remix view.
@@ -313,6 +358,20 @@ namespace lookdev::replay
 			drop(decls);
 			written.erase(id);
 			gpu_written.erase(id);
+			deferred_buffers.erase(id);
+		}
+
+		void clear_deferred()
+		{
+			deferred.clear();
+			for (auto* b : { &vs_f, &ps_f, &vs_i, &ps_i, &vs_b, &ps_b })
+			{
+				b->values.clear();
+				b->dirty.clear();
+				b->any = false;
+			}
+			deferred_buffers.clear();
+			has_deferred = false;
 		}
 
 		// Everything released: a new live session starts from nothing.
@@ -349,6 +408,7 @@ namespace lookdev::replay
 			decls.clear();
 			written.clear();
 			gpu_written.clear();
+			clear_deferred();
 			first_pass = true;
 			decl = 0;
 			fvf = 0;
@@ -587,11 +647,182 @@ namespace lookdev::replay
 			}
 		}
 
+		// The piece of device state a record sets, as a key ordered by record type
+		// (render targets before the viewport they reset), or false if the record
+		// is not plain state.
+		static bool state_key(const record& rec, uint64_t& key)
+		{
+			const uint8_t* p = rec.payload;
+			uint32_t sub = 0;
+			switch (rec.type)
+			{
+			case REC_RENDER_STATE: case REC_STREAM_FREQ: case REC_LIGHT_ENABLE:
+				if (rec.size < sizeof(state_value)) return false;
+				sub = read<state_value>(p).state;
+				break;
+			case REC_SAMPLER_STATE: case REC_TEXTURE_STAGE_STATE:
+			{
+				if (rec.size < sizeof(stage_state)) return false;
+				const auto s = read<stage_state>(p);
+				sub = (s.stage << 16) | s.type;
+				break;
+			}
+			case REC_SET_TEXTURE: case REC_RENDER_TARGET:
+				if (rec.size < sizeof(bind)) return false;
+				sub = read<bind>(p).slot;
+				break;
+			case REC_STREAM_SOURCE:
+				if (rec.size < sizeof(stream_source)) return false;
+				sub = read<stream_source>(p).stream;
+				break;
+			case REC_CLIP_PLANE:
+				if (rec.size < sizeof(clip_plane)) return false;
+				sub = read<clip_plane>(p).index;
+				break;
+			case REC_TRANSFORM:
+				if (rec.size < sizeof(transform)) return false;
+				sub = read<transform>(p).state;
+				break;
+			case REC_LIGHT:
+				if (rec.size < sizeof(light)) return false;
+				sub = read<light>(p).index;
+				break;
+			case REC_SET_VERTEX_SHADER: case REC_SET_PIXEL_SHADER: case REC_SET_VERTEX_DECL: case REC_SET_FVF:
+			case REC_INDICES: case REC_DEPTH_STENCIL: case REC_VIEWPORT: case REC_SCISSOR: case REC_MATERIAL:
+				break;
+			default:
+				return false;
+			}
+			key = (uint64_t(rec.type) << 32) | sub;
+			return true;
+		}
+
+		// Keeps a record for later instead of calling the device. False when the
+		// record must be applied now (resources, contents other than buffers,
+		// copies, game state).
+		bool defer(const record& rec)
+		{
+			const uint8_t* p = rec.payload;
+			auto constants = [&](const_bank& bank, uint32_t regs)
+			{
+				const auto r = read<const_range>(p);
+				if (rec.size >= sizeof(r) + size_t(r.count) * bank.reg_bytes)
+					bank.store(r.start, r.count, p + sizeof(r), regs);
+			};
+			switch (rec.type)
+			{
+			case REC_VS_CONST_F: constants(vs_f, 256); break;
+			case REC_PS_CONST_F: constants(ps_f, 256); break;
+			case REC_VS_CONST_I: constants(vs_i, 16); break;
+			case REC_PS_CONST_I: constants(ps_i, 16); break;
+			case REC_VS_CONST_B: constants(vs_b, 16); break;
+			case REC_PS_CONST_B: constants(ps_b, 16); break;
+			case REC_BUFFER_DATA:
+			{
+				const auto bd = read<buffer_data>(p);
+				if (!(bd.flags & DATA_INITIAL))
+					written.insert(bd.id);
+				const auto it = buffers.find(bd.id);
+				if (it == buffers.end() || !it->second.buffer || bd.offset + bd.size > it->second.size || rec.size < sizeof(bd) + bd.size)
+					break;
+				auto& d = deferred_buffers[bd.id];
+				d.bytes.resize(it->second.size);
+				std::memcpy(d.bytes.data() + bd.offset, p + sizeof(bd), bd.size);
+				d.lo = std::min(d.lo, bd.offset);
+				d.hi = std::max(d.hi, bd.offset + bd.size);
+				break;
+			}
+			default:
+			{
+				uint64_t key;
+				if (!state_key(rec, key))
+					return false;
+				auto& e = deferred[key];
+				e.type = rec.type;
+				e.payload.assign(p, p + rec.size);
+				break;
+			}
+			}
+			has_deferred = true;
+			return true;
+		}
+
+		void set_ps_const_f(uint32_t start, const float* f, uint32_t count)
+		{
+			dev->SetPixelShaderConstantF(start, f, count);
+			for (const auto& o : ps_const_overrides)
+			{
+				if (o.reg < start || o.reg >= start + count)
+					continue;
+				float v[4];
+				std::memcpy(v, f + (o.reg - start) * 4, sizeof(v));
+				v[o.component] = o.value;
+				dev->SetPixelShaderConstantF(o.reg, v, 1);
+			}
+		}
+
+		// Sends the net state changes and buffer writes of the frames passed over.
+		void flush_deferred()
+		{
+			// buffer writes first: their order against state does not matter
+			for (auto& [id, d] : deferred_buffers)
+			{
+				const auto it = buffers.find(id);
+				if (it == buffers.end() || !it->second.buffer || d.lo >= d.hi)
+					continue;
+				void* dst = nullptr;
+				HRESULT hr;
+				if (it->second.vertex)
+					hr = static_cast<IDirect3DVertexBuffer9*>(it->second.buffer)->Lock(d.lo, d.hi - d.lo, &dst, 0);
+				else
+					hr = static_cast<IDirect3DIndexBuffer9*>(it->second.buffer)->Lock(d.lo, d.hi - d.lo, &dst, 0);
+				if (FAILED(hr) || !dst) { error("buffer lock", hr, id); continue; }
+				std::memcpy(dst, d.bytes.data() + d.lo, d.hi - d.lo);
+				if (it->second.vertex)
+					static_cast<IDirect3DVertexBuffer9*>(it->second.buffer)->Unlock();
+				else
+					static_cast<IDirect3DIndexBuffer9*>(it->second.buffer)->Unlock();
+			}
+			deferred_buffers.clear();
+
+			for (const auto& [key, e] : deferred)
+				apply_record({ e.type, static_cast<uint32_t>(e.payload.size()), e.payload.data() });
+			deferred.clear();
+
+			// constants, in runs of changed registers
+			auto runs = [](const_bank& bank, auto&& set)
+			{
+				if (!bank.any) return;
+				const uint32_t regs = static_cast<uint32_t>(bank.dirty.size());
+				for (uint32_t i = 0; i < regs;)
+				{
+					if (!bank.dirty[i]) { i++; continue; }
+					const uint32_t start = i;
+					while (i < regs && bank.dirty[i]) i++;
+					set(start, bank.values.data() + size_t(start) * bank.reg_bytes, i - start);
+				}
+				std::fill(bank.dirty.begin(), bank.dirty.end(), uint8_t(0));
+				bank.any = false;
+			};
+			runs(vs_f, [&](uint32_t s, const uint8_t* v, uint32_t n) { dev->SetVertexShaderConstantF(s, reinterpret_cast<const float*>(v), n); });
+			runs(ps_f, [&](uint32_t s, const uint8_t* v, uint32_t n) { set_ps_const_f(s, reinterpret_cast<const float*>(v), n); });
+			runs(vs_i, [&](uint32_t s, const uint8_t* v, uint32_t n) { dev->SetVertexShaderConstantI(s, reinterpret_cast<const int*>(v), n); });
+			runs(ps_i, [&](uint32_t s, const uint8_t* v, uint32_t n) { dev->SetPixelShaderConstantI(s, reinterpret_cast<const int*>(v), n); });
+			runs(vs_b, [&](uint32_t s, const uint8_t* v, uint32_t n) { dev->SetVertexShaderConstantB(s, reinterpret_cast<const BOOL*>(v), n); });
+			runs(ps_b, [&](uint32_t s, const uint8_t* v, uint32_t n) { dev->SetPixelShaderConstantB(s, reinterpret_cast<const BOOL*>(v), n); });
+			has_deferred = false;
+		}
+
 		// Applies one record. True at REC_PRESENT: the caller presents.
 		bool apply(const record& rec)
 		{
-			if (skip_commands && is_pixel_command(rec.type))
-				return false;
+			if (skip_commands)
+			{
+				if (is_pixel_command(rec.type) || defer(rec))
+					return false;
+			}
+			else if (has_deferred)
+				flush_deferred();
 			if (!drop_draws.empty() && rec.type >= REC_DRAW && rec.type <= REC_DRAW_INDEXED_UP && drop_draws.contains(draws))
 			{
 				draws++;
@@ -754,19 +985,7 @@ namespace lookdev::replay
 					const auto r = read<const_range>(p);
 					const auto* f = reinterpret_cast<const float*>(p + sizeof(r));
 					if (rec.type == REC_VS_CONST_F) dev->SetVertexShaderConstantF(r.start, f, r.count);
-					else
-					{
-						dev->SetPixelShaderConstantF(r.start, f, r.count);
-						for (const auto& o : ps_const_overrides)
-						{
-							if (o.reg < r.start || o.reg >= r.start + r.count)
-								continue;
-							float v[4];
-							std::memcpy(v, f + (o.reg - r.start) * 4, sizeof(v));
-							v[o.component] = o.value;
-							dev->SetPixelShaderConstantF(o.reg, v, 1);
-						}
-					}
+					else set_ps_const_f(r.start, f, r.count);
 					break;
 				}
 				case REC_VS_CONST_I:
