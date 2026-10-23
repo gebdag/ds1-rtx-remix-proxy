@@ -34,8 +34,9 @@ namespace comp::game::atmosphere
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);
 
-	// The ColAdj draw (PS_GRADE).
-	void observe_grade(const float* ps_const);
+	// The ColAdj draw (PS_GRADE), with the bright pass constant c11 still bound and the
+	// bloom buffer on stage 1 (its size gives the game's bloom resolution).
+	void observe_grade(const float* ps_const, IDirect3DDevice9* dev);
 
 	// Once per frame: hands the values seen since the last call to Remix when they changed.
 	void frame_update(unsigned int frame);

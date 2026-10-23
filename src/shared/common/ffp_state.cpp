@@ -465,8 +465,10 @@ namespace shared::common
 		bool reads_grade_matrix = false;
 		bool reads_probe_scale = false;
 		bool reads_hemisphere = false;
+		bool reads_view_fade = false;
 		for_each_ps_const_read(code, [&](DWORD reg)
 		{
+			if (reg == 176) reads_view_fade = true;
 			if (reg == 92) reads_dir = true;
 			if (reg == 95) reads_colour = true;
 			if (reg == 175) reads_shadow_dir = true;
@@ -481,7 +483,8 @@ namespace shared::common
 			(reads_shadow_dir ? PS_LIGHT_SHADOW : 0u) |
 			(reads_extinction && reads_inscatter ? PS_HAZE : 0u) |
 			(reads_grade_scale && reads_grade_matrix ? PS_GRADE : 0u) |
-			(reads_probe_scale && reads_hemisphere ? PS_AMBIENT : 0u);
+			(reads_probe_scale && reads_hemisphere ? PS_AMBIENT : 0u) |
+			(reads_view_fade ? PS_VIEW_FADE : 0u);
 	}
 
 	bool ffp_state::world_offset(float& x, float& y, float& z) const

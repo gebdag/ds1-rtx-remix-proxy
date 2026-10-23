@@ -45,6 +45,30 @@ namespace comp
 			const int stage = shared::common::config::get().ffp.albedo_stage;
 			return game::texture_names::is_atmospheric(ffp.cur_texture(static_cast<UINT>(stage)));
 		}
+
+		// A blended atmospheric layer the game draws over its far backdrop: the FRPG_NtoA mist and
+		// light-shaft planes (their alpha fades by view angle, c176) and the backdrop cards
+		// (m10_bg_giant_tree). Their look is the game shader's own: its probe light, tint, fog,
+		// scattering and view fade. As world geometry Remix lights them instead and loses the fade,
+		// so the edge-on mist stack at the horizon turned into a dark band. They go to the sky
+		// raster with the game's shaders, like the dome and cloud sea (shown where the view reaches
+		// the sky, which is where they sit).
+		bool is_backdrop_layer(IDirect3DDevice9* dev)
+		{
+			auto& ffp = shared::common::ffp_state::get();
+			if (!is_atmospheric_layer())
+				return false;
+			DWORD blend = FALSE, clip_planes = 0;
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+			dev->GetRenderState(D3DRS_CLIPPLANEENABLE, &clip_planes);
+			if (!blend || clip_planes != 0)
+				return false;
+			if (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE)
+				return true;
+			const int stage = shared::common::config::get().ffp.albedo_stage;
+			const auto name = game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(stage)));
+			return name.find("_bg_") != std::string::npos || name.find("back_ground") != std::string::npos;
+		}
 	}
 
 	namespace tex_addons
@@ -377,7 +401,7 @@ namespace comp
 		// plane, and its copy must stay out of the sky.
 		const bool sky_draw = !water_draw && ffp.view_proj_valid() && !ffp.cur_decl_is_skinned() &&
 			shared::common::config::get().sky.mark_sky_draws &&
-			is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount);
+			(is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount) || is_backdrop_layer(dev));
 
 		if (!ffp.view_proj_valid())
 		{

@@ -3,6 +3,7 @@
 
 #include "shared/common/remix_api.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/globals.hpp"
 #include "sun_light.hpp"
 
 #include <cmath>
@@ -27,6 +28,12 @@ namespace comp::game::atmosphere
 		{
 			float scale[4] = {};   // c56
 			float rows[3][4] = {}; // c62..c64
+			float bright[4] = {};  // c11: x = bright pass threshold near
+			float bloom_far[4] = {};     // c71: x threshold far, y bloom rate far, zw bloom depth range
+			unsigned int bloom_w = 0, bloom_h = 0; // the bloom buffer ColAdj reads (s1)
+			// FRPG_Fil_Dof*'s, still bound at ColAdj: c9 far (begin, end, rate), c10 near,
+			// c66/c67 the level blend weights.
+			float dof_far[4] = {}, dof_near[4] = {}, dof_scale[4] = {}, dof_bias[4] = {};
 
 			bool operator==(const grade_values& o) const { return std::memcmp(this, &o, sizeof(grade_values)) == 0; }
 		};
@@ -239,6 +246,33 @@ namespace comp::game::atmosphere
 			ok &= set("rtx.ds1grading.gameRowB", vec3(v.rows[2]));
 			ok &= set("rtx.ds1grading.gameOffset", vec3(offset));
 			ok &= set("rtx.ds1grading.gameActive", "True");
+			// The game's own image pipeline (rtx.ds1Look): ColAdj, bloom and bright pass values.
+			auto vec4 = [](const float* r) { return std::format("{}, {}, {}, {}", r[0], r[1], r[2], r[3]); };
+			ok &= set("rtx.ds1Look.sceneScale", num(v.scale[2]));
+			ok &= set("rtx.ds1Look.bloomRateNear", num(v.scale[0]));
+			ok &= set("rtx.ds1Look.bloomRateFar", num(v.bloom_far[1]));
+			ok &= set("rtx.ds1Look.thresholdNear", num(v.bright[0]));
+			ok &= set("rtx.ds1Look.thresholdFar", num(v.bloom_far[0]));
+			ok &= set("rtx.ds1Look.depthBegin", num(v.bloom_far[2]));
+			ok &= set("rtx.ds1Look.depthEnd", num(v.bloom_far[3]));
+			ok &= set("rtx.ds1Look.gradeRowR", vec4(v.rows[0]));
+			ok &= set("rtx.ds1Look.gradeRowG", vec4(v.rows[1]));
+			ok &= set("rtx.ds1Look.gradeRowB", vec4(v.rows[2]));
+			if (v.bloom_w && v.bloom_h)
+			{
+				// The bright pass runs at twice the final bloom buffer's size.
+				ok &= set("rtx.ds1Look.bloomWidth", std::to_string(2 * v.bloom_w));
+				ok &= set("rtx.ds1Look.bloomHeight", std::to_string(2 * v.bloom_h));
+			}
+			ok &= set("rtx.ds1Look.dofFarBegin", num(v.dof_far[0]));
+			ok &= set("rtx.ds1Look.dofFarEnd", num(v.dof_far[1]));
+			ok &= set("rtx.ds1Look.dofFarStrength", num(v.dof_far[2]));
+			ok &= set("rtx.ds1Look.dofNearBegin", num(v.dof_near[0]));
+			ok &= set("rtx.ds1Look.dofNearEnd", num(v.dof_near[1]));
+			ok &= set("rtx.ds1Look.dofNearStrength", num(v.dof_near[2]));
+			ok &= set("rtx.ds1Look.dofBlendScale", vec4(v.dof_scale));
+			ok &= set("rtx.ds1Look.dofBlendBias", vec4(v.dof_bias));
+			ok &= set("rtx.ds1Look.gameActive", "True");
 			report("grade", ok, std::format("scale {}, diagonal {}, {}, {}", v.scale[2], v.rows[0][0], v.rows[1][1], v.rows[2][2]));
 		}
 	}
@@ -279,13 +313,70 @@ namespace comp::game::atmosphere
 		std::memcpy(g_ambient_frame.shadow_dir, &ps_const[175 * 4], sizeof(g_ambient_frame.shadow_dir));
 	}
 
-	void observe_grade(const float* ps_const)
+	void observe_grade(const float* ps_const, IDirect3DDevice9* dev)
 	{
 		if (!ps_const)
 			return;
 		std::memcpy(g_grade.scale, &ps_const[56 * 4], sizeof(g_grade.scale));
 		std::memcpy(g_grade.rows, &ps_const[62 * 4], sizeof(g_grade.rows));
+		// c11 is the BrightPassFilter's, still bound from that draw.
+		std::memcpy(g_grade.bright, &ps_const[11 * 4], sizeof(g_grade.bright));
+		std::memcpy(g_grade.bloom_far, &ps_const[71 * 4], sizeof(g_grade.bloom_far));
+		std::memcpy(g_grade.dof_far, &ps_const[9 * 4], sizeof(g_grade.dof_far));
+		std::memcpy(g_grade.dof_near, &ps_const[10 * 4], sizeof(g_grade.dof_near));
+		std::memcpy(g_grade.dof_scale, &ps_const[66 * 4], sizeof(g_grade.dof_scale));
+		std::memcpy(g_grade.dof_bias, &ps_const[67 * 4], sizeof(g_grade.dof_bias));
+		IDirect3DBaseTexture9* bloom = nullptr;
+		if (dev && SUCCEEDED(dev->GetTexture(1, &bloom)) && bloom)
+		{
+			if (bloom->GetType() == D3DRTYPE_TEXTURE)
+			{
+				D3DSURFACE_DESC desc {};
+				if (SUCCEEDED(static_cast<IDirect3DTexture9*>(bloom)->GetLevelDesc(0, &desc)))
+				{
+					g_grade.bloom_w = desc.Width;
+					g_grade.bloom_h = desc.Height;
+				}
+			}
+			bloom->Release();
+		}
 		g_have_grade = true;
+	}
+
+	// Lookdev host only: rtx_comp\lookdev\remix_live.txt holds `rtx.key = value` lines that are
+	// sent to Remix whenever the file changes, so any option can be changed on the running
+	// host by a script without a restart or a menu.
+	void apply_live_options(unsigned int frame)
+	{
+		static FILETIME last {};
+		if (!shared::globals::lookdev_host || frame % 6 != 0 || !shared::common::remix_api::is_initialized())
+			return;
+		WIN32_FILE_ATTRIBUTE_DATA info;
+		if (!GetFileAttributesExA("rtx_comp\\lookdev\\remix_live.txt", GetFileExInfoStandard, &info)
+			|| CompareFileTime(&info.ftLastWriteTime, &last) == 0)
+			return;
+		last = info.ftLastWriteTime;
+		FILE* f = nullptr;
+		if (fopen_s(&f, "rtx_comp\\lookdev\\remix_live.txt", "rb") || !f)
+			return;
+		char line[4096];
+		int applied = 0, refused = 0;
+		while (fgets(line, sizeof(line), f))
+		{
+			std::string s(line);
+			const auto eq = s.find('=');
+			if (s.empty() || s[0] == '#' || eq == std::string::npos)
+				continue;
+			auto trim = [](const std::string& t)
+			{
+				const auto a = t.find_first_not_of(" \t\r\n"), b = t.find_last_not_of(" \t\r\n");
+				return a == std::string::npos ? std::string() : t.substr(a, b - a + 1);
+			};
+			const auto key = trim(s.substr(0, eq)), value = trim(s.substr(eq + 1));
+			(set(key.c_str(), value) ? applied : refused)++;
+		}
+		fclose(f);
+		shared::common::log("Atmosphere", std::format("remix_live.txt: {} option(s) applied, {} refused", applied, refused));
 	}
 
 	void frame_update(unsigned int frame)
@@ -293,6 +384,7 @@ namespace comp::game::atmosphere
 		if (frame == g_updated_frame)
 			return;
 		g_updated_frame = frame;
+		apply_live_options(frame);
 		if (frame != g_haze_frame_id)
 			close_haze_frame();
 		if (frame != g_ambient_frame_id)

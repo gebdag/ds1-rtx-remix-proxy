@@ -303,6 +303,8 @@ namespace shared::common
 		//   PS_AMBIENT      c86 and c98, the irradiance probe multiplier and hemisphere ambient
 		//                   of the HemEnv shaders (see game/atmosphere.hpp).
 		static constexpr uint32_t PS_AMBIENT = 1u << 4;
+		//   PS_VIEW_FADE    c176, FRPG_NtoA's alpha fade by view angle (mist and light-shaft layers).
+		static constexpr uint32_t PS_VIEW_FADE = 1u << 5;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
 
 		// True when the current pixel shader reads c139, the per-draw colour and

@@ -877,7 +877,7 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
-			comp::game::atmosphere::observe_grade(ffp.ps_const_data());
+			comp::game::atmosphere::observe_grade(ffp.ps_const_data(), m_pIDirect3DDevice9);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			HRESULT hr = S_OK;
