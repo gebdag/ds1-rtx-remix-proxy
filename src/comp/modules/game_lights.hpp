@@ -41,6 +41,16 @@ namespace comp
 		float sun_angular_diameter = 0.53f;
 		float sun_fallback_colour[3] = { 0.7f, 0.7f, 0.7f };
 
+		// The sun as last submitted to Remix (radiance and direction); false while there is none.
+		bool submitted_sun(float* radiance, float* direction) const
+		{
+			if (!sun_handle_)
+				return false;
+			radiance[0] = sun_info_.radiance.x; radiance[1] = sun_info_.radiance.y; radiance[2] = sun_info_.radiance.z;
+			direction[0] = sun_distant_.direction.x; direction[1] = sun_distant_.direction.y; direction[2] = sun_distant_.direction.z;
+			return true;
+		}
+
 		int active_light_count() const { return static_cast<int>(live_lights_.size()); }
 		int total_light_count() const { return harvested_count_; }
 		int create_failed_count() const { return create_failed_; }

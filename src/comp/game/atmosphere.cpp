@@ -5,6 +5,7 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/globals.hpp"
 #include "sun_light.hpp"
+#include "../modules/game_lights.hpp"
 
 #include <cmath>
 
@@ -104,8 +105,9 @@ namespace comp::game::atmosphere
 
 		void report(const char* what, bool ok, const std::string& detail)
 		{
-			static bool logged_haze = false, logged_grade = false, logged_ambient = false;
-			bool& logged = what[0] == 'h' ? logged_haze : what[0] == 'g' ? logged_grade : logged_ambient;
+			static bool logged_haze = false, logged_grade = false, logged_ambient = false, logged_adaptation = false;
+			bool& logged = what[0] == 'h' ? logged_haze : what[0] == 'g' ? logged_grade
+				: what[1] == 'd' ? logged_adaptation : logged_ambient;
 			if (logged && ok)
 				return;
 			logged = true;
@@ -225,6 +227,25 @@ namespace comp::game::atmosphere
 		std::array<std::array<float, 3>, 6> g_ambient_gamma = {};
 		bool g_have_ambient_gamma = false;
 
+		// c54 as still bound at ColAdj: FRPG_Fil_CalcAdaptedLum's rate, luminance clamp and key.
+		// Remix runs the game's meter and adaptation on its own frame with them (rtx.ds1Exposure.adapt*),
+		// since under path tracing the game meters a buffer that is not the image shown.
+		float g_c54[4] = {};
+		float g_c54_sent[4] = {};
+		float g_divisor_sent = 0.0f;
+
+		void send_adaptation(const float* c54, float divisor)
+		{
+			bool ok = true;
+			ok &= set("rtx.ds1Exposure.adaptRate", num(c54[0]));
+			ok &= set("rtx.ds1Exposure.adaptMinLum", num(c54[1]));
+			ok &= set("rtx.ds1Exposure.adaptMaxLum", num(c54[2]));
+			ok &= set("rtx.ds1Exposure.adaptKey", num(c54[3]));
+			ok &= set("rtx.ds1Exposure.exposureDivisor", num(divisor));
+			ok &= set("rtx.ds1Exposure.adaptActive", "True");
+			report("adaptation", ok, std::format("rate {}, clamp {}..{}, key {}, c135.y {}", c54[0], c54[1], c54[2], c54[3], divisor));
+		}
+
 		void send_ambient(const std::array<std::array<float, 3>, 6>& cube)
 		{
 			static const char* keys[6] = { "rtx.ds1Ambient.posX", "rtx.ds1Ambient.negX", "rtx.ds1Ambient.posY",
@@ -326,6 +347,7 @@ namespace comp::game::atmosphere
 		std::memcpy(g_grade.dof_near, &ps_const[10 * 4], sizeof(g_grade.dof_near));
 		std::memcpy(g_grade.dof_scale, &ps_const[66 * 4], sizeof(g_grade.dof_scale));
 		std::memcpy(g_grade.dof_bias, &ps_const[67 * 4], sizeof(g_grade.dof_bias));
+		std::memcpy(g_c54, &ps_const[54 * 4], sizeof(g_c54));
 		IDirect3DBaseTexture9* bloom = nullptr;
 		if (dev && SUCCEEDED(dev->GetTexture(1, &bloom)) && bloom)
 		{
@@ -343,21 +365,31 @@ namespace comp::game::atmosphere
 		g_have_grade = true;
 	}
 
-	// Lookdev host only: rtx_comp\lookdev\remix_live.txt holds `rtx.key = value` lines that are
-	// sent to Remix whenever the file changes, so any option can be changed on the running
-	// host by a script without a restart or a menu.
+	// Live options: `rtx.key = value` lines sent to Remix whenever the file changes, so any
+	// option can be changed by a script without a restart or a menu. The lookdev host reads
+	// rtx_comp\lookdev\remix_live.txt; the game reads rtx_comp\remix_dev.txt, which only
+	// exists on a development machine.
+	const char* live_options_path()
+	{
+		return shared::globals::lookdev_host ? "rtx_comp\\lookdev\\remix_live.txt" : "rtx_comp\\remix_dev.txt";
+	}
+
+	// Set while the game's rtx_comp\remix_dev.txt exists: frame_update keeps
+	// rtx_comp\look_state.txt current with every game value it hands to Remix.
+	bool g_dev_file = false;
+
 	void apply_live_options(unsigned int frame)
 	{
 		static FILETIME last {};
-		if (!shared::globals::lookdev_host || frame % 6 != 0 || !shared::common::remix_api::is_initialized())
+		if (frame % 6 != 0 || !shared::common::remix_api::is_initialized())
 			return;
 		WIN32_FILE_ATTRIBUTE_DATA info;
-		if (!GetFileAttributesExA("rtx_comp\\lookdev\\remix_live.txt", GetFileExInfoStandard, &info)
-			|| CompareFileTime(&info.ftLastWriteTime, &last) == 0)
+		g_dev_file = GetFileAttributesExA(live_options_path(), GetFileExInfoStandard, &info) != 0;
+		if (!g_dev_file || CompareFileTime(&info.ftLastWriteTime, &last) == 0)
 			return;
 		last = info.ftLastWriteTime;
 		FILE* f = nullptr;
-		if (fopen_s(&f, "rtx_comp\\lookdev\\remix_live.txt", "rb") || !f)
+		if (fopen_s(&f, live_options_path(), "rb") || !f)
 			return;
 		char line[4096];
 		int applied = 0, refused = 0;
@@ -376,7 +408,55 @@ namespace comp::game::atmosphere
 			(set(key.c_str(), value) ? applied : refused)++;
 		}
 		fclose(f);
-		shared::common::log("Atmosphere", std::format("remix_live.txt: {} option(s) applied, {} refused", applied, refused));
+		shared::common::log("Atmosphere", std::format("{}: {} option(s) applied, {} refused", live_options_path(), applied, refused));
+	}
+
+	// rtx_comp\look_state.txt: what the game is handing to Remix right now, rewritten when it
+	// changes (checked every 30 frames) while the dev options file exists.
+	void write_look_state(unsigned int frame)
+	{
+		static std::string last;
+		if (!g_dev_file || frame % 30 != 0)
+			return;
+		auto v4 = [](const float* r) { return std::format("{:.6g}, {:.6g}, {:.6g}, {:.6g}", r[0], r[1], r[2], r[3]); };
+		std::string s;
+		const auto& h = g_haze_ready;
+		s += std::format("c135 exposure {}  (x/y = {:.6g})\n", v4(h.exposure), h.exposure[1] != 0.0f ? h.exposure[0] / h.exposure[1] : 0.0f);
+		s += std::format("c54 at ColAdj {}\n", v4(g_c54));
+		for (int i = 0; i < 9; i++)
+			s += std::format("c{} {}\n", 103 + i, v4(h.ps[i]));
+		s += std::format("vs c128 {}\n", v4(h.fog_range));
+		const auto& g = g_grade;
+		s += std::format("c56 {}\nc62 {}\nc63 {}\nc64 {}\n", v4(g.scale), v4(g.rows[0]), v4(g.rows[1]), v4(g.rows[2]));
+		s += std::format("c11 {}\nc71 {}\nc9 {}\nc10 {}\nc66 {}\nc67 {}\nbloom {}x{}\n",
+			v4(g.bright), v4(g.bloom_far), v4(g.dof_far), v4(g.dof_near), v4(g.dof_scale), v4(g.dof_bias), g.bloom_w, g.bloom_h);
+		if (g_have_ambient_gamma)
+			for (int f = 0; f < 6; f++)
+				s += std::format("ambient face {} (gamma) {:.6g}, {:.6g}, {:.6g}\n", f, g_ambient_gamma[f][0], g_ambient_gamma[f][1], g_ambient_gamma[f][2]);
+		if (auto* gl = game_lights::get())
+		{
+			const auto& sun = sun_light::current(frame, gl->sun_fallback_colour);
+			s += std::format("sun vote valid {} dir_from {} colour_from {} dir {:.4g}, {:.4g}, {:.4g} colour {:.4g}, {:.4g}, {:.4g} shadow/map/chr draws {}/{}/{}\n",
+				sun.valid, static_cast<int>(sun.dir_from), static_cast<int>(sun.colour_from),
+				sun.key.dir[0], sun.key.dir[1], sun.key.dir[2], sun.key.colour[0], sun.key.colour[1], sun.key.colour[2],
+				sun.shadow_draws, sun.map_dir3_draws, sun.chr_dir3_draws);
+			float rad[3], dir[3];
+			if (gl->submitted_sun(rad, dir))
+				s += std::format("sun submitted radiance {:.4g}, {:.4g}, {:.4g} dir {:.4g}, {:.4g}, {:.4g} (x{} enabled {})\n",
+					rad[0], rad[1], rad[2], dir[0], dir[1], dir[2], gl->sun_intensity_scale, gl->sun_enabled);
+			else
+				s += std::format("sun submitted none (enabled {})\n", gl->sun_enabled);
+			s += std::format("lights live {} harvested {} create_failed {} zero_radiance {}\n",
+				gl->active_light_count(), gl->total_light_count(), gl->create_failed_count(), gl->zero_radiance_count());
+		}
+		if (s == last)
+			return;
+		last = s;
+		FILE* f = nullptr;
+		if (fopen_s(&f, shared::globals::lookdev_host ? "rtx_comp\\look_state_host.txt" : "rtx_comp\\look_state.txt", "wb") || !f)
+			return;
+		fprintf(f, "frame %u\n%s", frame, s.c_str());
+		fclose(f);
 	}
 
 	void frame_update(unsigned int frame)
@@ -414,12 +494,21 @@ namespace comp::game::atmosphere
 			g_haze_sent = g_haze_ready;
 			g_haze_sent_once = true;
 		}
+		// The adaptation constants and c135.y, when they change (c54.x moves with the frame time).
+		if (const float divisor = g_haze_ready.exposure[1]; g_have_grade && g_have_haze && g_c54[3] > 0.0f && divisor > 0.0f &&
+			(std::memcmp(g_c54, g_c54_sent, sizeof(g_c54)) != 0 || divisor != g_divisor_sent))
+		{
+			send_adaptation(g_c54, divisor);
+			std::memcpy(g_c54_sent, g_c54, sizeof(g_c54));
+			g_divisor_sent = divisor;
+		}
 		if (g_have_grade && !(g_grade_sent_once && g_grade_sent == g_grade))
 		{
 			send_grade(g_grade);
 			g_grade_sent = g_grade;
 			g_grade_sent_once = true;
 		}
+		write_look_state(frame);
 	}
 
 	bool ambient_toward(const float* normal, float* out_gamma)
