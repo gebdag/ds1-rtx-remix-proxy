@@ -17,6 +17,7 @@
 #include "../game/camera.hpp"
 #include "../game/cheats.hpp"
 #include "../game/frustum_culling.hpp"
+#include "../game/vanilla_view.hpp"
 
 // Allow us to directly call the ImGui WndProc function.
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -86,6 +87,10 @@ namespace comp
 			else
 				benchmark::start();
 		}
+
+		// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.
+		if (message_type == WM_KEYUP && wparam == VK_F8 && !shared::common::config::get().lookdev.enabled)
+			game::vanilla_view::request_toggle();
 
 		if (shared::globals::imgui_menu_open)
 		{
@@ -347,6 +352,12 @@ namespace comp
 	{
 		auto& ffp = shared::common::ffp_state::get();
 		auto& cfg = shared::common::config::get();
+
+		if (ImGui::Button(game::vanilla_view::active() ? "Back to Remix (F8)" : "Show Vanilla Graphics (F8)"))
+			game::vanilla_view::request_toggle();
+		ImGui::SameLine();
+		ImGui::TextDisabled("(Remix path tracing, FFP conversion, Skip Post-FX and Suppress Aux Passes off)");
+		ImGui::Separator();
 
 		// FFP enable/disable toggle
 		bool ffp_enabled = ffp.is_enabled();

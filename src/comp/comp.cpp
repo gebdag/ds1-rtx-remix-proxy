@@ -15,6 +15,7 @@
 
 #include "game/camera.hpp"
 #include "game/atmosphere.hpp"
+#include "game/vanilla_view.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
 
@@ -37,6 +38,9 @@ namespace comp
 		// Not without Remix (lookdev mode): each attempt would log a warning.
 		if (!shared::common::remix_api::is_initialized() && shared::common::config::get().remix.enabled)
 			shared::common::remix_api::initialize(nullptr, nullptr, nullptr);
+
+		// Vanilla graphics on/off (F8 / F4 menu) switches here, before the frame's draws.
+		game::vanilla_view::frame_update();
 
 		// Update game lights each frame
 		if (auto* gl = game_lights::get())
