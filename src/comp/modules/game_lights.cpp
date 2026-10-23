@@ -380,7 +380,8 @@ namespace comp
 		// The player light is taken out before anything else sees it: it has its own
 		// settings, and none of the [Lights] scales below apply to it.
 		const auto* player = find_player_light(harvested);
-		sync_player_light(player);
+		std::string falloff_table;
+		sync_player_light(player, falloff_table);
 
 		const auto& synthetic = game::map_lights::get();
 		synthetic_count_ = static_cast<int>(synthetic.size());
@@ -399,7 +400,6 @@ namespace comp
 		rows_.reserve(sources.size());
 
 		int active = 0;
-		std::string falloff_table;
 		for (const auto* src_ptr : sources)
 		{
 			const auto& src = *src_ptr;
@@ -501,8 +501,12 @@ namespace comp
 		if (falloff_table != falloff_table_sent_)
 		{
 			auto& bridge = shared::common::remix_api::get().m_bridge;
-			if (bridge.SetConfigVariable)
-				bridge.SetConfigVariable("rtx.ds1Lights.falloffTable", falloff_table.c_str());
+			const bool ok = bridge.SetConfigVariable &&
+				bridge.SetConfigVariable("rtx.ds1Lights.falloffTable", falloff_table.c_str()) == REMIXAPI_ERROR_CODE_SUCCESS;
+			const auto count = std::count(falloff_table.begin(), falloff_table.end(), ';');
+			const bool has_player = falloff_table.find(std::format("{:x}:", string_hash64("ds1_player_light"))) != std::string::npos;
+			shared::common::log("GameLights", std::format("game falloff for {} light(s){}{}", count,
+				has_player ? ", the player light among them" : "", ok ? "" : " (Remix refused the table)"));
 			falloff_table_sent_ = falloff_table;
 		}
 
@@ -692,7 +696,7 @@ namespace comp
 		return true;
 	}
 
-	void game_lights::sync_player_light(const game::point_lights::light* src)
+	void game_lights::sync_player_light(const game::point_lights::light* src, std::string& falloff_table)
 	{
 		const auto& c = player_cfg_;
 		const float mult = edit_multiplier(KEY_PLAYER);
@@ -715,10 +719,29 @@ namespace comp
 		const float radius = std::max(0.01f,
 			c.use_game_radius && game && src->dwindle_begin > 0.01f ? src->dwindle_begin : c.radius);
 
-		// Same radiance model as the other harvested lights, so the defaults keep the
-		// brightness the light had before it was split out.
-		const float falloff = range * range * kRadianceNormalisation * c.intensity * mult;
-		const remixapi_Float3D radiance = { colour[0] * falloff, colour[1] * falloff, colour[2] * falloff };
+		remixapi_Float3D radiance;
+		if (game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)])
+		{
+			// The game's falloff, as for the map lights: the game's colour over its own range
+			// (0..3 for the head light), radiance colour^2.2 / pi. Intensity and Range in
+			// [PlayerLight] were set against inverse square and do not apply.
+			const float game_begin = game ? std::max(0.0f, src->dwindle_begin) : 0.0f;
+			const float game_end = game ? std::max(0.01f, src->dwindle_end) : range;
+			const float scale = mult / 3.14159265f;
+			radiance = {
+				std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
+				std::pow(std::max(colour[1], 0.0f), 2.2f) * scale,
+				std::pow(std::max(colour[2], 0.0f), 2.2f) * scale,
+			};
+			falloff_table += std::format("{:x}:{:.4g}:{:.4g};", string_hash64("ds1_player_light"), game_begin, game_end);
+		}
+		else
+		{
+			// Same radiance model as the other harvested lights, so the defaults keep the
+			// brightness the light had before it was split out.
+			const float falloff = range * range * kRadianceNormalisation * c.intensity * mult;
+			radiance = { colour[0] * falloff, colour[1] * falloff, colour[2] * falloff };
+		}
 		player_radiance_[0] = radiance.x; player_radiance_[1] = radiance.y; player_radiance_[2] = radiance.z;
 
 		float offset[3] = {};
@@ -1010,7 +1033,7 @@ namespace comp
 				"for the kinds ticked here. Default: the lights mounted in the map (torches,\n"
 				"lanterns, synthesized flames). Off: inverse square for every light.");
 		ImGui::BeginDisabled(!game_falloff_);
-		for (int k = static_cast<int>(kind::map_row); k < static_cast<int>(kind::count); ++k)
+		for (int k = static_cast<int>(kind::player); k < static_cast<int>(kind::count); ++k)
 		{
 			ImGui::SameLine();
 			ImGui::Checkbox(std::format("{}###falloff{}", kKindSource[k], k).c_str(), &kind_game_falloff_[k]);
