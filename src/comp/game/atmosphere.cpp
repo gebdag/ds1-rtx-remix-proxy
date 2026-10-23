@@ -11,6 +11,7 @@
 
 #include <cstring>
 #include <format>
+#include <vector>
 
 namespace comp::game::atmosphere
 {
@@ -23,6 +24,89 @@ namespace comp::game::atmosphere
 			float fog_range[4] = {}; // VS c128
 
 			bool operator==(const haze_values& o) const { return std::memcmp(this, &o, sizeof(haze_values)) == 0; }
+			// The same region's set: c135 is global and moves every frame, so it is not part of it.
+			bool same_set(const haze_values& o) const
+			{
+				return std::memcmp(ps, o.ps, sizeof(ps)) == 0 && std::memcmp(fog_range, o.fog_range, sizeof(fog_range)) == 0;
+			}
+		};
+
+		// A frame's draws can carry several sets of a group's constants: the game applies its
+		// per-region DrawParams per draw (Blighttown shows five or more fog and light zones in one
+		// view), while Remix gets one set for the whole screen. That set is the one most of the
+		// frame's geometry uses, each distinct set weighted by the primitives of every draw using it.
+		// Another set takes over only after leading for kHoldFrames frames in a row, or at once when
+		// the current one is gone from the frame (a new area), so turning the camera can't flip it.
+		// Taking the single largest draw's set instead flipped Blighttown to a small zone's green
+		// scattering whenever one of its draws was the largest in view.
+		template <class T>
+		struct dominant_set
+		{
+			static constexpr size_t kMaxSets = 16;
+			static constexpr int kHoldFrames = 20;
+			struct entry { T value; uint64_t weight; };
+			std::vector<entry> frame;
+			T ready {};
+			bool have = false;
+			T challenger {};
+			int lead = 0;
+
+			void add(const T& value, unsigned int prim_count)
+			{
+				const uint64_t weight = prim_count ? prim_count : 1;
+				for (auto& e : frame)
+				{
+					if (e.value.same_set(value))
+					{
+						e.weight += weight;
+						e.value = value;
+						return;
+					}
+				}
+				if (frame.size() < kMaxSets)
+					frame.push_back({ value, weight });
+			}
+
+			// Ends the frame; true once a set has been chosen.
+			bool close()
+			{
+				if (frame.empty())
+					return have;
+				const entry* best = &frame[0];
+				const entry* current = nullptr;
+				for (const auto& e : frame)
+				{
+					if (e.weight > best->weight)
+						best = &e;
+					if (have && e.value.same_set(ready))
+						current = &e;
+				}
+				if (!have || !current)
+				{
+					ready = best->value;
+					have = true;
+					lead = 0;
+				}
+				else if (best == current)
+				{
+					ready = current->value; // same set, latest values (c135)
+					lead = 0;
+				}
+				else
+				{
+					lead = lead > 0 && best->value.same_set(challenger) ? lead + 1 : 1;
+					challenger = best->value;
+					if (lead >= kHoldFrames)
+					{
+						ready = best->value;
+						lead = 0;
+					}
+					else
+						ready = current->value;
+				}
+				frame.clear();
+				return have;
+			}
 		};
 
 		struct grade_values
@@ -40,15 +124,14 @@ namespace comp::game::atmosphere
 		};
 
 		// Haze: the frame being drawn, the last complete frame, and what Remix has.
-		haze_values g_haze_frame;
+		dominant_set<haze_values> g_haze_sets;
 		unsigned int g_haze_frame_id = 0;
-		unsigned int g_haze_weight = 0;
 		haze_values g_haze_ready;
 		bool g_have_haze = false;
 		haze_values g_haze_sent;
 		bool g_haze_sent_once = false;
 
-		// Ambient: the probe-lit draw with the most primitives this frame, and the cube sent.
+		// Ambient: the probe-lit set most of the frame uses (dominant_set), and the cube sent.
 		struct ambient_source
 		{
 			IDirect3DBaseTexture9* probe = nullptr;
@@ -56,10 +139,11 @@ namespace comp::game::atmosphere
 			float upper[4] = {};      // c98
 			float lower[4] = {};      // c99
 			float shadow_dir[4] = {}; // c175, the sun's direction of travel
+
+			bool same_set(const ambient_source& o) const { return std::memcmp(this, &o, sizeof(ambient_source)) == 0; }
 		};
-		ambient_source g_ambient_frame;
+		dominant_set<ambient_source> g_ambient_sets;
 		unsigned int g_ambient_frame_id = 0;
-		unsigned int g_ambient_weight = 0;
 		ambient_source g_ambient_ready;
 		bool g_have_ambient = false;
 		std::array<std::array<float, 3>, 6> g_ambient_sent {};
@@ -67,12 +151,11 @@ namespace comp::game::atmosphere
 
 		void close_ambient_frame()
 		{
-			if (g_ambient_weight)
+			if (g_ambient_sets.close())
 			{
-				g_ambient_ready = g_ambient_frame;
+				g_ambient_ready = g_ambient_sets.ready;
 				g_have_ambient = true;
 			}
-			g_ambient_weight = 0;
 		}
 
 		// Grade: one ColAdj draw per frame.
@@ -85,12 +168,11 @@ namespace comp::game::atmosphere
 
 		void close_haze_frame()
 		{
-			if (g_haze_weight)
+			if (g_haze_sets.close())
 			{
-				g_haze_ready = g_haze_frame;
+				g_haze_ready = g_haze_sets.ready;
 				g_have_haze = true;
 			}
-			g_haze_weight = 0;
 		}
 
 		bool set(const char* key, const std::string& value)
@@ -307,12 +389,11 @@ namespace comp::game::atmosphere
 			close_haze_frame();
 			g_haze_frame_id = frame;
 		}
-		if (prim_count < g_haze_weight)
-			return;
-		g_haze_weight = prim_count ? prim_count : 1;
-		std::memcpy(g_haze_frame.ps, &ps_const[103 * 4], sizeof(g_haze_frame.ps));
-		std::memcpy(g_haze_frame.exposure, &ps_const[135 * 4], sizeof(g_haze_frame.exposure));
-		std::memcpy(g_haze_frame.fog_range, &vs_const[128 * 4], sizeof(g_haze_frame.fog_range));
+		haze_values v;
+		std::memcpy(v.ps, &ps_const[103 * 4], sizeof(v.ps));
+		std::memcpy(v.exposure, &ps_const[135 * 4], sizeof(v.exposure));
+		std::memcpy(v.fog_range, &vs_const[128 * 4], sizeof(v.fog_range));
+		g_haze_sets.add(v, prim_count);
 	}
 
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count)
@@ -324,14 +405,13 @@ namespace comp::game::atmosphere
 			close_ambient_frame();
 			g_ambient_frame_id = frame;
 		}
-		if (prim_count < g_ambient_weight)
-			return;
-		g_ambient_weight = prim_count ? prim_count : 1;
-		g_ambient_frame.probe = probe;
-		std::memcpy(g_ambient_frame.scale, &ps_const[86 * 4], sizeof(g_ambient_frame.scale));
-		std::memcpy(g_ambient_frame.upper, &ps_const[98 * 4], sizeof(g_ambient_frame.upper));
-		std::memcpy(g_ambient_frame.lower, &ps_const[99 * 4], sizeof(g_ambient_frame.lower));
-		std::memcpy(g_ambient_frame.shadow_dir, &ps_const[175 * 4], sizeof(g_ambient_frame.shadow_dir));
+		ambient_source a;
+		a.probe = probe;
+		std::memcpy(a.scale, &ps_const[86 * 4], sizeof(a.scale));
+		std::memcpy(a.upper, &ps_const[98 * 4], sizeof(a.upper));
+		std::memcpy(a.lower, &ps_const[99 * 4], sizeof(a.lower));
+		std::memcpy(a.shadow_dir, &ps_const[175 * 4], sizeof(a.shadow_dir));
+		g_ambient_sets.add(a, prim_count);
 	}
 
 	void observe_grade(const float* ps_const, IDirect3DDevice9* dev)

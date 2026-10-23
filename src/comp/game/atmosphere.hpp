@@ -9,15 +9,17 @@ namespace comp::game::atmosphere
 	// constants: PS c103 fog colour (w = fog strength), VS c128 fog start / 1 / range,
 	// PS c104 extinction, c105 surface tint (w = in-scatter scale), c106 1 / extinction,
 	// c107 Mie phase, c108 Rayleigh, c109 Mie, c110 sun colour (w = blend),
-	// c111 sun direction (w = distance scale), c135 exposure. The draw with the most
-	// primitives that reads them supplies the frame's values.
+	// c111 sun direction (w = distance scale), c135 exposure. These are per-region
+	// DrawParams, applied per draw; Remix gets the set most of the frame's geometry
+	// uses (weighted by primitives, held against brief challengers; atmosphere.cpp
+	// dominant_set).
 	//
 	// Ambient: the HemEnv shaders light a surface with irradianceProbe(N) * c86 (s11)
 	// plus lerp(c99, c98, N.y * 0.5 + 0.5); the probe holds the area's sky and its
 	// sun. The probe is split into a sky gradient and a sun lobe along the shadow
 	// light (c175): the sky plus the hemisphere ambient becomes the sky of Remix's
 	// bounce rays (rtx.ds1Ambient.*), the lobe the sun's colour in HemEnv maps
-	// (sun_light::set_probe_sun). The probe-lit draw with the most primitives supplies it.
+	// (sun_light::set_probe_sun). Chosen like the haze: the set most probe-lit geometry uses.
 	//
 	// The game lights in gamma space: no lit draw reads or writes sRGB, so a light
 	// value multiplies the texture's stored (gamma-encoded) colour. Remix lights in
