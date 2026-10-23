@@ -178,6 +178,36 @@ def running(image):
     return image.lower() in out.lower()
 
 
+def pids(image):
+    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    return [int(row.split('","')[1]) for row in out.splitlines() if row.lower().startswith(f'"{image.lower()}"')]
+
+
+def lower_host_priority(timeout=30.0):
+    """The host and its bridge run below the game's priority. The bridge raises itself to High, and
+    after a runtime change it compiles shaders on most cores for minutes: at High that starved the
+    game until DS1 kicked it to the title screen for low framerate (2026-10-23). Waits for the bridge
+    to come up (it starts with the host's device)."""
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    BELOW_NORMAL_PRIORITY_CLASS, PROCESS_SET_INFORMATION = 0x4000, 0x0200
+    lowered = set()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for image in (HOST_IN_GAME.name, "NvRemixBridge.exe"):
+            for pid in pids(image):
+                handle = kernel32.OpenProcess(PROCESS_SET_INFORMATION, False, pid)
+                if handle:
+                    if kernel32.SetPriorityClass(handle, BELOW_NORMAL_PRIORITY_CLASS):
+                        lowered.add(image)
+                    kernel32.CloseHandle(handle)
+        if len(lowered) == 2:
+            return True
+        time.sleep(0.25)
+    print(f"could not lower priority of: {sorted({HOST_IN_GAME.name, 'NvRemixBridge.exe'} - lowered)}")
+    return False
+
+
 def _wait_gone(image, timeout):
     deadline = time.monotonic() + timeout
     while running(image):
@@ -219,7 +249,8 @@ def cmd_host(args):
     deploy_game_proxy()
     source = ["--live"] if args.live else [str(cap)]
     subprocess.Popen([str(HOST_IN_GAME), *source, "--proxy", PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
-                     cwd=str(GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE)
+                     cwd=str(GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
+    lower_host_priority()
     print("host started, following the game live" if args.live else f"host started on {cap.name}")
     return 0
 
