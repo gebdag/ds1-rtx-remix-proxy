@@ -157,6 +157,7 @@ namespace comp
 		enabled = cfg.lights.enabled;
 		intensity_scale = cfg.lights.intensity_scale;
 		radius_scale = cfg.lights.radius_scale;
+		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		game::point_lights::set_resolve_entities(cfg.lights.resolve_entity_params);
 		game::map_lights::set_enabled(cfg.lights.synthesized_lights);
 
@@ -398,6 +399,7 @@ namespace comp
 		rows_.reserve(sources.size());
 
 		int active = 0;
+		std::string falloff_table;
 		for (const auto* src_ptr : sources)
 		{
 			const auto& src = *src_ptr;
@@ -415,16 +417,37 @@ namespace comp
 
 			// Remix takes radiance and an emitter size rather than a falloff distance, so
 			// the engine's dwindle end sets how much energy the light needs to still read
-			// at that range (inverse-square), and dwindle begin approximates the emitter.
+			// at that range (inverse-square). The emitter is the flame, emitter_radius_:
+			// dwindle begin is where the game's linear falloff starts (0.5 for a map
+			// torch), and a sphere that size around a wall-mounted flame sits half inside
+			// the wall and lights it as a bright disc. The light's intensity (radiance x
+			// emitter area) stays what it was with dwindle begin as the emitter.
 			const float range = std::max(0.01f, src.dwindle_end * radius_scale);
-			const float emitter = src.dwindle_begin > 0.01f
-				? src.dwindle_begin * radius_scale
-				: emitter_radius_;
-			const float falloff = range * range * kRadianceNormalisation;
+			const float emitter = emitter_radius_;
 			const auto* o = find_override(row.key);
 			const float* colour = o && o->recolour ? o->colour : row.colour;
-			const float scale = intensity_scale * falloff * mult;
-			const remixapi_Float3D radiance = { colour[0] * scale, colour[1] * scale, colour[2] * scale };
+			remixapi_Float3D radiance;
+			if (const bool game_falloff = game_falloff_ && kind_game_falloff_[static_cast<int>(row.kind)])
+			{
+				// The game's falloff (rtx.ds1Lights.falloffTable): Remix lights the surface with
+				// pi * radiance * att(d)^2.2, so radiance = colour^2.2 / pi gives (colour * att)^2.2,
+				// the game's light in linear space, at every distance.
+				const float scale = intensity_scale * mult / 3.14159265f;
+				radiance = {
+					std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
+					std::pow(std::max(colour[1], 0.0f), 2.2f) * scale,
+					std::pow(std::max(colour[2], 0.0f), 2.2f) * scale,
+				};
+				falloff_table += std::format("{:x}:{:.4g}:{:.4g};", light_hash_for_slot(src.slot),
+					std::max(0.0f, src.dwindle_begin) * radius_scale, range);
+			}
+			else
+			{
+				const float reference = src.dwindle_begin > 0.01f ? src.dwindle_begin * radius_scale : emitter;
+				const float falloff = range * range * kRadianceNormalisation * (reference * reference) / (emitter * emitter);
+				const float scale = intensity_scale * falloff * mult;
+				radiance = { colour[0] * scale, colour[1] * scale, colour[2] * scale };
+			}
 			const remixapi_Float3D position = {
 				src.x + manual_offset_[0],
 				src.y + manual_offset_[1],
@@ -471,6 +494,16 @@ namespace comp
 			row.drawn = light.handle != nullptr;
 			row.radiance[0] = radiance.x; row.radiance[1] = radiance.y; row.radiance[2] = radiance.z;
 			rows_.push_back(std::move(row));
+		}
+
+		// The lights with the game's falloff, when the set or a range changes (once: a runtime
+		// without the option refuses it, and asking again every frame would not change that).
+		if (falloff_table != falloff_table_sent_)
+		{
+			auto& bridge = shared::common::remix_api::get().m_bridge;
+			if (bridge.SetConfigVariable)
+				bridge.SetConfigVariable("rtx.ds1Lights.falloffTable", falloff_table.c_str());
+			falloff_table_sent_ = falloff_table;
 		}
 
 		// Drop lights not drawn this frame (slot went dark, filtered, disabled),
@@ -831,6 +864,7 @@ namespace comp
 		ok &= cfg.set_string("Lights", "Enabled", flag(enabled));
 		ok &= cfg.set_string("Lights", "IntensityScale", std::format("{:.3f}", intensity_scale));
 		ok &= cfg.set_string("Lights", "RadiusScale", std::format("{:.3f}", radius_scale));
+		ok &= cfg.set_string("Lights", "GameFalloff", game_falloff_ ? "1" : "0");
 		ok &= cfg.set_string("Lights", "ResolveEntityParams", flag(game::point_lights::resolve_entities()));
 		ok &= cfg.set_string("Lights", "SynthesizedLights", flag(game::map_lights::enabled()));
 
@@ -890,6 +924,7 @@ namespace comp
 		enabled = cfg.get_bool("Lights", "Enabled", true);
 		intensity_scale = cfg.get_float("Lights", "IntensityScale", 1.0f);
 		radius_scale = cfg.get_float("Lights", "RadiusScale", 1.0f);
+		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
 		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", true));
 
@@ -968,6 +1003,19 @@ namespace comp
 			if (k + 1 < static_cast<int>(kind::count))
 				ImGui::SameLine();
 		}
+		// Which of them Remix lights with the game's falloff instead of inverse square.
+		ImGui::Checkbox("Game falloff:", &game_falloff_);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Flat to dwindle begin, linear to zero at dwindle end, as the game lights them,\n"
+				"for the kinds ticked here. Default: the lights mounted in the map (torches,\n"
+				"lanterns, synthesized flames). Off: inverse square for every light.");
+		ImGui::BeginDisabled(!game_falloff_);
+		for (int k = static_cast<int>(kind::map_row); k < static_cast<int>(kind::count); ++k)
+		{
+			ImGui::SameLine();
+			ImGui::Checkbox(std::format("{}###falloff{}", kKindSource[k], k).c_str(), &kind_game_falloff_[k]);
+		}
+		ImGui::EndDisabled();
 
 		ImGui::SetNextItemWidth(180.0f);
 		ImGui::SliderFloat("Intensity scale", &intensity_scale, 0.01f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);

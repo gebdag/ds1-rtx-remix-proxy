@@ -190,6 +190,12 @@ namespace comp
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
 		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true };
+		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square: the
+		// lights the game mounts in the map (map rows, Bank entities, synthesized flames), whose
+		// inverse-square hot spot on the wall behind them is where they differ most from the game.
+		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, false, true, true, false, false, true, false };
+		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
+		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;
 		uint64_t solo_ = 0;
 		bool flash_selected_ = false;
