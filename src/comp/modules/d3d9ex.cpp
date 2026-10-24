@@ -37,6 +37,70 @@ namespace {
 		return shared::common::config::get().lookdev.enabled;
 	}
 
+	// Remix composites its frame at the first UI-marked draw, else at Present. DS1 draws its
+	// scene, then the HUD and subtitles, into its scene target, and a final 2D pass copies that
+	// target through the brightness LUT (s1, 256x1) to the back buffer. With UI on screen the
+	// composite lands in the scene target and the final pass shows it, as in the game. Without
+	// UI (cutscenes) nothing composited before Present, so the final pass reached Remix as scene
+	// geometry: vertex capture made its full-screen quad a plane in front of the camera, which
+	// darkened the view and cut across it near the camera. Before the frame's first draw into the
+	// back buffer, a degenerate UI-marked triangle drawn into the texture that draw presents makes
+	// Remix composite there; the final pass then runs after the composite, rasterized, as the
+	// game's own pass on the game's own image.
+	bool s_composite_requested = false; // this frame; reset at Present
+
+	void composite_before_backbuffer(IDirect3DDevice9* dev, UINT stride)
+	{
+		if (s_composite_requested)
+			return;
+		IDirect3DSurface9* rt = nullptr;
+		IDirect3DSurface9* back = nullptr;
+		dev->GetRenderTarget(0, &rt);
+		dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back);
+		const bool to_back = rt && rt == back;
+		if (back)
+			back->Release();
+		if (!to_back)
+		{
+			if (rt)
+				rt->Release();
+			return;
+		}
+		s_composite_requested = true;
+
+		IDirect3DBaseTexture9* source = nullptr;
+		IDirect3DSurface9* target = nullptr;
+		if (SUCCEEDED(dev->GetTexture(0, &source)) && source && source->GetType() == D3DRTYPE_TEXTURE)
+		{
+			D3DSURFACE_DESC src_desc {}, rt_desc {};
+			static_cast<IDirect3DTexture9*>(source)->GetLevelDesc(0, &src_desc);
+			rt->GetDesc(&rt_desc);
+			if ((src_desc.Usage & D3DUSAGE_RENDERTARGET) && src_desc.Width == rt_desc.Width && src_desc.Height == rt_desc.Height)
+				static_cast<IDirect3DTexture9*>(source)->GetSurfaceLevel(0, &target);
+		}
+		if (target)
+		{
+			constexpr DWORD kUiMarker = 0xD15D0011;
+			D3DVIEWPORT9 viewport {};
+			DWORD constant = 0;
+			dev->GetViewport(&viewport);
+			dev->GetTextureStageState(0, D3DTSS_CONSTANT, &constant);
+			dev->SetTexture(0, nullptr);
+			dev->SetRenderTarget(0, target);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUiMarker);
+			std::vector<BYTE> zero(3 * static_cast<size_t>(stride), 0);
+			dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, zero.data(), stride);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, constant);
+			dev->SetRenderTarget(0, rt);
+			dev->SetViewport(&viewport);
+			dev->SetTexture(0, source);
+			target->Release();
+		}
+		if (source)
+			source->Release();
+		rt->Release();
+	}
+
 	// DS1's particles (FRPG_Sfx_* pixel shaders) reach Remix as shader draws, and
 	// Remix builds their material from the stage-0 texture stage state, not the
 	// shader. Every sprite shader computes colour = texture * vertex colour and
@@ -352,6 +416,7 @@ namespace comp
 		auto& cfg = shared::common::config::get();
 		cfg.postfx.pass_count = s_postfx_pass_idx;
 		s_postfx_pass_idx = 0;
+		s_composite_requested = false;
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
 		rt_tracker::on_present();
@@ -909,6 +974,7 @@ namespace comp
 			if (c.ffp.skip_postfx && (c.postfx.skip_passes.empty() || c.postfx.skip_passes.contains(idx)))
 				return S_OK;
 		}
+		composite_before_backbuffer(m_pIDirect3DDevice9, VertexStreamZeroStride);
 		const auto hr = m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		return hr;
 	}
