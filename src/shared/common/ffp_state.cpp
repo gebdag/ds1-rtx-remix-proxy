@@ -164,9 +164,14 @@ namespace shared::common
 		ffp_active_ = false;
 
 		cur_vs_viewproj_base_ = -1;
+		cur_vs_exposure_ = false;
 		if (shader)
+		{
 			if (auto it = vs_viewproj_base_.find(shader); it != vs_viewproj_base_.end())
 				cur_vs_viewproj_base_ = it->second;
+			if (auto it = vs_exposure_.find(shader); it != vs_exposure_.end())
+				cur_vs_exposure_ = it->second;
+		}
 	}
 
 	namespace
@@ -216,10 +221,49 @@ namespace shared::common
 		}
 	}
 
+	namespace
+	{
+		// True when the vertex shader divides by c159.w (rcp of c159 with the w component). Half of
+		// DS1's sprite vertex shaders scale the sprite colour by c159.z / c159.w, the game's exposure
+		// c135.x / c135.y once more, on top of the pixel shader's (FRPG_Sfx_SimpleSprite_Base.fxh).
+		bool parse_vs_divides_c159w(const DWORD* code)
+		{
+			if (!code || (code[0] & 0xFFFF0000) != 0xFFFE0000)
+				return false;
+			constexpr size_t max_tokens = 65536;
+			size_t i = 1;
+			while (i < max_tokens)
+			{
+				const DWORD tok = code[i];
+				if (tok == 0x0000FFFF)
+					break;
+				const DWORD opcode = tok & 0xFFFF;
+				if (opcode == 0xFFFE) // D3DSIO_COMMENT
+				{
+					i += 1 + ((tok >> 16) & 0x7FFF);
+					continue;
+				}
+				const DWORD param_count = (tok >> 24) & 0x0F;
+				if (opcode == 6 /* D3DSIO_RCP */ && param_count >= 2)
+				{
+					const DWORD src = code[i + 2];
+					const DWORD reg_type = ((src >> 28) & 0x7) | ((src >> 8) & 0x18);
+					if (reg_type == 2 /* D3DSPR_CONST */ && (src & 0x7FF) == 159 && ((src >> 16) & 0x3) == 3)
+						return true;
+				}
+				i += 1 + param_count;
+			}
+			return false;
+		}
+	}
+
 	void ffp_state::on_create_vertex_shader(IDirect3DVertexShader9* shader, const DWORD* bytecode)
 	{
 		if (shader)
+		{
 			vs_viewproj_base_[shader] = parse_vs_viewproj_base(bytecode);
+			vs_exposure_[shader] = parse_vs_divides_c159w(bytecode);
+		}
 	}
 
 	void ffp_state::on_set_pixel_shader(IDirect3DPixelShader9* shader)
@@ -234,6 +278,8 @@ namespace shared::common
 		cur_ps_is_water_surface_ = false;
 		cur_ps_light_flags_ = 0;
 		cur_ps_sfx_class_ = sfx_class::None;
+		cur_ps_sfx_colour_scale_ = 1.0f;
+		cur_ps_reads_exposure_ = false;
 		cur_ps_draw_tint_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		if (shader)
@@ -246,6 +292,10 @@ namespace shared::common
 				cur_ps_sampler_mask_ = it->second;
 			if (auto it = ps_sfx_class_.find(shader); it != ps_sfx_class_.end())
 				cur_ps_sfx_class_ = it->second;
+			if (auto it = ps_sfx_colour_scale_.find(shader); it != ps_sfx_colour_scale_.end())
+				cur_ps_sfx_colour_scale_ = it->second;
+			if (auto it = ps_reads_exposure_.find(shader); it != ps_reads_exposure_.end())
+				cur_ps_reads_exposure_ = it->second;
 			if (auto it = ps_water_surface_.find(shader); it != ps_water_surface_.end())
 				cur_ps_is_water_surface_ = it->second;
 			if (auto it = ps_light_flags_.find(shader); it != ps_light_flags_.end())
@@ -330,14 +380,17 @@ namespace shared::common
 			: hash == water_wave_hash ? swamp_pass::WaveRing
 			: swamp_pass::None;
 
-		struct sfx_entry { uint32_t hash; sfx_class cls; const char* name; };
+		struct sfx_entry { uint32_t hash; sfx_class cls; float colour_scale; const char* name; };
 		static constexpr sfx_entry sfx_shaders[] = {
 #include "sfx_shaders.inc"
 		};
 		sfx_class sfx = sfx_class::None;
+		float sfx_scale = 1.0f;
 		for (const auto& e : sfx_shaders)
-			if (e.hash == hash) { sfx = e.cls; break; }
+			if (e.hash == hash) { sfx = e.cls; sfx_scale = e.colour_scale; break; }
 		ps_sfx_class_[shader] = sfx;
+		ps_sfx_colour_scale_[shader] = sfx_scale;
+		ps_reads_exposure_[shader] = ps_reads_float_const(bytecode, 135);
 		if (is_water)
 			log("WATER", std::format("water surface PS registered ptr={:#x} hash={:#010x}",
 				reinterpret_cast<uintptr_t>(shader), hash));
@@ -1747,6 +1800,44 @@ namespace shared::common
 				}
 		const bool masked = mask[0] != 1.0f || mask[1] != 1.0f || mask[2] != 1.0f || mask[3] != 1.0f;
 
+		// The colour the sprite shaders put on tex * vcolor besides the exposure (FRPG_Sfx_Pre2.fxh,
+		// FRPG_Sfx_SimpleSprite_Base.fxh), per vertex from the game's constants:
+		//   colour: * scale (CalcGetFogCol's 0.5) * (1 - PS c4.w * fogW) * scatter
+		//   alpha:  * (1 - PS c4.w * fogZ)
+		//   r = (clip w - VS c2.x) * VS c2.y, fogZ = sat(r * VS c159.x), fogW = sat(r * VS c159.y)
+		//   scatter = (exp2(-|VS c158 - pos| * VS c129 * VS c136.w * 2.0813689) * VS c130 - 1)
+		//             * (VS c135.w * VS c159.y) + 1
+		// Fog also adds PS c4.rgb * c4.w * fogW * scatter and scattering adds in-scattered light;
+		// those additive terms have no counterpart in Remix's sprite material (only while the
+		// area's sprite fog or scattering is on). The exposure goes to the runtime as a power
+		// (see kUnlitMarker below), so Remix applies its own metered exposure to the sprite.
+		const bool game_colour = unlit && cur_ps_sfx_colour_scale_ != 1.0f;
+		const float* vc = vs_const_;
+		const float* pc = ps_const_;
+		auto vertex_colour = [&](const float* pos, DWORD colour)
+		{
+			const float* w_row = &vc[(base + 3) * 4];
+			const float clip_w = w_row[0] * pos[0] + w_row[1] * pos[1] + w_row[2] * pos[2] + w_row[3];
+			const float r = (clip_w - vc[2 * 4 + 0]) * vc[2 * 4 + 1];
+			auto sat = [](float x) { return std::clamp(x, 0.0f, 1.0f); };
+			const float fog_z = sat(r * vc[159 * 4 + 0]);
+			const float fog_w = sat(r * vc[159 * 4 + 1]);
+			const float dx = vc[158 * 4 + 0] - pos[0], dy = vc[158 * 4 + 1] - pos[1], dz = vc[158 * 4 + 2] - pos[2];
+			const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+			const float scatter_weight = vc[135 * 4 + 3] * vc[159 * 4 + 1];
+			const float colour_scale = cur_ps_sfx_colour_scale_ * (1.0f - pc[4 * 4 + 3] * fog_w);
+			float k[4];
+			for (int c = 0; c < 3; c++)
+			{
+				const float ext = std::exp2(-dist * vc[129 * 4 + c] * vc[136 * 4 + 3] * 2.08136892f);
+				k[c] = colour_scale * ((ext * vc[130 * 4 + c] - 1.0f) * scatter_weight + 1.0f);
+			}
+			k[3] = 1.0f - pc[4 * 4 + 3] * fog_z;
+			// D3DCOLOR is ARGB: alpha in 24-31, red 16-23, green 8-15, blue 0-7.
+			auto channel = [&](int shift, float m) { return static_cast<DWORD>(std::clamp(((colour >> shift) & 0xFF) * m + 0.5f, 0.0f, 255.0f)) << shift; };
+			return channel(24, k[3]) | channel(16, k[0]) | channel(8, k[1]) | channel(0, k[2]);
+		};
+
 		for (UINT v = 0; v < count; v++)
 		{
 			const unsigned char* sv = src + static_cast<size_t>(v) * stride;
@@ -1759,6 +1850,8 @@ namespace shared::common
 				auto channel = [&](int shift, float m) { return static_cast<DWORD>(((c >> shift) & 0xFF) * m + 0.5f) << shift; };
 				out[v].color = channel(24, mask[3]) | channel(16, mask[0]) | channel(8, mask[1]) | channel(0, mask[2]);
 			}
+			if (game_colour)
+				out[v].color = vertex_colour(pos, out[v].color);
 			if (uv_float)
 			{
 				const auto* tc = reinterpret_cast<const float*>(sv + cur_decl_texcoord_off_);
@@ -1793,9 +1886,13 @@ namespace shared::common
 		}
 		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled). Stage 0's constant is
 		// inert in rasterization: no stage argument references D3DTA_CONSTANT.
+		// 0xD15D0E21 / 0xD15D0E22 also tell how many times the game's shaders apply the exposure
+		// c135.x / c135.y to the sprite colour: once in a pixel shader that reads c135, once more in
+		// a vertex shader that scales by c159.z / c159.w. Remix applies its own exposure that often.
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
+		const int exposure_power = game_colour ? (cur_ps_reads_exposure_ ? 1 : 0) + (cur_vs_exposure_ ? 1 : 0) : 0;
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, exposure_power ? 0xD15D0E20u + exposure_power : kUnlitMarker);
 		// Some particle layers (the Crystal Cave fog) are drawn into a reduced-resolution
 		// buffer that a filter pass later upsamples onto the frame. Remix ray-traces only
 		// draws aimed at a back-buffer-sized target, and the upsample is a shader draw it

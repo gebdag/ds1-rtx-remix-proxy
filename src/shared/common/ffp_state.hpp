@@ -459,6 +459,9 @@ namespace shared::common
 		// First register of each vertex shader's view-projection (see on_create_vertex_shader).
 		std::unordered_map<IDirect3DVertexShader9*, int> vs_viewproj_base_;
 		int cur_vs_viewproj_base_ = -1;
+		// Vertex shaders that scale the sprite colour by c159.z / c159.w (the game's exposure).
+		std::unordered_map<IDirect3DVertexShader9*, bool> vs_exposure_;
+		bool cur_vs_exposure_ = false;
 		// The map camera's c0-c3 rows as of the last View/Proj decomposition, and the
 		// sprite path's repacked vertices.
 		float map_viewproj_rows_[16] = {};
@@ -478,6 +481,11 @@ namespace shared::common
 		// Particle class of each pixel shader (see cur_ps_sfx_class).
 		std::unordered_map<IDirect3DPixelShader9*, sfx_class> ps_sfx_class_;
 		sfx_class cur_ps_sfx_class_ = sfx_class::None;
+		// Its colour scale before fog (sfx_shaders.inc) and whether it applies the exposure c135.
+		std::unordered_map<IDirect3DPixelShader9*, float> ps_sfx_colour_scale_;
+		float cur_ps_sfx_colour_scale_ = 1.0f;
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_reads_exposure_;
+		bool cur_ps_reads_exposure_ = false;
 
 		// Solid-color fallback albedo for water draws with no stable static
 		// texture bound. Gives Remix a constant texture hash to remap.
