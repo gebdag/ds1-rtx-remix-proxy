@@ -1800,42 +1800,17 @@ namespace shared::common
 				}
 		const bool masked = mask[0] != 1.0f || mask[1] != 1.0f || mask[2] != 1.0f || mask[3] != 1.0f;
 
-		// The colour the sprite shaders put on tex * vcolor besides the exposure (FRPG_Sfx_Pre2.fxh,
-		// FRPG_Sfx_SimpleSprite_Base.fxh), per vertex from the game's constants:
-		//   colour: * scale (CalcGetFogCol's 0.5) * (1 - PS c4.w * fogW) * scatter
-		//   alpha:  * (1 - PS c4.w * fogZ)
-		//   r = (clip w - VS c2.x) * VS c2.y, fogZ = sat(r * VS c159.x), fogW = sat(r * VS c159.y)
-		//   scatter = (exp2(-|VS c158 - pos| * VS c129 * VS c136.w * 2.0813689) * VS c130 - 1)
-		//             * (VS c135.w * VS c159.y) + 1
-		// Fog also adds PS c4.rgb * c4.w * fogW * scatter and scattering adds in-scattered light;
-		// those additive terms have no counterpart in Remix's sprite material (only while the
-		// area's sprite fog or scattering is on). The exposure goes to the runtime as a power
-		// (see kUnlitMarker below), so Remix applies its own metered exposure to the sprite.
+		// The scale the sprite shaders' fog step puts on tex * vcolor (CalcGetFogCol's 0.5, from
+		// sfx_shaders.inc). Their fog and scattering are not folded in: the DS1 look's scene pass
+		// already hazes the composite, sprites included (with the haze of the surface behind them,
+		// not the sprite's own: still open). The exposure goes to the runtime as a power (see
+		// kUnlitMarker below), so Remix applies its own metered exposure to the sprite.
 		const bool game_colour = unlit && cur_ps_sfx_colour_scale_ != 1.0f;
-		const float* vc = vs_const_;
-		const float* pc = ps_const_;
-		auto vertex_colour = [&](const float* pos, DWORD colour)
+		auto vertex_colour = [&](DWORD colour)
 		{
-			const float* w_row = &vc[(base + 3) * 4];
-			const float clip_w = w_row[0] * pos[0] + w_row[1] * pos[1] + w_row[2] * pos[2] + w_row[3];
-			const float r = (clip_w - vc[2 * 4 + 0]) * vc[2 * 4 + 1];
-			auto sat = [](float x) { return std::clamp(x, 0.0f, 1.0f); };
-			const float fog_z = sat(r * vc[159 * 4 + 0]);
-			const float fog_w = sat(r * vc[159 * 4 + 1]);
-			const float dx = vc[158 * 4 + 0] - pos[0], dy = vc[158 * 4 + 1] - pos[1], dz = vc[158 * 4 + 2] - pos[2];
-			const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-			const float scatter_weight = vc[135 * 4 + 3] * vc[159 * 4 + 1];
-			const float colour_scale = cur_ps_sfx_colour_scale_ * (1.0f - pc[4 * 4 + 3] * fog_w);
-			float k[4];
-			for (int c = 0; c < 3; c++)
-			{
-				const float ext = std::exp2(-dist * vc[129 * 4 + c] * vc[136 * 4 + 3] * 2.08136892f);
-				k[c] = colour_scale * ((ext * vc[130 * 4 + c] - 1.0f) * scatter_weight + 1.0f);
-			}
-			k[3] = 1.0f - pc[4 * 4 + 3] * fog_z;
 			// D3DCOLOR is ARGB: alpha in 24-31, red 16-23, green 8-15, blue 0-7.
-			auto channel = [&](int shift, float m) { return static_cast<DWORD>(std::clamp(((colour >> shift) & 0xFF) * m + 0.5f, 0.0f, 255.0f)) << shift; };
-			return channel(24, k[3]) | channel(16, k[0]) | channel(8, k[1]) | channel(0, k[2]);
+			auto channel = [&](int shift) { return static_cast<DWORD>(((colour >> shift) & 0xFF) * cur_ps_sfx_colour_scale_ + 0.5f) << shift; };
+			return (colour & 0xFF000000u) | channel(16) | channel(8) | channel(0);
 		};
 
 		for (UINT v = 0; v < count; v++)
@@ -1851,7 +1826,7 @@ namespace shared::common
 				out[v].color = channel(24, mask[3]) | channel(16, mask[0]) | channel(8, mask[1]) | channel(0, mask[2]);
 			}
 			if (game_colour)
-				out[v].color = vertex_colour(pos, out[v].color);
+				out[v].color = vertex_colour(out[v].color);
 			if (uv_float)
 			{
 				const auto* tc = reinterpret_cast<const float*>(sv + cur_decl_texcoord_off_);
