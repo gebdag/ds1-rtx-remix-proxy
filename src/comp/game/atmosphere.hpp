@@ -10,9 +10,11 @@ namespace comp::game::atmosphere
 	// PS c104 extinction, c105 surface tint (w = in-scatter scale), c106 1 / extinction,
 	// c107 Mie phase, c108 Rayleigh, c109 Mie, c110 sun colour (w = blend),
 	// c111 sun direction (w = distance scale), c135 exposure. These are per-region
-	// DrawParams, applied per draw; Remix gets the set most of the frame's geometry
-	// uses (weighted by primitives, held against brief challengers; atmosphere.cpp
-	// dominant_set).
+	// DrawParams, applied per draw, so Remix gets them per draw too: each distinct set
+	// takes a slot (1-15), each draw is tagged with its set's slot (tag_haze_set), and
+	// the runtime hazes a pixel with its surface's set (rtx.ds1Haze.sets). The single
+	// set most of the frame's geometry uses (weighted by primitives, held against brief
+	// challengers; atmosphere.cpp dominant_set) remains for untagged surfaces.
 	//
 	// Ambient: the HemEnv shaders light a surface with irradianceProbe(N) * c86 (s11)
 	// plus lerp(c99, c98, N.y * 0.5 + 0.5); the probe holds the area's sky and its
@@ -32,6 +34,11 @@ namespace comp::game::atmosphere
 
 	// A draw whose pixel shader reads the haze constants (PS_HAZE).
 	void observe_haze(const float* ps_const, const float* vs_const, unsigned int frame, unsigned int prim_count);
+
+	// Tags the next draw with the slot of its haze set (stage 7 D3DTSS_CONSTANT, 0xD15DA000 | slot),
+	// or untags it when it has no haze tail (has_haze false). Every indexed draw goes through
+	// here, so no draw inherits another's tag.
+	void tag_haze_set(IDirect3DDevice9* dev, bool has_haze, const float* ps_const, const float* vs_const, unsigned int frame);
 
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);

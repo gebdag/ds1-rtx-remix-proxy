@@ -131,6 +131,26 @@ namespace comp::game::atmosphere
 		haze_values g_haze_sent;
 		bool g_haze_sent_once = false;
 
+		// Per-draw haze sets: every distinct set the frame's draws carry holds a slot (1-15, the
+		// 4 bits the runtime keeps per surface) until no draw has used it for two frames. A set
+		// keeps its slot while it is in use, so a draw's tag always names values Remix already
+		// has, except in a set's first frames: its values go out at the next frame_update and
+		// Remix applies options at its frame end, so a new slot is tagged only after
+		// kSlotLatency frames; until then its draws are untagged (the frame's single set).
+		struct haze_slot
+		{
+			haze_values v;
+			unsigned int first_frame = 0;
+			unsigned int last_frame = 0;
+			bool used = false;
+		};
+		constexpr int kHazeSlots = 15;
+		constexpr unsigned int kSlotLatency = 3;
+		constexpr DWORD kHazeMarker = 0xD15DA000;
+		haze_slot g_slots[kHazeSlots + 1]; // [0] unused
+		bool g_slots_dirty = false;
+		DWORD g_tag_set = ~0u; // the stage 7 constant as last set; ~0 = unknown (set it)
+
 		// Ambient: the probe-lit set most of the frame uses (dominant_set), and the cube sent.
 		struct ambient_source
 		{
@@ -396,6 +416,50 @@ namespace comp::game::atmosphere
 		g_haze_sets.add(v, prim_count);
 	}
 
+	void tag_haze_set(IDirect3DDevice9* dev, bool has_haze, const float* ps_const, const float* vs_const, unsigned int frame)
+	{
+		DWORD tag = 0;
+		if (has_haze && ps_const && vs_const)
+		{
+			haze_values v;
+			std::memcpy(v.ps, &ps_const[103 * 4], sizeof(v.ps));
+			std::memcpy(v.fog_range, &vs_const[128 * 4], sizeof(v.fog_range));
+			int slot = 0;
+			for (int i = 1; i <= kHazeSlots && !slot; i++)
+				if (g_slots[i].used && g_slots[i].v.same_set(v))
+					slot = i;
+			if (!slot)
+			{
+				// A free slot, else the one idle longest among those no draw used this frame or the last.
+				for (int i = 1; i <= kHazeSlots && !slot; i++)
+					if (!g_slots[i].used)
+						slot = i;
+				if (!slot)
+				{
+					for (int i = 1; i <= kHazeSlots; i++)
+						if (g_slots[i].last_frame + 1 < frame && (!slot || g_slots[i].last_frame < g_slots[slot].last_frame))
+							slot = i;
+				}
+				if (slot)
+				{
+					g_slots[slot] = { v, frame, frame, true };
+					g_slots_dirty = true;
+				}
+			}
+			if (slot)
+			{
+				g_slots[slot].last_frame = frame;
+				if (frame - g_slots[slot].first_frame >= kSlotLatency)
+					tag = kHazeMarker | static_cast<DWORD>(slot);
+			}
+		}
+		if (tag != g_tag_set)
+		{
+			dev->SetTextureStageState(7, D3DTSS_CONSTANT, tag);
+			g_tag_set = tag;
+		}
+	}
+
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count)
 	{
 		if (!ps_const || !probe)
@@ -574,6 +638,25 @@ namespace comp::game::atmosphere
 			g_haze_sent = g_haze_ready;
 			g_haze_sent_once = true;
 		}
+		// The per-draw sets by slot, when a slot was (re)assigned: "slot c103..c111 c128.x c128.y;".
+		if (g_slots_dirty)
+		{
+			std::string s;
+			for (int i = 1; i <= kHazeSlots; i++)
+			{
+				if (!g_slots[i].used)
+					continue;
+				s += std::to_string(i);
+				for (const auto& reg : g_slots[i].v.ps)
+					for (const float c : reg)
+						s += std::format(" {}", c);
+				s += std::format(" {} {};", g_slots[i].v.fog_range[0], g_slots[i].v.fog_range[1]);
+			}
+			if (set("rtx.ds1Haze.sets", s))
+				g_slots_dirty = false;
+		}
+		// Re-assert the draw tag once per frame (a device reset clears texture stage states).
+		g_tag_set = ~0u;
 		// The adaptation constants and c135.y, when they change (c54.x moves with the frame time).
 		if (const float divisor = g_haze_ready.exposure[1]; g_have_grade && g_have_haze && g_c54[3] > 0.0f && divisor > 0.0f &&
 			(std::memcmp(g_c54, g_c54_sent, sizeof(g_c54)) != 0 || divisor != g_divisor_sent))

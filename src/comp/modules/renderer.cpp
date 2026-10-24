@@ -171,6 +171,10 @@ namespace comp
 			return S_OK;
 		}
 
+		// The draw's own haze set, as for indexed draws (so it never inherits the last one's tag).
+		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
+			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
+
 		auto hr = S_OK;
 
 		/*
@@ -353,6 +357,9 @@ namespace comp
 		// Draws that end with the game's fog/scattering tail supply the haze constants.
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE))
 			game::atmosphere::observe_haze(ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count(), primCount);
+		// ... and Remix hazes the draw's surfaces with its own set, as the game does.
+		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
+			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
 
 		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
