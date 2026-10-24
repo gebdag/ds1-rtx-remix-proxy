@@ -134,18 +134,19 @@ namespace comp::game::atmosphere
 		// Per-draw haze sets: every distinct set the frame's draws carry holds a slot (1-15, the
 		// 4 bits the runtime keeps per surface) until no draw has used it for two frames. A set
 		// keeps its slot while it is in use, so a draw's tag always names values Remix already
-		// has, except in a set's first frames: its values go out at the next frame_update and
-		// Remix applies options at its frame end, so a new slot is tagged only after
-		// kSlotLatency frames; until then its draws are untagged (the frame's single set).
+		// has, except in a set's first frames: its values go out at the next frame_update, once
+		// Remix accepted them, and Remix applies options at the end of the frame that receives
+		// them, so a slot is tagged only kSlotLatency frames after its values were sent; until
+		// then its draws are untagged (the frame's single set).
 		struct haze_slot
 		{
 			haze_values v;
-			unsigned int first_frame = 0;
+			unsigned int sent_frame = 0; // frame its values went to Remix, 0 = not yet
 			unsigned int last_frame = 0;
 			bool used = false;
 		};
 		constexpr int kHazeSlots = 15;
-		constexpr unsigned int kSlotLatency = 3;
+		constexpr unsigned int kSlotLatency = 2;
 		constexpr DWORD kHazeMarker = 0xD15DA000;
 		haze_slot g_slots[kHazeSlots + 1]; // [0] unused
 		bool g_slots_dirty = false;
@@ -442,14 +443,14 @@ namespace comp::game::atmosphere
 				}
 				if (slot)
 				{
-					g_slots[slot] = { v, frame, frame, true };
+					g_slots[slot] = { v, 0, frame, true };
 					g_slots_dirty = true;
 				}
 			}
 			if (slot)
 			{
 				g_slots[slot].last_frame = frame;
-				if (frame - g_slots[slot].first_frame >= kSlotLatency)
+				if (g_slots[slot].sent_frame && frame - g_slots[slot].sent_frame >= kSlotLatency)
 					tag = kHazeMarker | static_cast<DWORD>(slot);
 			}
 		}
@@ -653,7 +654,12 @@ namespace comp::game::atmosphere
 				s += std::format(" {} {};", g_slots[i].v.fog_range[0], g_slots[i].v.fog_range[1]);
 			}
 			if (set("rtx.ds1Haze.sets", s))
+			{
 				g_slots_dirty = false;
+				for (int i = 1; i <= kHazeSlots; i++)
+					if (g_slots[i].used && !g_slots[i].sent_frame)
+						g_slots[i].sent_frame = std::max(frame, 1u); // 0 means unsent
+			}
 		}
 		// Re-assert the draw tag once per frame (a device reset clears texture stage states).
 		g_tag_set = ~0u;

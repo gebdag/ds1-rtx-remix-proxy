@@ -51,7 +51,8 @@ namespace {
 
 	void composite_before_backbuffer(IDirect3DDevice9* dev, UINT stride)
 	{
-		if (s_composite_requested)
+		// The same UI marking the HUD path uses; without it Remix composites at Present.
+		if (s_composite_requested || !shared::common::config::get().hud.mark_ui_draws)
 			return;
 		IDirect3DSurface9* rt = nullptr;
 		IDirect3DSurface9* back = nullptr;
@@ -82,8 +83,10 @@ namespace {
 		{
 			constexpr DWORD kUiMarker = 0xD15D0011;
 			D3DVIEWPORT9 viewport {};
+			RECT scissor {};
 			DWORD constant = 0;
 			dev->GetViewport(&viewport);
+			dev->GetScissorRect(&scissor);
 			dev->GetTextureStageState(0, D3DTSS_CONSTANT, &constant);
 			dev->SetTexture(0, nullptr);
 			dev->SetRenderTarget(0, target);
@@ -91,8 +94,10 @@ namespace {
 			std::vector<BYTE> zero(3 * static_cast<size_t>(stride), 0);
 			dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, zero.data(), stride);
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, constant);
+			// SetRenderTarget resets the viewport and the scissor rect to the whole target.
 			dev->SetRenderTarget(0, rt);
 			dev->SetViewport(&viewport);
+			dev->SetScissorRect(&scissor);
 			dev->SetTexture(0, source);
 			target->Release();
 		}
@@ -941,6 +946,8 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		// UP draws (sprites, UI, post passes) carry no haze set of their own.
+		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
 			comp::game::atmosphere::observe_grade(ffp.ps_const_data(), m_pIDirect3DDevice9);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
@@ -992,6 +999,7 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitiveUP, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			HRESULT hr = S_OK;

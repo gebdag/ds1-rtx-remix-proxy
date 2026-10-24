@@ -36,8 +36,8 @@ namespace comp::game::atmosphere
 	void observe_haze(const float* ps_const, const float* vs_const, unsigned int frame, unsigned int prim_count);
 
 	// Tags the next draw with the slot of its haze set (stage 7 D3DTSS_CONSTANT, 0xD15DA000 | slot),
-	// or untags it when it has no haze tail (has_haze false). Every indexed draw goes through
-	// here, so no draw inherits another's tag.
+	// or untags it when it has no haze tail (has_haze false). Every draw goes through here
+	// (renderer for DIP/DP, d3d9ex for the UP draws), so no draw inherits another's tag.
 	void tag_haze_set(IDirect3DDevice9* dev, bool has_haze, const float* ps_const, const float* vs_const, unsigned int frame);
 
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
