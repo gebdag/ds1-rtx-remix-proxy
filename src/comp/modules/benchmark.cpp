@@ -392,7 +392,7 @@ namespace comp::benchmark
 			"go to rtx_comp\\benchmark_<timestamp>.txt.");
 		ImGui::TextWrapped(
 			"Stand still in a representative in-game scene, disable Remix vsync in "
-			"rtx.conf, and don't touch settings during the run. F7 starts/cancels.");
+			"rtx.conf, and don't touch settings during the run.");
 		ImGui::Spacing();
 
 		ImGui::BeginDisabled(s_running);

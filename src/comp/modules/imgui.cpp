@@ -80,14 +80,6 @@ namespace comp
 				d->toggle_manual_capture();
 		}
 
-		if (message_type == WM_KEYUP && wparam == VK_F7)
-		{
-			if (benchmark::is_running())
-				benchmark::cancel();
-			else
-				benchmark::start();
-		}
-
 		// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.
 		if (message_type == WM_KEYUP && wparam == VK_F8 && !shared::common::config::get().lookdev.enabled)
 			game::vanilla_view::request_toggle();
@@ -312,7 +304,7 @@ namespace comp
 			SPACEY8;
 		}
 
-		if (ImGui::CollapsingHeader("Benchmark (option-cost sweep, F7)"))
+		if (ImGui::CollapsingHeader("Benchmark (option-cost sweep)"))
 		{
 			SPACEY8;
 			benchmark::tab_imgui();
