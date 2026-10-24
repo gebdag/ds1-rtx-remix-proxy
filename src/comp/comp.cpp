@@ -15,6 +15,7 @@
 
 #include "game/camera.hpp"
 #include "game/atmosphere.hpp"
+#include "game/swamp.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
@@ -48,6 +49,9 @@ namespace comp
 
 		// Hand the game's haze and grade to Remix (rtx.ds1Haze.*, rtx.ds1grading.game*)
 		game::atmosphere::frame_update(shared::common::ffp_state::get().frame_count());
+
+		// The swamp's constants and the last frame's wake rings (rtx.ds1Swamp.*).
+		game::swamp::frame_update(shared::common::ffp_state::get().frame_count());
 
 		// Sync camera override flags to ffp_state each frame
 		{

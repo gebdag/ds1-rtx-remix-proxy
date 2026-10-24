@@ -30,8 +30,9 @@ namespace comp::game::sun_light
 			candidate c[kMaxCandidates];
 			int count = 0;
 			unsigned int draws = 0;
+			unsigned int total_weight = 0;
 
-			void clear() { count = 0; draws = 0; }
+			void clear() { count = 0; draws = 0; total_weight = 0; }
 
 			// key_regs: the float4s that make a value distinct; stored: the
 			// registers copied into the candidate (n float4s from store_from).
@@ -39,6 +40,7 @@ namespace comp::game::sun_light
 				int store_from, int store_n, unsigned int weight)
 			{
 				++draws;
+				total_weight += weight;
 				int key[6] = {};
 				int k = 0;
 				for (int reg : key_regs)
@@ -117,7 +119,14 @@ namespace comp::game::sun_light
 			g_state.dir3_candidates = g_map_dir3.count + g_chr_dir3.count;
 
 			const candidate* shadow = g_shadow.best();
+			// Map geometry lights with the probe (HemEnv): across every capture the only non-skinned
+			// draws reading the key light c92/c95 are effect quads (hit flashes, s05210/s05214, 2
+			// triangles each, c95 = 0.8 grey straight down). Their vote turned the sun ~30x brighter for
+			// the frames a hit effect was on screen. A map vote counts only when its geometry is at
+			// least 1% of the primitives that vote the shadow direction (nearly all map geometry).
 			const candidate* map = g_map_dir3.best();
+			if (map && static_cast<unsigned long long>(map->weight) * 100ull < g_shadow.total_weight)
+				map = nullptr;
 			const candidate* chr = g_chr_dir3.best();
 			const candidate* dir3 = map ? map : chr; // regs[0] = c92
 

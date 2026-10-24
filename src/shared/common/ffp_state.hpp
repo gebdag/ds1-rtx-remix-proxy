@@ -279,6 +279,11 @@ namespace shared::common
 		// surface shaders (FRPG_Water_Env*/Reflect*, FRPG_WWS_Dif*).
 		bool cur_ps_is_water_surface() const { return cur_ps_is_water_surface_; }
 
+		// DS1's FRPG_Snow passes (the Blighttown swamp), by pixel shader: the surface, the height
+		// field it reads, and the wake rings stamped into that field (comp/game/swamp.hpp).
+		enum class swamp_pass : uint8_t { None, Surface, HeightMap, WaveRing };
+		swamp_pass cur_ps_swamp_pass() const { return cur_ps_swamp_pass_; }
+
 		// Sampler-declaration bitmask of the current pixel shader (bit n = sn).
 		uint32_t cur_ps_sampler_mask() const { return cur_ps_sampler_mask_; }
 
@@ -442,6 +447,10 @@ namespace shared::common
 		// renderer routes them through a dedicated water path.
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_water_surface_;
 		bool cur_ps_is_water_surface_ = false;
+
+		// FRPG_Snow passes, by FNV-1a bytecode hash at creation (see cur_ps_swamp_pass).
+		std::unordered_map<IDirect3DPixelShader9*, swamp_pass> ps_swamp_pass_;
+		swamp_pass cur_ps_swamp_pass_ = swamp_pass::None;
 
 		// Light constants each pixel shader reads (see cur_ps_light_flags).
 		std::unordered_map<IDirect3DPixelShader9*, uint32_t> ps_light_flags_;

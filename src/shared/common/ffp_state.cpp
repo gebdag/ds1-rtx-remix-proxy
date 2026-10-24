@@ -235,8 +235,11 @@ namespace shared::common
 		cur_ps_light_flags_ = 0;
 		cur_ps_sfx_class_ = sfx_class::None;
 		cur_ps_draw_tint_ = false;
+		cur_ps_swamp_pass_ = swamp_pass::None;
 		if (shader)
 		{
+			if (auto it = ps_swamp_pass_.find(shader); it != ps_swamp_pass_.end())
+				cur_ps_swamp_pass_ = it->second;
 			if (auto it = ps_draw_tint_.find(shader); it != ps_draw_tint_.end())
 				cur_ps_draw_tint_ = it->second;
 			if (auto it = ps_sampler_masks_.find(shader); it != ps_sampler_masks_.end())
@@ -294,6 +297,38 @@ namespace shared::common
 		const uint32_t hash = hash_shader_bytecode(bytecode);
 		const bool is_water = water_ps_hashes.contains(hash);
 		ps_water_surface_[shader] = is_water;
+
+		// FRPG_Snow surface shaders (the Lit variants are lightmapped; some share bytecode with
+		// the plain ones), its height pass, and the WaterWave ring that stamps into heights.
+		static const std::unordered_set<uint32_t> snow_surface_hashes = {
+			0xC8F2D2F4, // FRPG_Snow_______
+			0x539F3A6A, // FRPG_Snow_______PntS, FRPG_Snow_Lit___PntS
+			0xB92DCD52, // FRPG_Snow_______PntSS, FRPG_Snow_Lit___PntSS
+			0xD205FD68, // FRPG_Snow_______PntSSSS, FRPG_Snow_Lit___PntSSSS
+			0x7B23FEC0, // FRPG_Snow____Csd
+			0x03494144, // FRPG_Snow____CsdPntS
+			0x4482B2FC, // FRPG_Snow____CsdPntSS
+			0x9144323F, // FRPG_Snow____CsdPntSSSS
+			0x87FA77D3, // FRPG_Snow____Ncs
+			0xE94A7522, // FRPG_Snow____NcsPntS
+			0x58D7A349, // FRPG_Snow____NcsPntSS
+			0x4725F19C, // FRPG_Snow____NcsPntSSSS
+			0xC4B3B54B, // FRPG_Snow_Lit___
+			0xB879277B, // FRPG_Snow_LitCsd
+			0xD1C7F921, // FRPG_Snow_LitCsdPntS
+			0x9F2E5CE6, // FRPG_Snow_LitCsdPntSS
+			0xAA43DA75, // FRPG_Snow_LitCsdPntSSSS
+			0xABD87677, // FRPG_Snow_LitNcs
+			0x27808B3F, // FRPG_Snow_LitNcsPntS
+			0x9906D388, // FRPG_Snow_LitNcsPntSS
+			0x4F298CB6, // FRPG_Snow_LitNcsPntSSSS
+		};
+		constexpr uint32_t snow_height_map_hash = 0x22D2F93A; // FRPG_Snow_HeightMap
+		constexpr uint32_t water_wave_hash = 0x8CDD4D9A;      // FRPG_WWS_Dif________________WaterWave
+		ps_swamp_pass_[shader] = snow_surface_hashes.contains(hash) ? swamp_pass::Surface
+			: hash == snow_height_map_hash ? swamp_pass::HeightMap
+			: hash == water_wave_hash ? swamp_pass::WaveRing
+			: swamp_pass::None;
 
 		struct sfx_entry { uint32_t hash; sfx_class cls; const char* name; };
 		static constexpr sfx_entry sfx_shaders[] = {
@@ -876,6 +911,7 @@ namespace shared::common
 
 		if (water_fallback_tex_) { water_fallback_tex_->Release(); water_fallback_tex_ = nullptr; }
 		cur_ps_is_water_surface_ = false;
+		cur_ps_swamp_pass_ = swamp_pass::None;
 		cur_ps_light_flags_ = 0;
 		cur_ps_draw_tint_ = false;
 

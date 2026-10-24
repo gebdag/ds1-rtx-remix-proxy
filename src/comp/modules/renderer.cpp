@@ -11,6 +11,7 @@
 #include "../game/sky_meshes.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
+#include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
 
 namespace comp
@@ -338,10 +339,16 @@ namespace comp
 		}
 
 		// Draws that read the game's sun constants (shadow direction c175, key
-		// light c92/c95) vote for the Remix sun.
-		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & (ffp.PS_LIGHT_DIR3 | ffp.PS_LIGHT_SHADOW)))
+		// light c92/c95) vote for the Remix sun. The swamp's FRPG_Snow shader reads
+		// c92/c95 only for a rim lobe weighted by c169.z (0 in Blighttown): with no
+		// such lobe it does not use that light, and its c95 must not colour the sun.
+		const auto swamp_pass = ffp.cur_ps_swamp_pass();
+		uint32_t sun_flags = ffp.cur_ps_light_flags();
+		if (swamp_pass == game::swamp::pass::Surface && ffp.ps_const_data() && ffp.ps_const_data()[169 * 4 + 2] == 0.0f)
+			sun_flags &= ~ffp.PS_LIGHT_DIR3;
+		if (ffp.view_proj_valid() && (sun_flags & (ffp.PS_LIGHT_DIR3 | ffp.PS_LIGHT_SHADOW)))
 			game::sun_light::observe(ffp.ps_const_data(), ffp.frame_count(), primCount,
-				ffp.cur_ps_light_flags(), ffp.cur_decl_is_skinned());
+				sun_flags, ffp.cur_decl_is_skinned());
 
 		// Draws that end with the game's fog/scattering tail supply the haze constants.
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE))
@@ -350,6 +357,14 @@ namespace comp
 		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
 			game::atmosphere::observe_ambient(ffp.ps_const_data(), ffp.probe_texture(), ffp.frame_count(), primCount);
+
+		// Map materials' c100 (the swamp's colours keep their ratio to them).
+		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && swamp_pass == game::swamp::pass::None)
+			game::swamp::observe_map_diffuse(ffp.ps_const_data(), ffp.frame_count(), primCount);
+
+		// The swamp's surface constants, height field layers and wake rings.
+		if (ffp.view_proj_valid() && swamp_pass != game::swamp::pass::None)
+			game::swamp::observe(swamp_pass, ffp.vs_const_data(), ffp.ps_const_data(), dev, ffp.frame_count(), primCount);
 
 		// Track draw key for dedup learning (all draw types — rigid and skinned).
 		{
@@ -450,8 +465,15 @@ namespace comp
 			auto* skin = skinning::get();
 			if (ffp.is_enabled() && skin && ffp.num_bones() > 0 && shared::common::config::get().skinning.enabled)
 			{
+				// The swamp's surface carries the swamp marker: Remix shades it from the game's
+				// height field (rtx.ds1Swamp, game/swamp.hpp).
+				const bool swamp = swamp_pass == game::swamp::pass::Surface;
+				if (swamp)
+					dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
 				hr = skin->draw_skinned_dip(dev, PrimitiveType, BaseVertexIndex,
 					MinVertexIndex, NumVertices, startIndex, primCount);
+				if (swamp)
+					dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 			}
 			else
 			{
@@ -569,10 +591,16 @@ namespace comp
 					// behind it, so mist or a backdrop card in front of the sky vanished.
 					const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					const bool tinted = ffp.apply_draw_tint(dev);
+					// The swamp's surface carries the swamp marker (see the skinned path).
+					const bool swamp = !base_decal && swamp_pass == game::swamp::pass::Surface;
+					if (swamp)
+						dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
 					{
 						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 					}
+					if (swamp)
+						dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal)
 						ffp.clear_decal_marker(dev);
