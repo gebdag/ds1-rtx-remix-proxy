@@ -3,6 +3,7 @@
 
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "../game/texture_scroll.hpp"
 
 namespace comp
 {
@@ -69,7 +70,11 @@ namespace comp
 		dev->SetStreamSource(0, exp_vb, 0, SKIN_VTX_SIZE);
 
 		const bool tinted = ffp.apply_draw_tint(dev);
+		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
+			base_vtx, start_idx, prim_count, ffp.frame_count());
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+		if (scrolled)
+			game::texture_scroll::clear(dev);
 		if (tinted)
 			ffp.clear_draw_tint(dev);
 

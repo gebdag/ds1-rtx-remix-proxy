@@ -14,6 +14,7 @@
 #include "../game/lightmap_sun.hpp"
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
+#include "../game/texture_scroll.hpp"
 
 namespace comp
 {
@@ -236,10 +237,14 @@ namespace comp
 				// behind it, so mist or a backdrop card in front of the sky vanished.
 				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 				const bool tinted = ffp.apply_draw_tint(dev);
+				const bool scrolled = game::texture_scroll::apply(dev, false, false, nullptr, nullptr,
+					0, 0, 0, ffp.frame_count());
 				{
 					shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 					hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
 				}
+				if (scrolled)
+					game::texture_scroll::clear(dev);
 				shared::common::ffp_prof::count_converted_draw();
 				if (base_decal)
 					ffp.clear_decal_marker(dev);
@@ -253,7 +258,11 @@ namespace comp
 					if (ffp.setup_overlay_decal_pass(dev, StartVertex, 0, num_verts))
 					{
 						shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
+						const bool overlay_scrolled = game::texture_scroll::apply(dev, true, false, nullptr, nullptr,
+							0, 0, 0, ffp.frame_count());
 						auto overlay_hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
+						if (overlay_scrolled)
+							game::texture_scroll::clear(dev);
 						ffp.clear_decal_marker(dev);
 						if (FAILED(overlay_hr))
 							hr = overlay_hr;
@@ -376,6 +385,11 @@ namespace comp
 		// The swamp's surface constants, height field layers and wake rings.
 		if (ffp.view_proj_valid() && swamp_pass != game::swamp::pass::None)
 			game::swamp::observe(swamp_pass, ffp.vs_const_data(), ffp.ps_const_data(), dev, ffp.frame_count(), primCount);
+
+		// Water height passes: how far their mesh's waves have flowed, for its surface draw.
+		if (ffp.cur_ps_is_water_heightmap())
+			game::texture_scroll::observe_water_heightmap(ffp.vs_const_data(), ffp.ps_const_data(), ffp.stream_vb(0), ffp.cur_ib(),
+				BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 
 		// Track draw key for dedup learning (all draw types — rigid and skinned).
 		{
@@ -606,10 +620,17 @@ namespace comp
 					const bool swamp = !base_decal && swamp_pass == game::swamp::pass::Surface;
 					if (swamp)
 						dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
+					// The source VB and IB, as bound by the game (the expanded VB replaced stream 0).
+					IDirect3DVertexBuffer9* const mesh_vb = ffp.stream_vb(0);
+					IDirect3DIndexBuffer9* const mesh_ib = ffp.cur_ib();
+					const bool scrolled = game::texture_scroll::apply(dev, false, water_draw, mesh_vb, mesh_ib,
+						BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 					{
 						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 					}
+					if (scrolled)
+						game::texture_scroll::clear(dev);
 					if (swamp)
 						dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 					shared::common::ffp_prof::count_converted_draw();
@@ -636,7 +657,11 @@ namespace comp
 						if (ffp.setup_overlay_decal_pass(dev, BaseVertexIndex, MinVertexIndex, NumVertices))
 						{
 							shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
+							const bool overlay_scrolled = game::texture_scroll::apply(dev, true, false, mesh_vb, mesh_ib,
+								BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 							auto overlay_hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+							if (overlay_scrolled)
+								game::texture_scroll::clear(dev);
 							ffp.clear_decal_marker(dev);
 							if (FAILED(overlay_hr))
 								hr = overlay_hr;

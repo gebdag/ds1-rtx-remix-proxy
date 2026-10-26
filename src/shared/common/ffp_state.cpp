@@ -165,8 +165,11 @@ namespace shared::common
 
 		cur_vs_viewproj_base_ = -1;
 		cur_vs_exposure_ = false;
+		cur_vs_tex_scroll_ = 0;
 		if (shader)
 		{
+			if (auto it = vs_tex_scroll_.find(shader); it != vs_tex_scroll_.end())
+				cur_vs_tex_scroll_ = it->second;
 			if (auto it = vs_viewproj_base_.find(shader); it != vs_viewproj_base_.end())
 				cur_vs_viewproj_base_ = it->second;
 			if (auto it = vs_exposure_.find(shader); it != vs_exposure_.end())
@@ -263,6 +266,8 @@ namespace shared::common
 		{
 			vs_viewproj_base_[shader] = parse_vs_viewproj_base(bytecode);
 			vs_exposure_[shader] = parse_vs_divides_c159w(bytecode);
+			vs_tex_scroll_[shader] = (reads_float_const(bytecode, 246) ? VS_TEX_SCROLL_0 : 0u) |
+				(reads_float_const(bytecode, 247) ? VS_TEX_SCROLL_1 : 0u);
 		}
 	}
 
@@ -276,6 +281,7 @@ namespace shared::common
 		// decal pass stays off rather than risking a stale-texture overlay.
 		cur_ps_sampler_mask_ = 0;
 		cur_ps_is_water_surface_ = false;
+		cur_ps_is_water_heightmap_ = false;
 		cur_ps_light_flags_ = 0;
 		cur_ps_sfx_class_ = sfx_class::None;
 		cur_ps_sfx_colour_scale_ = 1.0f;
@@ -298,6 +304,8 @@ namespace shared::common
 				cur_ps_reads_exposure_ = it->second;
 			if (auto it = ps_water_surface_.find(shader); it != ps_water_surface_.end())
 				cur_ps_is_water_surface_ = it->second;
+			if (auto it = ps_water_heightmap_.find(shader); it != ps_water_heightmap_.end())
+				cur_ps_is_water_heightmap_ = it->second;
 			if (auto it = ps_light_flags_.find(shader); it != ps_light_flags_.end())
 				cur_ps_light_flags_ = it->second;
 		}
@@ -308,7 +316,7 @@ namespace shared::common
 		if (!shader) return;
 		ps_sampler_masks_[shader] = parse_ps_sampler_mask(bytecode);
 		ps_light_flags_[shader] = parse_ps_light_flags(bytecode);
-		ps_draw_tint_[shader] = ps_reads_float_const(bytecode, 139);
+		ps_draw_tint_[shader] = reads_float_const(bytecode, 139);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
 		// token stream from the version token through the END token inclusive:
@@ -347,6 +355,8 @@ namespace shared::common
 		const uint32_t hash = hash_shader_bytecode(bytecode);
 		const bool is_water = water_ps_hashes.contains(hash);
 		ps_water_surface_[shader] = is_water;
+		constexpr uint32_t water_height_map_hash = 0x90706CDC; // FRPG_Water_HeightMap
+		ps_water_heightmap_[shader] = hash == water_height_map_hash;
 
 		// FRPG_Snow surface shaders (the Lit variants are lightmapped; some share bytecode with
 		// the plain ones), its height pass, and the WaterWave ring that stamps into heights.
@@ -390,7 +400,7 @@ namespace shared::common
 			if (e.hash == hash) { sfx = e.cls; sfx_scale = e.colour_scale; break; }
 		ps_sfx_class_[shader] = sfx;
 		ps_sfx_colour_scale_[shader] = sfx_scale;
-		ps_reads_exposure_[shader] = ps_reads_float_const(bytecode, 135);
+		ps_reads_exposure_[shader] = reads_float_const(bytecode, 135);
 		if (is_water)
 			log("WATER", std::format("water surface PS registered ptr={:#x} hash={:#010x}",
 				reinterpret_cast<uintptr_t>(shader), hash));
@@ -472,13 +482,13 @@ namespace shared::common
 
 	namespace
 	{
-		// Calls fn(reg) for every float constant an instruction of the pixel shader
-		// reads. Same token walk as parse_ps_sampler_mask; DEF/DEFI/DEFB are skipped,
-		// their trailing tokens are literals, not register operands.
+		// Calls fn(reg) for every float constant an instruction of the shader (pixel or
+		// vertex) reads. Same token walk as parse_ps_sampler_mask; DEF/DEFI/DEFB are
+		// skipped, their trailing tokens are literals, not register operands.
 		template <class Fn>
-		void for_each_ps_const_read(const DWORD* code, Fn&& fn)
+		void for_each_const_read(const DWORD* code, Fn&& fn)
 		{
-			if (!code || (code[0] & 0xFFFF0000) != 0xFFFF0000)
+			if (!code || (code[0] & 0xFFFE0000) != 0xFFFE0000)
 				return;
 
 			constexpr size_t max_tokens = 65536;
@@ -513,10 +523,10 @@ namespace shared::common
 		}
 	}
 
-	bool ffp_state::ps_reads_float_const(const DWORD* code, DWORD reg)
+	bool ffp_state::reads_float_const(const DWORD* code, DWORD reg)
 	{
 		bool reads = false;
-		for_each_ps_const_read(code, [&](DWORD r) { if (r == reg) reads = true; });
+		for_each_const_read(code, [&](DWORD r) { if (r == reg) reads = true; });
 		return reads;
 	}
 
@@ -533,7 +543,7 @@ namespace shared::common
 		bool reads_probe_scale = false;
 		bool reads_hemisphere = false;
 		bool reads_view_fade = false;
-		for_each_ps_const_read(code, [&](DWORD reg)
+		for_each_const_read(code, [&](DWORD reg)
 		{
 			if (reg == 176) reads_view_fade = true;
 			if (reg == 92) reads_dir = true;
@@ -1625,8 +1635,8 @@ namespace shared::common
 		dev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 		dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
 
-		// UV scaling/offset is handled by CPU-side vertex expansion (expand_rigid_texcoords)
-		// rather than D3DTS_TEXTURE0 — Remix doesn't support FFP texture coordinate transforms.
+		// UV scale is baked into the vertices by expand_rigid_texcoords; a scrolling material's
+		// offset goes to Remix as stage 0's texture transform (game/texture_scroll.hpp).
 		dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 
 		// Disable remaining stages: the game binds shadow maps, LUTs, normal maps etc.

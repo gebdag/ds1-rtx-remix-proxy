@@ -28,11 +28,12 @@ material keyed on that texture's Remix hash covers all water. This script writes
                                             TILES x TILES repeats (the layers repeat
                                             7-10 times per mesh UV), wave height in
                                             metres from c126/c134, mips by normal averaging
-and prints the rtx.conf lines: the stand-in hash as animated water; Remix's two normal
-layers scrolling at the game's layer 1 and layer 2 velocities converted to mesh UV per
-second (velocity / layer scale, from two captures' offsets); and both layers' LOD bias
-set to the game's normal span over a pixel's footprint, so the mip chain blurs the
-waves the way the game does at every distance.
+and prints the rtx.conf lines: the stand-in hash as animated water, and both layers' LOD
+bias set to the game's normal span over a pixel's footprint, so the mip chain blurs the
+waves the way the game does at every distance. Where Remix samples the two normal layers
+and how strongly each tilts comes from each water surface's own height pass at runtime
+(the proxy's game/texture_scroll.cpp, which holds this build's TILES and reference slope);
+the layer velocities printed from the two --speed captures are for reference only.
 """
 import argparse
 import math

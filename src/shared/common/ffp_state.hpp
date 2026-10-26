@@ -279,6 +279,17 @@ namespace shared::common
 		// surface shaders (FRPG_Water_Env*/Reflect*, FRPG_WWS_Dif*).
 		bool cur_ps_is_water_surface() const { return cur_ps_is_water_surface_; }
 
+		// True when the bound pixel shader is FRPG_Water_HeightMap: the pass that draws a water
+		// mesh's wave height field from its scrolling layers (game/texture_scroll.hpp).
+		bool cur_ps_is_water_heightmap() const { return cur_ps_is_water_heightmap_; }
+
+		// Which UV scroll offsets the bound vertex shader reads: VS_TEX_SCROLL_0 = c246 (the
+		// base uv, TEXCOORD0.xy / 1024 + c246.xy), VS_TEX_SCROLL_1 = c247 (the overlay uv,
+		// TEXCOORD0.zw / 1024 + c247.xy). The game sets them from the material's g_TexScroll.
+		static constexpr uint32_t VS_TEX_SCROLL_0 = 1u << 0;
+		static constexpr uint32_t VS_TEX_SCROLL_1 = 1u << 1;
+		uint32_t cur_vs_tex_scroll() const { return cur_vs_tex_scroll_; }
+
 		// DS1's FRPG_Snow passes (the Blighttown swamp), by pixel shader: the surface, the height
 		// field it reads, and the wake rings stamped into that field (comp/game/swamp.hpp).
 		enum class swamp_pass : uint8_t { None, Surface, HeightMap, WaveRing };
@@ -392,7 +403,7 @@ namespace shared::common
 		int secondary_blend_stage() const;
 		static uint32_t parse_ps_sampler_mask(const DWORD* bytecode);
 		static uint32_t parse_ps_light_flags(const DWORD* bytecode);
-		static bool ps_reads_float_const(const DWORD* bytecode, DWORD reg);
+		static bool reads_float_const(const DWORD* bytecode, DWORD reg);
 		static uint32_t hash_shader_bytecode(const DWORD* bytecode);
 
 		bool enabled_ = true;
@@ -447,6 +458,8 @@ namespace shared::common
 		// renderer routes them through a dedicated water path.
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_water_surface_;
 		bool cur_ps_is_water_surface_ = false;
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_water_heightmap_;
+		bool cur_ps_is_water_heightmap_ = false;
 
 		// FRPG_Snow passes, by FNV-1a bytecode hash at creation (see cur_ps_swamp_pass).
 		std::unordered_map<IDirect3DPixelShader9*, swamp_pass> ps_swamp_pass_;
@@ -462,6 +475,9 @@ namespace shared::common
 		// Vertex shaders that scale the sprite colour by c159.z / c159.w (the game's exposure).
 		std::unordered_map<IDirect3DVertexShader9*, bool> vs_exposure_;
 		bool cur_vs_exposure_ = false;
+		// UV scroll registers each vertex shader reads (see cur_vs_tex_scroll).
+		std::unordered_map<IDirect3DVertexShader9*, uint32_t> vs_tex_scroll_;
+		uint32_t cur_vs_tex_scroll_ = 0;
 		// The map camera's c0-c3 rows as of the last View/Proj decomposition, and the
 		// sprite path's repacked vertices.
 		float map_viewproj_rows_[16] = {};
