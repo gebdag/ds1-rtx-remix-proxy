@@ -24,6 +24,7 @@ using comp::tracer;
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/atmosphere.hpp"
+#include "../game/lightmap_sun.hpp"
 
 namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
@@ -910,7 +911,11 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+		{
+			// Particles skip the renderer, where draws are tagged: no lightmap of their own.
+			comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount); });
+		}
 		UINT num_verts = PrimitiveCount * 3;
 		if (PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLEFAN)
 			num_verts = PrimitiveCount + 2;
@@ -930,7 +935,11 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
+		{
+			// Particles skip the renderer, where draws are tagged: no lightmap of their own.
+			comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 			return sfx_draw(m_pIDirect3DDevice9, sfx, [&] { return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount); });
+		}
 		const auto insp = perf::inspector_on_draw("DIP", PrimitiveType, primCount, NumVertices,
 			BaseVertexIndex, startIndex, shared::common::ffp_state::get().stream_stride(0));
 		if (insp.drop)
@@ -946,8 +955,9 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
-		// UP draws (sprites, UI, post passes) carry no haze set of their own.
+		// UP draws (sprites, UI, post passes) carry no haze set or lightmap of their own.
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
+		comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
 			comp::game::atmosphere::observe_grade(ffp.ps_const_data(), m_pIDirect3DDevice9);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
@@ -1000,6 +1010,7 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
+		comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			HRESULT hr = S_OK;

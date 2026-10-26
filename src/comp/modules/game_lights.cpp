@@ -545,6 +545,7 @@ namespace comp
 		float ambient[3] = {};
 		const float facing_sun[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
 		game::atmosphere::ambient_toward(facing_sun, ambient);
+		game::atmosphere::set_sun_gamma(ambient, sun.key.colour);
 		float linear[3];
 		for (int c = 0; c < 3; ++c)
 		{

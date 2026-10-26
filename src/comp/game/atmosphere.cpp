@@ -330,6 +330,12 @@ namespace comp::game::atmosphere
 		std::array<std::array<float, 3>, 6> g_ambient_gamma = {};
 		bool g_have_ambient_gamma = false;
 
+		// The sun's gamma-space ambient and lobe (set_sun_gamma), and what Remix has.
+		float g_sun_gamma[2][3] = {};
+		bool g_have_sun_gamma = false;
+		float g_sun_gamma_sent[2][3] = {};
+		bool g_sun_gamma_sent_once = false;
+
 		// c54 as still bound at ColAdj: FRPG_Fil_CalcAdaptedLum's rate, luminance clamp and key.
 		// Remix runs the game's meter and adaptation on its own frame with them (rtx.ds1Exposure.adapt*),
 		// since under path tracing the game meters a buffer that is not the image shown.
@@ -677,7 +683,27 @@ namespace comp::game::atmosphere
 			g_grade_sent = g_grade;
 			g_grade_sent_once = true;
 		}
+		if (g_have_sun_gamma && !(g_sun_gamma_sent_once && std::memcmp(g_sun_gamma, g_sun_gamma_sent, sizeof(g_sun_gamma)) == 0))
+		{
+			const bool ok = set("rtx.ds1Ambient.sunBase", vec3(g_sun_gamma[0])) & set("rtx.ds1Ambient.sunLobe", vec3(g_sun_gamma[1]));
+			report("ambient", ok, std::format("sun base {}, lobe {}", vec3(g_sun_gamma[0]), vec3(g_sun_gamma[1])));
+			if (ok)
+			{
+				std::memcpy(g_sun_gamma_sent, g_sun_gamma, sizeof(g_sun_gamma));
+				g_sun_gamma_sent_once = true;
+			}
+		}
 		write_look_state(frame);
+	}
+
+	void set_sun_gamma(const float* base, const float* lobe)
+	{
+		for (int c = 0; c < 3; c++)
+		{
+			g_sun_gamma[0][c] = base[c];
+			g_sun_gamma[1][c] = lobe[c];
+		}
+		g_have_sun_gamma = true;
 	}
 
 	bool ambient_toward(const float* normal, float* out_gamma)

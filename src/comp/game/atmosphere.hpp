@@ -53,4 +53,10 @@ namespace comp::game::atmosphere
 	// The game's ambient light (gamma space: probe sky gradient plus hemisphere) on a
 	// surface facing `normal`, from the last frame's ambient cube. False before one was seen.
 	bool ambient_toward(const float* normal, float* out_gamma);
+
+	// The sun as game_lights::sync_sun submits it, in gamma space: the ambient on a surface facing
+	// it and its own colour. Sent as rtx.ds1Ambient.sunBase / sunLobe: lightmapped surfaces add
+	// lightmap * lobe to that ambient in the game, and the runtime scales the sun on them to match
+	// (lightmap_sun.hpp).
+	void set_sun_gamma(const float* base, const float* lobe);
 }
