@@ -226,6 +226,8 @@ namespace shared::common
 		int cur_decl_normal_off() const { return cur_decl_normal_off_; }
 		int cur_decl_normal_type() const { return cur_decl_normal_type_; }
 		int cur_decl_texcoord_off() const { return cur_decl_texcoord_off_; }
+		// The vertex colour of a vertex in the current declaration as D3DCOLOR (white without one).
+		DWORD cur_vertex_color(const unsigned char* vertex) const;
 
 		void increment_draw_count()
 		{
@@ -334,6 +336,15 @@ namespace shared::common
 		bool apply_draw_tint(IDirect3DDevice9* dev);
 		void clear_draw_tint(IDirect3DDevice9* dev);
 
+		// The character creator's skin tone (PS c156), which DS1's character shaders add to a
+		// diffuse texture as stored: the base layer's, or for the two-layer "Mul" shaders (the
+		// FaceGen face) the second layer's, lerp(s0, s3 + c156, vertex alpha). For the layer
+		// being drawn (overlay = the second), puts c156 in stage 5's D3DTSS_CONSTANT as
+		// 0xD3rrggbb, signed bytes in 1/255 (the creator's steps), for the runtime
+		// (Surface::ds1AlbedoOffset). Returns true when it did; pair with clear_skin_tone.
+		bool apply_skin_tone(IDirect3DDevice9* dev, bool overlay);
+		void clear_skin_tone(IDirect3DDevice9* dev);
+
 		// Bind an albedo for a water-surface FFP draw: the first non-NULL,
 		// non-render-target texture on stages 0-7, else a solid-color fallback
 		// created on demand. Always succeeds unless the device is unavailable.
@@ -351,6 +362,19 @@ namespace shared::common
 		// runtime (rtx.fixedFunctionDecalMarkerEnabled). Returns true if the caller
 		// should re-issue the draw; call clear_decal_marker afterwards.
 		bool setup_overlay_decal_pass(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts);
+
+		// A two-layer draw's second diffuse (null for single-layer draws), for callers that
+		// expand the overlay vertices themselves (skinning).
+		IDirect3DBaseTexture9* overlay_texture() const
+		{
+			const int stage = secondary_blend_stage();
+			return stage >= 0 ? cur_texture_[stage] : nullptr;
+		}
+
+		// The overlay pass's texture, stage and blend state (see setup_overlay_decal_pass),
+		// for a draw whose bound vertices already carry the overlay uv as TEXCOORD0 and the
+		// vertex colour.
+		void apply_overlay_decal_states(IDirect3DDevice9* dev, IDirect3DBaseTexture9* texture);
 
 		// True when the current draw is a two-layer material that will actually
 		// run the overlay pass. Pure state inspection — no device calls — so the
@@ -491,6 +515,9 @@ namespace shared::common
 		// Pixel shaders that read c139 (see cur_ps_reads_draw_tint).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_draw_tint_;
 		bool cur_ps_draw_tint_ = false;
+		// Pixel shaders that read c156 (see apply_skin_tone).
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_skin_tone_;
+		bool cur_ps_skin_tone_ = false;
 		// The game's own D3DRS_TEXTUREFACTOR, restored by clear_draw_tint.
 		DWORD game_tfactor_ = 0xFFFFFFFF;
 
@@ -577,6 +604,8 @@ namespace shared::common
 		// Decal tag for overlay draws — matched by the custom RTX Remix runtime
 		// (rtx.fixedFunctionDecalMarkerEnabled) in the stage-0 D3DTSS_CONSTANT.
 		static constexpr DWORD OVERLAY_DECAL_MARKER = 0xD15DECA1;
+		// High byte of the stage-5 skin tone tag (apply_skin_tone).
+		static constexpr DWORD SKIN_TONE_MARKER = 0xD3000000;
 		IDirect3DVertexDeclaration9* rigid_exp_decl_ = nullptr;
 		bool rigid_exp_active_ = false;
 

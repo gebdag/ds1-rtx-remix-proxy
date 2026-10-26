@@ -287,6 +287,7 @@ namespace shared::common
 		cur_ps_sfx_colour_scale_ = 1.0f;
 		cur_ps_reads_exposure_ = false;
 		cur_ps_draw_tint_ = false;
+		cur_ps_skin_tone_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		if (shader)
 		{
@@ -294,6 +295,8 @@ namespace shared::common
 				cur_ps_swamp_pass_ = it->second;
 			if (auto it = ps_draw_tint_.find(shader); it != ps_draw_tint_.end())
 				cur_ps_draw_tint_ = it->second;
+			if (auto it = ps_skin_tone_.find(shader); it != ps_skin_tone_.end())
+				cur_ps_skin_tone_ = it->second;
 			if (auto it = ps_sampler_masks_.find(shader); it != ps_sampler_masks_.end())
 				cur_ps_sampler_mask_ = it->second;
 			if (auto it = ps_sfx_class_.find(shader); it != ps_sfx_class_.end())
@@ -317,6 +320,7 @@ namespace shared::common
 		ps_sampler_masks_[shader] = parse_ps_sampler_mask(bytecode);
 		ps_light_flags_[shader] = parse_ps_light_flags(bytecode);
 		ps_draw_tint_[shader] = reads_float_const(bytecode, 139);
+		ps_skin_tone_[shader] = reads_float_const(bytecode, 156);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
 		// token stream from the version token through the END token inclusive:
@@ -1438,6 +1442,11 @@ namespace shared::common
 		}
 	}
 
+	DWORD ffp_state::cur_vertex_color(const unsigned char* vertex) const
+	{
+		return cur_decl_has_color_ ? pack_decl_color(vertex, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
+	}
+
 	bool ffp_state::vs_camera_basis_is_orthonormal() const
 	{
 		const float* c4 = &vs_const_[4 * 4];
@@ -1685,6 +1694,36 @@ namespace shared::common
 		dev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 		dev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 		dev->SetRenderState(D3DRS_TEXTUREFACTOR, game_tfactor_);
+	}
+
+	bool ffp_state::apply_skin_tone(IDirect3DDevice9* dev, bool overlay)
+	{
+		if (!dev || !cur_ps_skin_tone_)
+			return false;
+		// Two-layer shaders (sampler s3) add it to the second diffuse only.
+		const bool two_layer = (cur_ps_sampler_mask_ & (1u << 3)) != 0;
+		if (overlay != two_layer)
+			return false;
+
+		const float* c = &ps_const_[156 * 4];
+		DWORD tag = SKIN_TONE_MARKER;
+		bool any = false;
+		for (int i = 0; i < 3; i++)
+		{
+			const long step = std::lround(std::clamp(c[i], -127.0f / 255.0f, 127.0f / 255.0f) * 255.0f);
+			any |= step != 0;
+			tag |= static_cast<DWORD>(static_cast<uint8_t>(static_cast<int8_t>(step))) << (16 - 8 * i);
+		}
+		if (!any)
+			return false;
+		dev->SetTextureStageState(5, D3DTSS_CONSTANT, tag);
+		return true;
+	}
+
+	void ffp_state::clear_skin_tone(IDirect3DDevice9* dev)
+	{
+		if (dev)
+			dev->SetTextureStageState(5, D3DTSS_CONSTANT, 0);
 	}
 
 	bool ffp_state::draw_sprite_up(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, UINT prim_count,
@@ -2084,6 +2123,12 @@ namespace shared::common
 		if (!expand_rigid_texcoords(dev, base_vtx, min_vtx, num_verts, true))
 			return false;
 
+		apply_overlay_decal_states(dev, overlay_texture);
+		return true;
+	}
+
+	void ffp_state::apply_overlay_decal_states(IDirect3DDevice9* dev, IDirect3DBaseTexture9* overlay_texture)
+	{
 		dev->SetTexture(0, overlay_texture);
 		for (DWORD ts = 1; ts < 8; ts++)
 			dev->SetTexture(ts, nullptr);
@@ -2114,7 +2159,6 @@ namespace shared::common
 		dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 		dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 		dev->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
-		return true;
 	}
 
 	bool ffp_state::apply_blended_decal_marker(IDirect3DDevice9* dev)

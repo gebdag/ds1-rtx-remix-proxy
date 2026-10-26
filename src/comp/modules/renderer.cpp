@@ -238,6 +238,7 @@ namespace comp
 				// behind it, so mist or a backdrop card in front of the sky vanished.
 				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 				const bool tinted = ffp.apply_draw_tint(dev);
+				const bool toned = ffp.apply_skin_tone(dev, false);
 				const bool scrolled = game::texture_scroll::apply(dev, false, false, nullptr, nullptr,
 					0, 0, 0, ffp.frame_count());
 				{
@@ -246,6 +247,8 @@ namespace comp
 				}
 				if (scrolled)
 					game::texture_scroll::clear(dev);
+				if (toned)
+					ffp.clear_skin_tone(dev);
 				shared::common::ffp_prof::count_converted_draw();
 				if (base_decal)
 					ffp.clear_decal_marker(dev);
@@ -261,7 +264,10 @@ namespace comp
 						shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
 						const bool overlay_scrolled = game::texture_scroll::apply(dev, true, false, nullptr, nullptr,
 							0, 0, 0, ffp.frame_count());
+						const bool overlay_toned = ffp.apply_skin_tone(dev, true);
 						auto overlay_hr = dev->DrawPrimitive(PrimitiveType, 0, PrimitiveCount);
+						if (overlay_toned)
+							ffp.clear_skin_tone(dev);
 						if (overlay_scrolled)
 							game::texture_scroll::clear(dev);
 						ffp.clear_decal_marker(dev);
@@ -626,10 +632,13 @@ namespace comp
 					IDirect3DIndexBuffer9* const mesh_ib = ffp.cur_ib();
 					const bool scrolled = game::texture_scroll::apply(dev, false, water_draw, mesh_vb, mesh_ib,
 						BaseVertexIndex, startIndex, primCount, ffp.frame_count());
+					const bool toned = ffp.apply_skin_tone(dev, false);
 					{
 						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
 						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 					}
+					if (toned)
+						ffp.clear_skin_tone(dev);
 					if (scrolled)
 						game::texture_scroll::clear(dev);
 					if (swamp)
@@ -660,7 +669,10 @@ namespace comp
 							shared::common::ffp_prof::scope oprof(shared::common::ffp_prof::step::overlay_draw);
 							const bool overlay_scrolled = game::texture_scroll::apply(dev, true, false, mesh_vb, mesh_ib,
 								BaseVertexIndex, startIndex, primCount, ffp.frame_count());
+							const bool overlay_toned = ffp.apply_skin_tone(dev, true);
 							auto overlay_hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+							if (overlay_toned)
+								ffp.clear_skin_tone(dev);
 							if (overlay_scrolled)
 								game::texture_scroll::clear(dev);
 							ffp.clear_decal_marker(dev);

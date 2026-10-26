@@ -16,12 +16,7 @@ namespace comp
 
 	skinning::~skinning()
 	{
-		release_cache();
-		if (skin_exp_decl_)
-		{
-			skin_exp_decl_->Release();
-			skin_exp_decl_ = nullptr;
-		}
+		on_reset();
 		p_this = nullptr;
 	}
 
@@ -46,7 +41,7 @@ namespace comp
 		auto* src_vb = ffp.stream_vb(0);
 		UINT stride = ffp.stream_stride(0);
 		UINT total_verts = min_vtx + num_verts;
-		auto* exp_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride);
+		auto* exp_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride, false);
 
 		if (!exp_vb)
 		{
@@ -70,11 +65,23 @@ namespace comp
 		dev->SetStreamSource(0, exp_vb, 0, SKIN_VTX_SIZE);
 
 		const bool tinted = ffp.apply_draw_tint(dev);
+		const bool toned = ffp.apply_skin_tone(dev, false);
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
 		if (scrolled)
 			game::texture_scroll::clear(dev);
+		if (toned)
+			ffp.clear_skin_tone(dev);
+		// Two-layer material (the FaceGen face: lerp(s0, s3 + c156, vertex alpha)): the second
+		// diffuse as a coplanar decal with vertex alpha as its opacity, as on the rigid path.
+		if (SUCCEEDED(hr) && ffp.overlay_texture())
+		{
+			const HRESULT overlay_hr = draw_overlay(dev, pt, src_vb, base_vtx, min_vtx, num_verts,
+				start_idx, prim_count, stride);
+			if (FAILED(overlay_hr))
+				hr = overlay_hr;
+		}
 		if (tinted)
 			ffp.clear_draw_tint(dev);
 
@@ -93,17 +100,20 @@ namespace comp
 	void skinning::on_reset()
 	{
 		release_cache();
-		if (skin_exp_decl_)
+		for (auto** decl : { &skin_exp_decl_, &skin_overlay_decl_ })
 		{
-			skin_exp_decl_->Release();
-			skin_exp_decl_ = nullptr;
+			if (*decl)
+			{
+				(*decl)->Release();
+				*decl = nullptr;
+			}
 		}
 	}
 
 	void skinning::create_expanded_decl(IDirect3DDevice9* dev)
 	{
 		// Expanded skinned vertex layout: FLOAT3 pos + FLOAT3 weights + UBYTE4 idx + FLOAT3 normal + FLOAT2 uv
-		D3DVERTEXELEMENT9 elems[] = {
+		const D3DVERTEXELEMENT9 base[] = {
 			{ 0,  0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
 			{ 0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDWEIGHT, 0 },
 			{ 0, 24, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDINDICES, 0 },
@@ -111,14 +121,24 @@ namespace comp
 			{ 0, 40, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
 			D3DDECL_END()
 		};
+		// The overlay pass: the same, the uv being the second set, plus the vertex colour.
+		const D3DVERTEXELEMENT9 overlay[] = {
+			{ 0,  0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
+			{ 0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDWEIGHT, 0 },
+			{ 0, 24, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDINDICES, 0 },
+			{ 0, 28, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0 },
+			{ 0, 40, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
+			{ 0, 48, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },
+			D3DDECL_END()
+		};
 
-		HRESULT hr = dev->CreateVertexDeclaration(elems, &skin_exp_decl_);
-		if (FAILED(hr))
-		{
+		if (!skin_exp_decl_ && FAILED(dev->CreateVertexDeclaration(base, &skin_exp_decl_)))
+			skin_exp_decl_ = nullptr;
+		if (!skin_overlay_decl_ && FAILED(dev->CreateVertexDeclaration(overlay, &skin_overlay_decl_)))
+			skin_overlay_decl_ = nullptr;
+		if (!skin_exp_decl_ || !skin_overlay_decl_)
 			shared::common::log("Skinning", "Failed to create expanded vertex declaration!",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
-			skin_exp_decl_ = nullptr;
-		}
 	}
 
 	void skinning::release_cache()
@@ -161,15 +181,18 @@ namespace comp
 	}
 
 	IDirect3DVertexBuffer9* skinning::get_expanded_vb(IDirect3DDevice9* dev,
-		IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride)
+		IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, bool overlay)
 	{
 		if (!src_vb || stride == 0 || num_verts == 0) return nullptr;
+		const UINT vtx_size = overlay ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE;
 
-		// Hash: src_vb pointer + base_vtx + num_verts + stride
+		// Hash: src_vb pointer + base_vtx + num_verts + stride, and which layout
 		unsigned int key = static_cast<unsigned int>(reinterpret_cast<uintptr_t>(src_vb));
 		key ^= static_cast<unsigned int>(base_vtx) * 0x9E3779B9u;
 		key ^= num_verts * 0x517CC1B7u;
 		key ^= stride * 0x6C62272Eu;
+		if (overlay)
+			key ^= 0xA5A5A5A5u;
 
 		int slot = key % SKIN_CACHE_SIZE;
 
@@ -183,7 +206,7 @@ namespace comp
 
 		// Cache hit: same range and still the same vertices
 		if (skin_exp_vb_[slot] && skin_exp_key_[slot] == key && skin_exp_nv_[slot] == num_verts &&
-			skin_exp_fp_[slot] == fp)
+			skin_exp_fp_[slot] == fp && skin_exp_overlay_[slot] == overlay)
 		{
 			src_vb->Unlock();
 			cur_max_idx_ = skin_exp_max_idx_[slot];
@@ -199,7 +222,7 @@ namespace comp
 
 		// Create expanded VB
 		IDirect3DVertexBuffer9* exp_vb = nullptr;
-		if (FAILED(dev->CreateVertexBuffer(num_verts * SKIN_VTX_SIZE, 0,
+		if (FAILED(dev->CreateVertexBuffer(num_verts * vtx_size, 0,
 			0, D3DPOOL_MANAGED, &exp_vb, nullptr)))
 		{
 			src_vb->Unlock();
@@ -208,7 +231,7 @@ namespace comp
 
 		// Lock and expand
 		unsigned char* dst_data = nullptr;
-		if (FAILED(exp_vb->Lock(0, num_verts * SKIN_VTX_SIZE, reinterpret_cast<void**>(&dst_data), 0)))
+		if (FAILED(exp_vb->Lock(0, num_verts * vtx_size, reinterpret_cast<void**>(&dst_data), 0)))
 		{
 			src_vb->Unlock();
 			exp_vb->Release();
@@ -217,7 +240,7 @@ namespace comp
 
 		cur_max_idx_ = 0;
 		for (UINT v = 0; v < num_verts; v++)
-			expand_skin_vertex(&dst_data[v * SKIN_VTX_SIZE], &src_data[v * stride], stride);
+			expand_skin_vertex(&dst_data[v * vtx_size], &src_data[v * stride], overlay);
 
 		exp_vb->Unlock();
 		src_vb->Unlock();
@@ -225,13 +248,14 @@ namespace comp
 		skin_exp_vb_[slot] = exp_vb;
 		skin_exp_key_[slot] = key;
 		skin_exp_nv_[slot] = num_verts;
+		skin_exp_overlay_[slot] = overlay;
 		skin_exp_fp_[slot] = fp;
 		skin_exp_max_idx_[slot] = cur_max_idx_;
 
 		return exp_vb;
 	}
 
-	void skinning::expand_skin_vertex(unsigned char* dst, const unsigned char* src, UINT /*stride*/)
+	void skinning::expand_skin_vertex(unsigned char* dst, const unsigned char* src, bool overlay)
 	{
 		auto& ffp = shared::common::ffp_state::get();
 		auto* out = reinterpret_cast<float*>(dst);
@@ -307,7 +331,9 @@ namespace comp
 			out[7] = 0.0f; out[8] = 1.0f; out[9] = 0.0f;
 		}
 
-		// Texcoord (FLOAT2 at offset 40)
+		// Texcoord (FLOAT2 at offset 40). The overlay takes the second pair of a four-component
+		// texcoord (TEXCOORD0.zw, the second layer's uv): only SHORT4/FLOAT4 draws have an overlay.
+		const int first = overlay ? 2 : 0;
 		if (ffp.cur_decl_has_texcoord())
 		{
 			int tc_type = ffp.cur_decl_texcoord_type();
@@ -315,7 +341,7 @@ namespace comp
 			if (tc_type == D3DDECLTYPE_FLOAT2 || tc_type == D3DDECLTYPE_FLOAT3 || tc_type == D3DDECLTYPE_FLOAT4)
 			{
 				auto* tc = reinterpret_cast<const float*>(&src[tc_off]);
-				out[10] = tc[0]; out[11] = tc[1];
+				out[10] = tc[first]; out[11] = tc[first + 1];
 			}
 			else if (tc_type == D3DDECLTYPE_FLOAT16_2)
 			{
@@ -328,8 +354,8 @@ namespace comp
 				// Dark Souls stores UVs as SHORT * 1024; convert to normalized FLOAT
 				constexpr float kScale = 1.0f / 1024.0f;
 				auto* tc = reinterpret_cast<const short*>(&src[tc_off]);
-				out[10] = static_cast<float>(tc[0]) * kScale;
-				out[11] = static_cast<float>(tc[1]) * kScale;
+				out[10] = static_cast<float>(tc[first]) * kScale;
+				out[11] = static_cast<float>(tc[first + 1]) * kScale;
 			}
 			else
 			{
@@ -340,6 +366,50 @@ namespace comp
 		{
 			out[10] = out[11] = 0.0f;
 		}
+
+		// Vertex colour (D3DCOLOR at offset 48, overlay only): its alpha is the second layer's weight.
+		// Its rgb stays white, as on the base layer, which carries no vertex colour.
+		if (overlay)
+		{
+			const DWORD argb = (ffp.cur_vertex_color(src) & 0xFF000000u) | 0x00FFFFFFu;
+			std::memcpy(&dst[48], &argb, sizeof(argb));
+		}
+	}
+
+	HRESULT skinning::draw_overlay(IDirect3DDevice9* dev, D3DPRIMITIVETYPE pt, IDirect3DVertexBuffer9* src_vb,
+		INT base_vtx, UINT min_vtx, UINT num_verts, UINT start_idx, UINT prim_count, UINT stride)
+	{
+		auto& ffp = shared::common::ffp_state::get();
+		auto* texture = ffp.overlay_texture();
+		auto* overlay_vb = skin_overlay_decl_ ? get_expanded_vb(dev, src_vb, base_vtx, min_vtx + num_verts, stride, true) : nullptr;
+		if (!texture || !overlay_vb)
+			return S_OK;
+
+		// The render states the overlay pass changes, restored after it.
+		static constexpr D3DRENDERSTATETYPE kStates[] = {
+			D3DRS_ZWRITEENABLE, D3DRS_ALPHATESTENABLE, D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND,
+			D3DRS_DESTBLEND, D3DRS_BLENDOP, D3DRS_SEPARATEALPHABLENDENABLE,
+		};
+		DWORD saved[std::size(kStates)] = {};
+		for (size_t i = 0; i < std::size(kStates); i++)
+			dev->GetRenderState(kStates[i], &saved[i]);
+
+		dev->SetVertexDeclaration(skin_overlay_decl_);
+		dev->SetStreamSource(0, overlay_vb, 0, SKIN_OVERLAY_VTX_SIZE);
+		ffp.apply_overlay_decal_states(dev, texture);
+		const bool toned = ffp.apply_skin_tone(dev, true);
+		const bool scrolled = game::texture_scroll::apply(dev, true, false, src_vb, ffp.cur_ib(),
+			base_vtx, start_idx, prim_count, ffp.frame_count());
+		const HRESULT hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+		if (scrolled)
+			game::texture_scroll::clear(dev);
+		if (toned)
+			ffp.clear_skin_tone(dev);
+		ffp.clear_decal_marker(dev);
+
+		for (size_t i = 0; i < std::size(kStates); i++)
+			dev->SetRenderState(kStates[i], saved[i]);
+		return hr;
 	}
 
 	void skinning::upload_bones(IDirect3DDevice9* dev)

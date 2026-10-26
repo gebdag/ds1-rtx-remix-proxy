@@ -36,14 +36,19 @@ namespace comp
 
 	private:
 		static constexpr int SKIN_VTX_SIZE = 48;
+		// The overlay layout: SKIN_VTX_SIZE with the second uv set as TEXCOORD0, plus D3DCOLOR.
+		static constexpr int SKIN_OVERLAY_VTX_SIZE = 52;
 		static constexpr int SKIN_CACHE_SIZE = 64;
 
 		IDirect3DVertexDeclaration9* skin_exp_decl_ = nullptr;
+		IDirect3DVertexDeclaration9* skin_overlay_decl_ = nullptr;
 
 		// Expanded vertex buffer cache
 		IDirect3DVertexBuffer9* skin_exp_vb_[SKIN_CACHE_SIZE] = {};
 		unsigned int skin_exp_key_[SKIN_CACHE_SIZE] = {};
 		unsigned int skin_exp_nv_[SKIN_CACHE_SIZE] = {};
+		// Which layout the entry holds (base or overlay vertices).
+		bool skin_exp_overlay_[SKIN_CACHE_SIZE] = {};
 		// Sampled content fingerprint of the source range: the game can free a VB
 		// and create another at the same address, which a pointer key alone would
 		// serve the old character's vertices for.
@@ -57,10 +62,14 @@ namespace comp
 		void create_expanded_decl(IDirect3DDevice9* dev);
 		void release_cache();
 
-		// Vertex expansion
+		// Vertex expansion (overlay: the SKIN_OVERLAY_VTX_SIZE layout)
 		IDirect3DVertexBuffer9* get_expanded_vb(IDirect3DDevice9* dev,
-			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride);
-		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, UINT stride);
+			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, bool overlay);
+		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, bool overlay);
+
+		// A two-layer draw's second diffuse, re-drawn as a coplanar decal (see draw_skinned_dip).
+		HRESULT draw_overlay(IDirect3DDevice9* dev, D3DPRIMITIVETYPE pt, IDirect3DVertexBuffer9* src_vb,
+			INT base_vtx, UINT min_vtx, UINT num_verts, UINT start_idx, UINT prim_count, UINT stride);
 		static uint64_t fingerprint(const unsigned char* src, UINT num_verts, UINT stride);
 
 		// Bone upload
