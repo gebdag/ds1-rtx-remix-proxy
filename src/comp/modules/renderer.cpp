@@ -84,6 +84,7 @@ namespace comp
 			if (release)
 			{
 				if (tex_addons::icon) tex_addons::icon->Release();
+				tex_addons::icon = nullptr; // a failed Reset skips the reload
 				return;
 			}
 

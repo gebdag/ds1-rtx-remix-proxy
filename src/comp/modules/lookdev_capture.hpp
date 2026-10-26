@@ -40,5 +40,11 @@ namespace comp
 
 		// True for a few seconds after a capture file was written; name = its name.
 		static bool recent_capture(std::string& name);
+
+		// Before the game's device Reset: a stream session, capture or snap holds the
+		// back buffer or DEFAULT-pool objects, and real D3D9 fails Reset while any are
+		// alive (lookdev renders on the real device, which a fullscreen focus loss
+		// makes lost). The stream resumes as a new session after the next Present.
+		static void on_reset();
 	};
 }

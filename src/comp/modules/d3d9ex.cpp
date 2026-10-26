@@ -25,6 +25,7 @@ using comp::tracer;
 #include "../game/sky_meshes.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/lightmap_sun.hpp"
+#include "lookdev_capture.hpp"
 
 namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
@@ -400,6 +401,9 @@ namespace comp
 		shared::common::g_shader_cache.clear_cache();
 		tex_addons::init_texture_addons(true);
 		ImGui_ImplDX9_InvalidateDeviceObjects();
+		perf::on_reset();
+		if (lookdev_passthrough())
+			lookdev_capture::on_reset();
 		const auto& res_cfg = shared::common::config::get().resolution;
 		if (res_cfg.render_width > 0 && res_cfg.render_height > 0)
 		{
@@ -410,6 +414,13 @@ namespace comp
 			pPresentationParameters->BackBufferHeight = res_cfg.present_height;
 		}
 		const auto hr = m_pIDirect3DDevice9->Reset(pPresentationParameters);
+		if (FAILED(hr))
+		{
+			// The game polls TestCooperativeLevel and retries; nothing DEFAULT-pool can be
+			// created until a Reset succeeds.
+			crash_context::note("device Reset failed hr=%08X", hr);
+			return hr;
+		}
 		tex_addons::init_texture_addons();
 		ImGui_ImplDX9_CreateDeviceObjects();
 		return hr;

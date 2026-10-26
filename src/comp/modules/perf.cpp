@@ -216,6 +216,8 @@ namespace comp::perf
 	UINT count_last(draw_cat c) { return s_count_last[static_cast<int>(c)]; }
 	UINT total_last() { return s_total_last; }
 
+	void on_reset() { release_retained_textures(); }
+
 	void on_present()
 	{
 		for (int i = 0; i < CAT_COUNT; i++)

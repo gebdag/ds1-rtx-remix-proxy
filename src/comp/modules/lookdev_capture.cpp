@@ -1559,6 +1559,21 @@ namespace comp
 			delete c;
 		}
 
+		// A capture cut short by a device Reset: its references go, the partial file is dropped.
+		void abort_capture(const char* why)
+		{
+			auto* c = s_cap;
+			s_capturing = false;
+			s_cap = nullptr;
+			fclose(c->w.file);
+			for (auto* obj : c->refs) obj->Release();
+			release_staging(c);
+			if (c->backbuffer) c->backbuffer->Release();
+			DeleteFileA(c->part_path.c_str());
+			log(std::format("Capture {} abandoned ({})", c->name, why), shared::common::LOG_TYPE::LOG_TYPE_WARN);
+			delete c;
+		}
+
 		// ---- live stream ----
 
 		void close_ring()
@@ -2194,14 +2209,17 @@ namespace comp
 				snap_poll();
 				poll_freeze_key();
 				poll_request();
-				if (s_request && !s_cap)
+				// Nothing starts on a lost device: its references would keep the game's Reset
+				// failing (on_reset ends what was already running).
+				const bool presented = SUCCEEDED(hr);
+				if (presented && s_request && !s_cap)
 				{
 					// starts right after a Present so the file holds one whole frame
 					s_request = false;
 					std::lock_guard lock(s_mutex);
 					start_capture(dev, s_request_name);
 				}
-				else if (s_request && s_cap && s_cap->streaming)
+				else if (presented && s_request && s_cap && s_cap->streaming)
 				{
 					// A capture file is one whole frame from a fresh recorder: the stream
 					// pauses for it and resumes as a new session, which the host follows.
@@ -2210,7 +2228,7 @@ namespace comp
 					end_stream_session("file capture");
 					start_capture(dev, s_request_name);
 				}
-				if (!s_cap)
+				if (presented && !s_cap)
 				{
 					// Streams start (or resume after a file capture or a dropped frame)
 					// right after a Present too, once the host is ready for them.
@@ -2608,6 +2626,16 @@ namespace comp
 	bool lookdev_capture::writing_file()
 	{
 		return (s_capturing.load(std::memory_order_relaxed) && s_cap && !s_cap->streaming) || s_snap == snap_stage::armed;
+	}
+
+	void lookdev_capture::on_reset()
+	{
+		std::lock_guard lock(s_mutex);
+		if (s_cap && s_cap->streaming)
+			end_stream_session("device reset");
+		else if (s_cap)
+			abort_capture("device reset");
+		snap_release();
 	}
 
 	lookdev_capture::~lookdev_capture() = default;

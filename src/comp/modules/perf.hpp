@@ -47,6 +47,7 @@ namespace comp::perf
 	UINT total_last();           // all game draws last frame
 
 	void on_present();           // roll over per-frame counters, advance probes
+	void on_reset();             // drop the draw inspector's texture refs (they can block a device Reset)
 	void tab_imgui();            // the F4 "Perf" tab
 
 	// --- Draw-call inspector (Dev tab) ---
