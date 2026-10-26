@@ -336,7 +336,22 @@ namespace comp::game::lightmap_sun
 			g_tag_set = ~0u;
 			g_measures_left = kMeasuresPerFrame;
 		}
-		DWORD tag = ffp.cur_decl_is_skinned() ? kSkinnedMarker : 0;
+		DWORD tag = 0;
+		if (ffp.cur_decl_is_skinned())
+		{
+			// Read from the device: the game applies blend state through state blocks.
+			DWORD blend = FALSE, test = FALSE, dest = D3DBLEND_ZERO;
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+			dev->GetRenderState(D3DRS_ALPHATESTENABLE, &test);
+			dev->GetRenderState(D3DRS_DESTBLEND, &dest);
+			// MTD g_BlendMode 2 (_Alp) blends over INVSRCALPHA, mode 4 (Add: ghosts, fire) over ONE, both
+			// alpha-tested. Only unbumped _Alp draws are cards: hair, lashes, the FaceGen iris, fringes.
+			// The bumped ones (pixel shader samples s2, every *Bmp* shader and FRPG_Ghost) are the
+			// see-through ones: fur shells, lace, veils, wing membranes.
+			const bool card = blend && test && dest == D3DBLEND_INVSRCALPHA &&
+				!(ffp.cur_ps_sampler_mask() & (1u << 2));
+			tag = card ? kSkinnedCardMarker : kSkinnedMarker;
+		}
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
 		IDirect3DVertexBuffer9* vb = ffp.stream_vb(0);
 		IDirect3DIndexBuffer9* ib = ffp.cur_ib();

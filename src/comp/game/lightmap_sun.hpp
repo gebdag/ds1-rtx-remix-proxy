@@ -24,9 +24,13 @@ namespace comp::game::lightmap_sun
 	// clearance ray passes through characters, the player's own body and gear among them
 	// (rtx_dark_souls_light_falloff.h in the runtime).
 	constexpr DWORD kSkinnedMarker = 0xD2000000;
+	// A skinned draw the game alpha-blends (over INVSRCALPHA) and alpha-tests with an unbumped pixel
+	// shader: DS1's hair cards, which the runtime renders as hair cards (cutouts at full texture
+	// detail) instead of stacked blends.
+	constexpr DWORD kSkinnedCardMarker = 0xD2000001;
 
 	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped,
-	// kSkinnedMarker when it is skinned, else none.
+	// kSkinnedMarker / kSkinnedCardMarker when it is skinned, else none.
 	// Levels are worked out once per draw (vertex, index and lightmap data are read back on the CPU,
 	// a few dozen draws per frame at most) and cached by the draw's buffers, range and lightmap.
 	void tag_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index,
