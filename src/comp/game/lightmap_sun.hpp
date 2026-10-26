@@ -20,8 +20,13 @@ namespace comp::game::lightmap_sun
 
 	// Stage 6's D3DTSS_CONSTANT: kMarker | r << 16 | g << 8 | b (the level, 0-255), 0 = not lightmapped.
 	constexpr DWORD kMarker = 0xD1000000;
+	// The same constant on a skinned draw (characters, never lightmapped): the runtime's player light
+	// clearance ray passes through characters, the player's own body and gear among them
+	// (rtx_dark_souls_light_falloff.h in the runtime).
+	constexpr DWORD kSkinnedMarker = 0xD2000000;
 
-	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped, else none.
+	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped,
+	// kSkinnedMarker when it is skinned, else none.
 	// Levels are worked out once per draw (vertex, index and lightmap data are read back on the CPU,
 	// a few dozen draws per frame at most) and cached by the draw's buffers, range and lightmap.
 	void tag_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index,

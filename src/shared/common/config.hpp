@@ -264,6 +264,9 @@ namespace shared::common
 			float radius = 0.5f;         // emitter sphere radius
 			float intensity = 1.0f;      // radiance multiplier (inverse-square light)
 			float falloff_intensity = 1.0f; // with the game's falloff: 1 = the game's brightness
+			// With the game's falloff: scales the game's dwindle begin and end together (1 = the
+			// game's reach). Range / UseGameRange apply to the inverse-square light only.
+			float falloff_range_scale = 1.0f;
 			// How Offset is applied: 0 world axes (x, y, z); 1 view: turns with the camera
 			// heading (right, up, forward); 2 character: turns with the body (right, up,
 			// forward). View and character use the heading only, so the light stays level.

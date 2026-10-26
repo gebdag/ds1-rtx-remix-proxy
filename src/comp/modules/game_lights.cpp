@@ -716,19 +716,26 @@ namespace comp
 			c.use_game_colour && game ? src->g : c.colour[1],
 			c.use_game_colour && game ? src->b : c.colour[2],
 		};
+		const bool game_falloff = game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)];
 		const float range = std::max(0.01f, c.use_game_range && game ? src->dwindle_end : c.range);
+		// With the game's falloff the dwindle begin is where the falloff starts (up to 6 in some
+		// areas), not an emitter size: a sphere that big sits in the walls around the player.
 		const float radius = std::max(0.01f,
-			c.use_game_radius && game && src->dwindle_begin > 0.01f ? src->dwindle_begin : c.radius);
+			!game_falloff && c.use_game_radius && game && src->dwindle_begin > 0.01f ? src->dwindle_begin : c.radius);
 
 		remixapi_Float3D radiance;
-		if (game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)])
+		if (game_falloff)
 		{
-			// The game's falloff, as for the map lights: radiance colour^2.2 / pi over the
-			// range (the game's, 0..3 for the head light, unless Game range is off), with its
-			// own intensity, FalloffIntensity (1 = the game's brightness): Intensity was tuned
-			// for the inverse-square light, where 0.02 was about right.
-			const float game_end = range;
-			const float game_begin = game ? std::min(std::max(0.0f, src->dwindle_begin), game_end * 0.99f) : 0.0f;
+			// The game's falloff, as for the map lights: radiance colour^2.2 / pi, flat to the
+			// game's dwindle begin and linear to zero at its end, both times FalloffRangeScale,
+			// with its own intensity, FalloffIntensity (1 = the game's brightness). Begin and end
+			// come from the same light: the area's player light ranges from 0..2.5 to 6..25, and a
+			// fixed end under the game's begin cut the light off in a hard ring (begin 6 against
+			// an end of 4.2 left 4 cm of falloff). Range and Intensity are the inverse-square
+			// light's (0.02 was about right there).
+			const float game_end = std::max(0.01f, (game ? src->dwindle_end : c.range) * c.falloff_range_scale);
+			const float game_begin = game
+				? std::min(std::max(0.0f, src->dwindle_begin) * c.falloff_range_scale, game_end * 0.99f) : 0.0f;
 			const float scale = c.falloff_intensity * mult / 3.14159265f;
 			radiance = {
 				std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
@@ -750,6 +757,30 @@ namespace comp
 		if (!player_offset_world(offset))
 			std::memcpy(offset, c.offset, sizeof(offset)); // no heading yet: world axes
 		const remixapi_Float3D position = { src->x + offset[0], src->y + offset[1], src->z + offset[2] };
+
+		// The head the offset hangs from: the runtime pulls the light back towards it when the offset
+		// would put it behind a wall (rtx.ds1Lights.playerLightClearance).
+		// Asked once: a runtime without the options refuses them, and asking again every frame
+		// would not change that.
+		auto& bridge = shared::common::remix_api::get().m_bridge;
+		if (bridge.SetConfigVariable && !player_clearance_refused_)
+		{
+			if (!player_hash_sent_)
+			{
+				player_hash_sent_ = true;
+				player_clearance_refused_ = bridge.SetConfigVariable("rtx.ds1Lights.playerLight",
+					std::format("{:x}", string_hash64("ds1_player_light")).c_str()) != REMIXAPI_ERROR_CODE_SUCCESS;
+			}
+			const float anchor[3] = { src->x, src->y, src->z };
+			if (!player_clearance_refused_ && std::memcmp(anchor, player_anchor_sent_, sizeof(anchor)) != 0)
+			{
+				std::memcpy(player_anchor_sent_, anchor, sizeof(anchor));
+				player_clearance_refused_ = bridge.SetConfigVariable("rtx.ds1Lights.playerAnchor",
+					std::format("{}, {}, {}", anchor[0], anchor[1], anchor[2]).c_str()) != REMIXAPI_ERROR_CODE_SUCCESS;
+			}
+			if (player_clearance_refused_)
+				shared::common::log("GameLights", "Remix refused the player light's wall clearance options (older runtime)");
+		}
 
 		auto& light = player_light_;
 		const bool unchanged = light.handle &&
@@ -863,11 +894,11 @@ namespace comp
 		std::string s = std::format(
 			"lights {} {:.3f} {:.3f} {} {}\n"
 			"sun {} {:.3f} {:.3f} {}\n"
-			"player {} {} {} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {} {}\n",
+			"player {} {} {} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {:.3f} {} {}\n",
 			enabled, intensity_scale, radius_scale, game::point_lights::resolve_entities(), game::map_lights::enabled(),
 			sun_enabled, sun_intensity_scale, sun_angular_diameter, format_float3(sun_fallback_colour),
 			p.enabled, p.use_game_colour, format_float3(p.colour), p.use_game_range, p.range, p.use_game_radius,
-			p.radius, p.intensity, p.falloff_intensity, p.offset_frame, format_float3(p.offset));
+			p.radius, p.intensity, p.falloff_intensity, p.falloff_range_scale, p.offset_frame, format_float3(p.offset));
 
 		std::vector<std::pair<uint64_t, const light_override*>> saved;
 		for (const auto& [key, o] : overrides_)
@@ -908,6 +939,7 @@ namespace comp
 		ok &= cfg.set_string("PlayerLight", "Radius", std::format("{:.3f}", p.radius));
 		ok &= cfg.set_string("PlayerLight", "Intensity", std::format("{:.3f}", p.intensity));
 		ok &= cfg.set_string("PlayerLight", "FalloffIntensity", std::format("{:.3f}", p.falloff_intensity));
+		ok &= cfg.set_string("PlayerLight", "FalloffRangeScale", std::format("{:.3f}", p.falloff_range_scale));
 		ok &= cfg.set_string("PlayerLight", "OffsetFrame", kFrameNames[std::clamp(p.offset_frame, 0, 2)]);
 		ok &= cfg.set_string("PlayerLight", "Offset", format_float3(p.offset));
 
@@ -969,6 +1001,7 @@ namespace comp
 		p.radius = std::max(0.01f, cfg.get_float("PlayerLight", "Radius", 0.5f));
 		p.intensity = std::max(0.0f, cfg.get_float("PlayerLight", "Intensity", 1.0f));
 		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 1.0f));
+		p.falloff_range_scale = std::max(0.01f, cfg.get_float("PlayerLight", "FalloffRangeScale", 1.0f));
 		const auto frame = cfg.get_string("PlayerLight", "OffsetFrame", "View");
 		p.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0 : _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
 		p.offset[0] = p.offset[1] = p.offset[2] = 0.0f;
@@ -1366,19 +1399,31 @@ namespace comp
 		ImGui::ColorEdit3("Colour##pl", c.colour, ImGuiColorEditFlags_Float);
 		ImGui::EndDisabled();
 
-		ImGui::Checkbox("Game range##pl", &c.use_game_range);
-		ImGui::SameLine();
-		ImGui::BeginDisabled(c.use_game_range);
-		ImGui::SliderFloat("Range##pl", &c.range, 0.1f, 30.0f, "%.2f");
-		ImGui::EndDisabled();
+		const bool game_falloff = game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)];
+		if (game_falloff)
+		{
+			ImGui::SliderFloat("Range scale##pl", &c.falloff_range_scale, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("With the game's falloff: the game's dwindle begin and end, both times this\n"
+					"(1 = the game's reach, which changes by area). Saved as [PlayerLight] FalloffRangeScale.");
+			ImGui::SliderFloat("Emitter radius##pl", &c.radius, 0.01f, 2.0f, "%.2f");
+		}
+		else
+		{
+			ImGui::Checkbox("Game range##pl", &c.use_game_range);
+			ImGui::SameLine();
+			ImGui::BeginDisabled(c.use_game_range);
+			ImGui::SliderFloat("Range##pl", &c.range, 0.1f, 30.0f, "%.2f");
+			ImGui::EndDisabled();
 
-		ImGui::Checkbox("Game radius##pl", &c.use_game_radius);
-		ImGui::SameLine();
-		ImGui::BeginDisabled(c.use_game_radius);
-		ImGui::SliderFloat("Emitter radius##pl", &c.radius, 0.01f, 2.0f, "%.2f");
-		ImGui::EndDisabled();
+			ImGui::Checkbox("Game radius##pl", &c.use_game_radius);
+			ImGui::SameLine();
+			ImGui::BeginDisabled(c.use_game_radius);
+			ImGui::SliderFloat("Emitter radius##pl", &c.radius, 0.01f, 2.0f, "%.2f");
+			ImGui::EndDisabled();
+		}
 
-		if (game_falloff_ && kind_game_falloff_[static_cast<int>(light_kind::player)])
+		if (game_falloff)
 		{
 			ImGui::SliderFloat("Intensity##plf", &c.falloff_intensity, 0.0f, 10.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
 			if (ImGui::IsItemHovered())

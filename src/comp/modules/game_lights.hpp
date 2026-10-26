@@ -176,6 +176,9 @@ namespace comp
 		game::point_lights::light player_src_ = {}; // its last harvested values, for the readout
 		float player_head_dist_ = 0.0f;   // distance of that light from the head point
 		float player_radiance_[3] = {};
+		bool player_hash_sent_ = false;   // rtx.ds1Lights.playerLight
+		bool player_clearance_refused_ = false; // the runtime refused playerLight / playerAnchor
+		float player_anchor_sent_[3] = {}; // rtx.ds1Lights.playerAnchor as last sent
 
 		remixapi_LightHandle sun_handle_ = nullptr;
 		remixapi_LightInfoDistantEXT sun_distant_ = {};

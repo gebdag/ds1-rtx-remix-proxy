@@ -336,7 +336,7 @@ namespace comp::game::lightmap_sun
 			g_tag_set = ~0u;
 			g_measures_left = kMeasuresPerFrame;
 		}
-		DWORD tag = 0;
+		DWORD tag = ffp.cur_decl_is_skinned() ? kSkinnedMarker : 0;
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
 		IDirect3DVertexBuffer9* vb = ffp.stream_vb(0);
 		IDirect3DIndexBuffer9* ib = ffp.cur_ib();
