@@ -1,7 +1,7 @@
 // ds1_lookdev_viewer: replays a lookdev frame capture (.ds1cap) on a plain
 // x64 D3D9 device and compares the result with the frame the game presented.
 //
-//   ds1_lookdev_viewer.exe <capture.ds1cap> [--compare] [--out <dir>] [--ps-const <reg>.<xyzw>=<value>]...
+//   ds1_lookdev_viewer.exe <capture.ds1cap> [--compare] [--out <dir>] [--ps-const <reg>.<xyzw>=<value>]... [--drop i,j,...]
 //
 // --ps-const forces one pixel shader constant component whenever the frame sets it,
 // e.g. --ps-const 110.w=0 replays the frame without the game's sky scattering.
@@ -86,6 +86,7 @@ int wmain(int argc, wchar_t** argv)
 	bool compare_only = false;
 	int pixel_x = -1, pixel_y = -1;
 	std::vector<replayer::const_override> ps_const_overrides;
+	std::unordered_set<uint32_t> drop_draws;
 	for (int i = 1; i < argc; i++)
 	{
 		const std::wstring a = argv[i];
@@ -104,6 +105,19 @@ int wmain(int argc, wchar_t** argv)
 			}
 			ps_const_overrides.push_back({ static_cast<uint32_t>(_wtoi(spec.substr(0, dot).c_str())),
 				static_cast<uint32_t>(comps.find(spec[dot + 1])), static_cast<float>(_wtof(spec.c_str() + eq + 1)) });
+		}
+		else if (a == L"--drop" && i + 1 < argc)
+		{
+			// Comma-separated draw indices, as the host's --drop.
+			for (const wchar_t* s = argv[++i]; *s;)
+			{
+				wchar_t* end = nullptr;
+				const unsigned long v = wcstoul(s, &end, 10);
+				if (end == s)
+					break;
+				drop_draws.insert(static_cast<uint32_t>(v));
+				s = *end == L',' ? end + 1 : end;
+			}
 		}
 		else if (a == L"--pixel" && i + 2 < argc)
 		{
@@ -169,6 +183,7 @@ int wmain(int argc, wchar_t** argv)
 
 	replayer rp(cap);
 	rp.ps_const_overrides = ps_const_overrides;
+	rp.drop_draws = drop_draws;
 	rp.dev = dev;
 
 	// Pixel history: after every command that can write pixels, copy the pixel
