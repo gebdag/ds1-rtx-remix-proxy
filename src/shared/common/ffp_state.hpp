@@ -323,7 +323,13 @@ namespace shared::common
 		static constexpr uint32_t PS_AMBIENT = 1u << 4;
 		//   PS_VIEW_FADE    c176, FRPG_NtoA's alpha fade by view angle (mist and light-shaft layers).
 		static constexpr uint32_t PS_VIEW_FADE = 1u << 5;
+		//   PS_LIGHT_SHAFT  c69 and c70, FRPG_Fil_LightShaft's radial blur (see game/atmosphere.hpp).
+		static constexpr uint32_t PS_LIGHT_SHAFT = 1u << 6;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
+
+		// The main camera's camera-relative view-projection as the map shaders get it (VS c0..c3,
+		// one register per row), nullptr before one was seen.
+		const float* map_viewproj_rows() const { return have_map_viewproj_ ? map_viewproj_rows_ : nullptr; }
 
 		// True when the current pixel shader reads c139, the per-draw colour and
 		// fade every FRPG material shader multiplies its output by.

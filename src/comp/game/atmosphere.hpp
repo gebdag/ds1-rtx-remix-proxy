@@ -47,6 +47,15 @@ namespace comp::game::atmosphere
 	// bloom buffer on stage 1 (its size gives the game's bloom resolution).
 	void observe_grade(const float* ps_const, IDirect3DDevice9* dev);
 
+	// Light shafts: FRPG_Fil_LightShaft blurs a bright pass of the frame (threshold c71.x for the
+	// sky) radially towards c69.xy, and ColAdj adds the result times c56.y. c69 is the shaft sun's
+	// direction T through the camera's view-projection without the perspective divide:
+	// xy = (VP * (T, 0)).xy as uv, w = its clip w, z = w - 0.05 (fitted exactly on six captures).
+	// The runtime path traces the shafts from T (rtx.ds1Look.shaft*), so T is recovered from c69
+	// with the frame's view-projection. T is per area and is not the lighting sun (c175).
+	// Called on each LightShaft pass; the frame's first one is read.
+	void observe_light_shaft(const float* ps_const, unsigned int frame);
+
 	// Once per frame: hands the values seen since the last call to Remix when they changed.
 	void frame_update(unsigned int frame);
 

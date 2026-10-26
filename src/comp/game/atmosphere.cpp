@@ -185,6 +185,32 @@ namespace comp::game::atmosphere
 		grade_values g_grade_sent;
 		bool g_grade_sent_once = false;
 
+		// Light shafts: the frame's first LightShaft pass, and what Remix has.
+		struct shaft_values
+		{
+			float direction[3] = {}; // towards the shaft sun (world space, unit)
+			float threshold = 1.0f;  // the bright pass threshold for the sky (c71.x)
+			float weight = 0.0f;     // ColAdj's c56.y
+		};
+		shaft_values g_shaft;
+		unsigned int g_shaft_frame = 0;        // the last frame with a LightShaft pass, 0 = none yet
+		unsigned int g_shaft_seen_frame = ~0u; // the frame whose first pass was read
+		shaft_values g_shaft_sent;
+		bool g_shaft_active_sent = false;
+		// Frames without a LightShaft pass before the shafts are switched off (an area without them,
+		// a menu, a load).
+		constexpr unsigned int kShaftHoldFrames = 30;
+
+		// T moves a little each frame (c69 is recomputed with the camera): resend only on a change
+		// that shows.
+		bool shaft_changed(const shaft_values& a, const shaft_values& b)
+		{
+			for (int i = 0; i < 3; i++)
+				if (std::abs(a.direction[i] - b.direction[i]) > 1e-3f)
+					return true;
+			return a.threshold != b.threshold || a.weight != b.weight;
+		}
+
 		unsigned int g_updated_frame = ~0u;
 
 		void close_haze_frame()
@@ -516,6 +542,49 @@ namespace comp::game::atmosphere
 		g_have_grade = true;
 	}
 
+	void observe_light_shaft(const float* ps_const, unsigned int frame)
+	{
+		if (!ps_const || frame == g_shaft_seen_frame)
+			return;
+		g_shaft_seen_frame = frame;
+		const float* rows = shared::common::ffp_state::get().map_viewproj_rows();
+		if (!rows)
+			return;
+		// Rows x, y and w of VP times (T, 0) give c69's x and y as NDC and its w: three equations.
+		const float* c69 = &ps_const[69 * 4];
+		const double b[3] = { 2.0 * c69[0] - 1.0, 1.0 - 2.0 * c69[1], c69[3] };
+		const double m[3][3] = {
+			{ rows[0], rows[1], rows[2] },
+			{ rows[4], rows[5], rows[6] },
+			{ rows[12], rows[13], rows[14] },
+		};
+		auto det3 = [](const double a[3][3])
+		{
+			return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+				+ a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+		};
+		const double det = det3(m);
+		if (std::abs(det) < 1e-9)
+			return;
+		double t[3];
+		for (int k = 0; k < 3; k++)
+		{
+			double a[3][3];
+			for (int i = 0; i < 3; i++)
+				for (int j = 0; j < 3; j++)
+					a[i][j] = j == k ? b[i] : m[i][j];
+			t[k] = det3(a) / det;
+		}
+		// T is a unit vector; anything else is not the camera c69 was made with.
+		const double len = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+		if (len < 0.9 || len > 1.1)
+			return;
+		for (int i = 0; i < 3; i++)
+			g_shaft.direction[i] = static_cast<float>(t[i] / len);
+		g_shaft.threshold = ps_const[71 * 4];
+		g_shaft_frame = std::max(frame, 1u);
+	}
+
 	// Live options: `rtx.key = value` lines sent to Remix whenever the file changes, so any
 	// option can be changed by a script without a restart or a menu. The lookdev host reads
 	// rtx_comp\lookdev\remix_live.txt; the game reads rtx_comp\remix_dev.txt, which only
@@ -682,6 +751,30 @@ namespace comp::game::atmosphere
 			send_grade(g_grade);
 			g_grade_sent = g_grade;
 			g_grade_sent_once = true;
+		}
+		// Light shafts, while the game runs its filter.
+		if (g_shaft_frame && frame - g_shaft_frame < kShaftHoldFrames)
+		{
+			g_shaft.weight = g_have_grade ? g_grade.scale[1] : 1.0f;
+			if (!g_shaft_active_sent || shaft_changed(g_shaft, g_shaft_sent))
+			{
+				const bool ok = set("rtx.ds1Look.shaftDirection", vec3(g_shaft.direction))
+					& set("rtx.ds1Look.shaftThreshold", num(g_shaft.threshold))
+					& set("rtx.ds1Look.shaftWeight", num(g_shaft.weight))
+					& set("rtx.ds1Look.shaftActive", "True");
+				if (ok)
+				{
+					if (!g_shaft_active_sent)
+						shared::common::log("Atmosphere", std::format("game light shafts sent: towards {}, threshold {}, weight {}",
+							vec3(g_shaft.direction), g_shaft.threshold, g_shaft.weight));
+					g_shaft_sent = g_shaft;
+					g_shaft_active_sent = true;
+				}
+			}
+		}
+		else if (g_shaft_active_sent && set("rtx.ds1Look.shaftActive", "False"))
+		{
+			g_shaft_active_sent = false;
 		}
 		if (g_have_sun_gamma && !(g_sun_gamma_sent_once && std::memcmp(g_sun_gamma, g_sun_gamma_sent, sizeof(g_sun_gamma)) == 0))
 		{

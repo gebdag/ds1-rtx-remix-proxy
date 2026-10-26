@@ -971,6 +971,8 @@ namespace comp
 		comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
 			comp::game::atmosphere::observe_grade(ffp.ps_const_data(), m_pIDirect3DDevice9);
+		else if (ffp.cur_ps_light_flags() & ffp.PS_LIGHT_SHAFT)
+			comp::game::atmosphere::observe_light_shaft(ffp.ps_const_data(), ffp.frame_count());
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			HRESULT hr = S_OK;
