@@ -331,6 +331,10 @@ namespace shared::common
 			// (rtx.skyMarkerEnabled) rasterizes them into its sky exactly as the
 			// game shades them: tint, fog, light scattering, scrolling, blending.
 			bool mark_sky_draws = true;
+			// Blended shells (rtx_comp\sky\shell_meshes.txt): 0 = decals like the other blended map
+			// draws (the old behaviour), 1 = plain blended geometry, 2 = cutouts at the runtime's
+			// rtx.ds1ShellCutoutAlpha (stage-4 D3DTSS_CONSTANT marker 0xD4000001, AlphaBlendToCutout).
+			int shell_mode = 2;
 		} sky;
 
 		struct resolution_settings

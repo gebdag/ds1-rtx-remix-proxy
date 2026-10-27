@@ -228,6 +228,7 @@ namespace shared::common
 
 		// [Sky]
 		sky.mark_sky_draws = get_bool("Sky", "MarkSkyDraws", true);
+		sky.shell_mode = std::clamp(get_int("Sky", "ShellMode", 2), 0, 2);
 
 		// [Resolution]
 		resolution.render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));

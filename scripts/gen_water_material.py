@@ -216,7 +216,7 @@ over "RootNode"
                     colorSpace = "raw"
                 )
                 float inputs:ior_constant = 1.33
-                color3f inputs:transmittance_color = (0.86, 0.9, 0.84)
+                color3f inputs:transmittance_color = (0.866, 0.866, 0.866)
                 float inputs:transmittance_measurement_distance = 1.5
                 bool inputs:thin_walled = 0
             }}

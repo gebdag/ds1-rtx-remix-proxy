@@ -24,6 +24,9 @@ namespace comp
 		// reads as "this draw is sky", like the UI (0xD15D0011) and decal
 		// (0xD15DECA1) markers.
 		constexpr DWORD SKY_MARKER = 0xD15D05C1;
+		// Stage 4's D3DTSS_CONSTANT on a blended shell drawn as a cutout ([Sky] ShellMode 2): the
+		// runtime renders it alpha-tested at rtx.ds1ShellCutoutAlpha (AlphaBlendToCutout).
+		constexpr DWORD kShellCutoutMarker = 0xD4000001;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
 		// are blended over) in a pass whose camera is the main one: no user clip
@@ -621,7 +624,15 @@ namespace comp
 					// Remix composites them onto the surface beneath. Free-standing
 					// atmospheric layers are not: a decal only survives on a surface
 					// behind it, so mist or a backdrop card in front of the sky vanished.
-					const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					// Nor are blended shells (sky_meshes::is_shell_draw): they do not lie on
+					// a surface, so as decals they took the lighting of whatever lay behind
+					// them; they are shaded as their own surface instead ([Sky] ShellMode).
+					const int shell_mode = shared::common::config::get().sky.shell_mode;
+					const bool shell = shell_mode != 0 &&
+						game::sky_meshes::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+					const bool base_decal = !shell && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					if (shell && shell_mode == 2)
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kShellCutoutMarker);
 					const bool tinted = ffp.apply_draw_tint(dev);
 					// The swamp's surface carries the swamp marker (see the skinned path).
 					const bool swamp = !base_decal && swamp_pass == game::swamp::pass::Surface;
@@ -643,6 +654,8 @@ namespace comp
 						game::texture_scroll::clear(dev);
 					if (swamp)
 						dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+					if (shell && shell_mode == 2)
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal)
 						ffp.clear_decal_marker(dev);
