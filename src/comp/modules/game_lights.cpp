@@ -185,15 +185,12 @@ namespace comp
 	//  - CreateLight applies at once; on a hash that already exists it updates that
 	//    light in place, but only applies the new values every frame when the light
 	//    is flagged isDynamic (a static one is put to sleep and frozen);
-	//  - DestroyLight is only queued, and the queue is flushed at Present.
-	// So a changed light must be updated with CreateLight alone. Destroying it first
-	// and re-creating it under the same hash lets the queued destroy remove the new
-	// light at Present: it shows for one frame and is gone until its next change.
+	//  - DestroyLight and CreateLight apply in call order, and a create of a handle cancels
+	//    a destroy of it still waiting for the next rendered frame (2026-10-27; before, a
+	//    light dropped for a frame or over a load screen and created again was lost for good).
+	// So a changed light is updated with CreateLight alone; destroying it first is not needed.
 	bool game_lights::submit_light(const remixapi_LightInfo& info, remixapi_LightHandle& handle)
 	{
-		if (destroyed_this_frame(info.hash))
-			return false; // would be removed by this frame's pending destroy; retry next frame
-
 		remixapi_LightHandle out = nullptr;
 		if (shared::common::remix_api::get().m_bridge.CreateLight(&info, &out) != REMIXAPI_ERROR_CODE_SUCCESS)
 		{
