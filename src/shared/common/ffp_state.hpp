@@ -618,6 +618,7 @@ namespace shared::common
 		struct rigid_vb_entry {
 			IDirect3DVertexBuffer9* vb = nullptr;
 			UINT capacity = 0;      // allocated size in vertices
+			UINT vertex_size = 0;   // bytes per vertex the buffer was allocated for
 			UINT expanded = 0;      // vertices with valid data
 			UINT last_frame = 0;
 			// Reuse validation ([FFPSteps] ExpandReuse). The stock path never
@@ -649,8 +650,9 @@ namespace shared::common
 		std::unordered_map<uint64_t, rigid_vb_entry> rigid_overlay_cache_;
 
 		// Skinned vertex expansion — same cache structure but preserves full vertex layout.
-		// Key: (tc_type << 48) | (stride << 32) | (src_vb ^ byte_offset) to differentiate
-		// from rigid entries and handle multiple skinned declaration variants.
+		// Keyed by source VB and byte offset like the rigid caches. The expanded vertex size
+		// follows the draw's declaration, and a VB the game frees can come back at the same
+		// address with another one, so an entry's buffer is only reused at its own vertex size.
 		IDirect3DVertexDeclaration9* skinned_exp_decl_ = nullptr;
 		int skinned_exp_tc_type_ = -1;     // D3DDECLTYPE of last skinned expansion
 		int skinned_exp_stride_ = 0;        // stride of last skinned decl source

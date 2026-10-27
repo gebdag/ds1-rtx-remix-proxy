@@ -900,6 +900,18 @@ namespace shared::common
 					++it;
 				}
 			}
+			for (auto it = skinned_exp_cache_.begin(); it != skinned_exp_cache_.end(); )
+			{
+				if (frame_count_ - it->second.last_frame > 600)
+				{
+					if (it->second.vb) it->second.vb->Release();
+					it = skinned_exp_cache_.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
 		}
 	}
 
@@ -2321,6 +2333,7 @@ namespace shared::common
 				return false;
 			}
 			entry.capacity = new_cap;
+			entry.vertex_size = rigid_vtx_size;
 			entry.expanded = 0;
 			entry.has_fingerprint = false; // fresh allocation holds no valid data
 		}
@@ -2693,7 +2706,8 @@ namespace shared::common
 		// Always re-expand from source — never serve cached data.
 		// The game can destroy and re-create VBs at the same address (pointer
 		// reuse), which makes stale cache hits return garbage vertex data.
-		if (!entry.vb || entry.capacity < total_verts)
+		// A buffer sized for another vertex layout would be written past its end.
+		if (!entry.vb || entry.capacity < total_verts || entry.vertex_size != new_stride)
 		{
 			if (entry.vb) entry.vb->Release();
 			UINT new_cap = (total_verts + 255u) & ~255u;
@@ -2704,6 +2718,7 @@ namespace shared::common
 				return false;
 			}
 			entry.capacity = new_cap;
+			entry.vertex_size = new_stride;
 			entry.expanded = 0;
 		}
 
