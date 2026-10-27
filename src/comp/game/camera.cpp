@@ -180,10 +180,32 @@ namespace comp::game::camera
 		return true;
 	}
 
-	// Bootstrap only: the main camera orbits the character at a measured 1.6-5.4 units,
-	// and the water-reflection frustum (the same camera mirrored through the water plane)
-	// lands 15-20 away, so this separates them with margin at the moment of acquisition.
+	// Bootstrap only: the main camera orbits the character at a measured 1.6-5.4 units.
 	static constexpr float BOOTSTRAP_ORBIT_DISTANCE = 12.0f;
+
+	// The water-reflection frustum is the main camera mirrored through the water plane:
+	// the same x and z, below the water where the main camera is above it. Over deep water
+	// it lands 15-20 away, but standing in shallow water (the Firelink tunnel) puts it
+	// closer to the character than the main camera, so distance alone picked it and the
+	// lock then followed it for the whole session: the world went in 2.7 units too low and
+	// every light ended up above the ceiling. An apex with a twin straight above it is the
+	// reflection.
+	static constexpr float MIRROR_TWIN_TOLERANCE = 0.01f;
+
+	static bool is_reflection(const frustum_culling::apex_sample& a,
+		const frustum_culling::apex_sample* apexes, int count)
+	{
+		for (int i = 0; i < count; ++i)
+		{
+			const auto& b = apexes[i];
+			if (std::fabs(b.x - a.x) < MIRROR_TWIN_TOLERANCE && std::fabs(b.z - a.z) < MIRROR_TWIN_TOLERANCE &&
+				b.y > a.y + MIRROR_TWIN_TOLERANCE)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	// Once acquired the main camera is followed by its frustum OBJECT, so it may travel
 	// any distance from the character — cutscenes, wide rooms and elevators all move the
@@ -248,6 +270,10 @@ namespace comp::game::camera
 				{
 					break; // stale lock — fall through and re-acquire
 				}
+				if (is_reflection(apexes[i], apexes, count))
+				{
+					break; // locked onto the water reflection — re-acquire
+				}
 				return accept(apexes[i], distance);
 			}
 			s_lock.frustum = nullptr;
@@ -263,6 +289,10 @@ namespace comp::game::camera
 		float best_distance = 0.0f;
 		for (int i = 0; i < count; ++i)
 		{
+			if (is_reflection(apexes[i], apexes, count))
+			{
+				continue;
+			}
 			const float distance = distance_to_char(apexes[i]);
 			if (best < 0 || distance < best_distance)
 			{
