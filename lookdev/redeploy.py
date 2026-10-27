@@ -3,7 +3,7 @@
     python redeploy.py [tag]
 
 Stops the host cleanly (Remix keeps its shader caches), copies the runtime from
-ds1-dxvk-nr\\_output into DATA\\.trex when it is newer, starts `host --live` (which copies the
+ds1-dxvk-nv\\_output into DATA\\.trex when it is newer, starts `host --live` (which copies the
 proxy build), waits until the streamed map is up and the frame has settled, and runs snap.py.
 The game is not touched: it streams without waiting on the host and resyncs by itself.
 """
@@ -18,8 +18,8 @@ import lookdev
 import snap
 import suite
 
-RUNTIME_BUILD = Path(r"<projects>\ds1-dxvk-nr\_output\d3d9.dll")
-RUNTIME_PDB = Path(r"<projects>\ds1-dxvk-nr\_Comp64Release\src\d3d9\d3d9.pdb")
+RUNTIME_BUILD = Path(r"<projects>\ds1-dxvk-nv\_output\d3d9.dll")
+RUNTIME_PDB = Path(r"<projects>\ds1-dxvk-nv\_Comp64Release\src\d3d9\d3d9.pdb")
 TREX = lookdev.GAME_DIR / ".trex"
 BRIDGE_LOG = lookdev.GAME_DIR / "rtx-remix" / "logs" / "bridge64.log"
 

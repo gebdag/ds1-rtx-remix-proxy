@@ -180,14 +180,11 @@ namespace comp
 		p_this = nullptr;
 	}
 
-	// How the runtime treats API lights (ds1-dxvk-nr rtx_remix_api.cpp):
+	// How the stock runtime treats API lights (rtx_remix_api.cpp, LightManager::addExternalLight):
 	//  - the handle IS the hash;
-	//  - CreateLight applies at once; on a hash that already exists it updates that
-	//    light in place, but only applies the new values every frame when the light
-	//    is flagged isDynamic (a static one is put to sleep and frozen);
-	//  - DestroyLight and CreateLight apply in call order, and a create of a handle cancels
-	//    a destroy of it still waiting for the next rendered frame (2026-10-27; before, a
-	//    light dropped for a frame or over a load screen and created again was lost for good).
+	//  - CreateLight on a hash that already exists overwrites that light in place and keeps
+	//    its stable identity, so the new values apply on the next frame;
+	//  - DestroyLight erases at once, and DestroyLight and CreateLight apply in call order.
 	// So a changed light is updated with CreateLight alone; destroying it first is not needed.
 	bool game_lights::submit_light(const remixapi_LightInfo& info, remixapi_LightHandle& handle)
 	{
@@ -257,7 +254,7 @@ namespace comp
 		return true;
 	}
 
-	void REMIXAPI_PTR game_lights::remix_draw_callback()
+	void game_lights::remix_draw_callback()
 	{
 		if (auto* gl = get())
 			gl->draw_light_instances();
@@ -482,7 +479,6 @@ namespace comp
 				light.info.pNext = &light.sphere;
 				light.info.hash = light.hash;
 				light.info.radiance = radiance;
-				light.info.isDynamic = TRUE;
 
 				if (!submit_light(light.info, light.handle) && !destroyed_this_frame(light.hash))
 					++create_failed_;
@@ -587,9 +583,6 @@ namespace comp
 		sun_info_.pNext = &sun_distant_;
 		sun_info_.hash = string_hash64("ds1_sun");
 		sun_info_.radiance = radiance;
-		// Dynamic, or the runtime freezes it after a few static frames and later
-		// direction changes never land.
-		sun_info_.isDynamic = TRUE;
 
 		if (!submit_light(sun_info_, sun_handle_) && !destroyed_this_frame(sun_info_.hash))
 			++sun_create_failed_;
@@ -804,7 +797,6 @@ namespace comp
 		light.info.pNext = &light.sphere;
 		light.info.hash = light.hash;
 		light.info.radiance = radiance;
-		light.info.isDynamic = TRUE;
 
 		submit_light(light.info, light.handle);
 	}
@@ -836,7 +828,6 @@ namespace comp
 			light.hash = string_hash64("ds1_probe_light");
 			light.info.hash = light.hash;
 			light.info.radiance = { probe_radiance_, probe_radiance_, probe_radiance_ };
-			light.info.isDynamic = TRUE;
 
 			submit_light(light.info, light.handle);
 			return;

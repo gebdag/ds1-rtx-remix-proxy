@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import suite  # noqa: E402  (PrintWindow helpers)
 
 user32 = ctypes.windll.user32
-OUT = Path(r"<projects>\ds1-comp-proxy\lookdev\snaps")
+OUT = Path(r"<projects>\ds1-comp-proxy-nv\lookdev\snaps")
 
 
 def find_window(match) -> int:

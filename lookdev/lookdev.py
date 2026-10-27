@@ -38,6 +38,16 @@ PROXY_IN_GAME = GAME_DIR / "d3d9_lookdev.dll"
 # so what lookdev shows is what the game runs on its next launch.
 PROXY_FOR_GAME = GAME_DIR / "d3d9.dll"
 PROXY_PDB_BUILD = PROXY_BUILD.with_name("DarkSouls-comp-proxy.pdb")
+# This is the stock-NVIDIA (nv) proxy tree. It shares DATA with the live ds1-comp-proxy /
+# ds1-dxvk-nr set, so nothing here writes into DATA until the game is switched over on purpose:
+# rename ..\deploy.conf.DISABLED to deploy.conf (the same switch build.bat reads).
+DEPLOY_SWITCH = HERE.parent / "deploy.conf"
+
+
+def require_deploy_switch():
+    if not DEPLOY_SWITCH.exists():
+        sys.exit(f"nv tree: {DEPLOY_SWITCH} is missing, so DATA still belongs to the live set. "
+                 "Rename deploy.conf.DISABLED to deploy.conf to switch the game to the nv set.")
 
 
 def deploy_file(src, dst):
@@ -46,6 +56,7 @@ def deploy_file(src, dst):
     A DLL a running process has loaded can't be overwritten but can be renamed: a locked dst moves
     aside as dst.old-<time>, the new file takes its name, and the next launch loads it. Earlier
     moved-aside copies are removed once nothing has them loaded."""
+    require_deploy_switch()
     import shutil
     for old in dst.parent.glob(dst.name + ".old-*"):
         try:
@@ -242,6 +253,7 @@ def cmd_host(args):
         stop_host()
     if running("NvRemixBridge.exe"):
         sys.exit("NvRemixBridge.exe is running: the normal game (or another Remix client) owns the bridge. Close it first.")
+    require_deploy_switch()
     import shutil
     shutil.copy2(HOST, HOST_IN_GAME)
     shutil.copy2(PROXY_BUILD, PROXY_IN_GAME)

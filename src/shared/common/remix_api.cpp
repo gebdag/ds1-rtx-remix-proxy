@@ -12,7 +12,7 @@ namespace shared::common
 	}
 
 	// called on device->BeginScene
-	void REMIXAPI_PTR remix_api::begin_scene_callback_internal()
+	void remix_api::begin_scene_callback_internal()
 	{
 		auto& api = get();
 		if (api.is_initialized())
@@ -131,7 +131,7 @@ namespace shared::common
 		}
 	}
 
-	void REMIXAPI_PTR remix_api::end_scene_callback_internal()
+	void remix_api::end_scene_callback_internal()
 	{
 		// external callback (if registered)
 		if (get().is_initialized() && get().end_scene_callback_external) {
@@ -139,7 +139,7 @@ namespace shared::common
 		}
 	}
 
-	void REMIXAPI_PTR remix_api::present_callback_internal()
+	void remix_api::present_callback_internal()
 	{
 		// external callback (if registered)
 		if (get().is_initialized() && get().present_callback_external) {

@@ -24,7 +24,7 @@ namespace comp
 		void tab_imgui();
 		void draw_pos_hud();
 
-		static void REMIXAPI_PTR remix_draw_callback();
+		static void remix_draw_callback();
 
 		bool enabled = true;   // the point lights (harvested + synthesized); sun and player have their own
 		void set_enabled(bool e)

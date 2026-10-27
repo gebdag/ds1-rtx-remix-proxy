@@ -13,9 +13,9 @@ namespace shared::common
 
 		static remix_api& get();
 
-		static void REMIXAPI_PTR begin_scene_callback_internal();
-		static void REMIXAPI_PTR end_scene_callback_internal();
-		static void REMIXAPI_PTR present_callback_internal();
+		static void begin_scene_callback_internal();
+		static void end_scene_callback_internal();
+		static void present_callback_internal();
 
 
 		static constexpr std::uint32_t M_MAX_DEBUG_LINES = 512u;
