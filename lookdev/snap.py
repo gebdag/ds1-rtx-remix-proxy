@@ -49,7 +49,7 @@ def grab(hwnd) -> Image.Image | None:
     return suite.print_client(hwnd) if hwnd else None
 
 
-SNAP_DIR = Path(r"<game dir>\DATA\rtx_comp\lookdev")
+SNAP_DIR = suite.lookdev.CAPTURE_DIR
 
 
 def grab_game(timeout: float = 5.0) -> Image.Image | None:

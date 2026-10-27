@@ -26,7 +26,9 @@ import struct
 import sys
 from pathlib import Path
 
-GAME_DIR = Path(r"<game dir>\DATA")
+import os  # noqa: E402
+# DATA, or the nv set's own host folder (DS1_LOOKDEV_GAME_DIR, see lookdev.py).
+GAME_DIR = Path(os.environ.get("DS1_LOOKDEV_GAME_DIR", r"<game dir>\DATA"))
 SHADER_DIR = GAME_DIR / "unpacked" / "shader"
 CAPTURE_DIR = GAME_DIR / "rtx_comp" / "lookdev"
 

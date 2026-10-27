@@ -4,11 +4,14 @@ Keeps a persistent base block (the header of remix_live.txt, up to the '# --- li
 replaces everything after it with the given overrides; `python live.py --clear` drops them.
 The proxy in the host applies the file whenever it changes (atmosphere.cpp apply_live_options).
 """
+import os
 import sys
 import time
 from pathlib import Path
 
-LIVE = Path(r"<game dir>\DATA\rtx_comp\lookdev\remix_live.txt")
+# The host's folder: DATA, or the nv set's own host folder (DS1_LOOKDEV_GAME_DIR, see lookdev.py).
+GAME_DIR = Path(os.environ.get("DS1_LOOKDEV_GAME_DIR", r"<game dir>\DATA"))
+LIVE = GAME_DIR / "rtx_comp" / "lookdev" / "remix_live.txt"
 MARK = "# --- live"
 
 

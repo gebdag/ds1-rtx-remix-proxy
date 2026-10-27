@@ -61,6 +61,7 @@ def stop_host() -> None:
 
 
 def start_host(source: list[str]) -> None:
+    lookdev.require_deploy_switch()  # copies into GAME_DIR: not the live set's DATA without deploy.conf
     shutil.copy2(lookdev.HOST, lookdev.HOST_IN_GAME)
     shutil.copy2(lookdev.PROXY_BUILD, lookdev.PROXY_IN_GAME)
     lookdev.deploy_game_proxy()
@@ -318,6 +319,7 @@ def cmd_run(args) -> int:
     was_live = lookdev.running(lookdev.HOST_IN_GAME.name)
 
     metrics, rows, crashed = {}, [], {}
+    lookdev.require_deploy_switch()  # rewrites GAME_DIR's rtx.conf for the run
     restore = apply_overrides(args.set)
     (out_dir / "settings.txt").write_text("\n".join(args.set) + "\n", encoding="utf-8")
     try:

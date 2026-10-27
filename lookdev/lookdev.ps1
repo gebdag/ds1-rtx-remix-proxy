@@ -73,6 +73,11 @@ function Set-IniOverrides([string[]]$lines, $overrides) {
     return $out
 }
 
+# nv tree: DATA belongs to the live set until ..\deploy.conf.DISABLED is renamed to deploy.conf.
+if (-not (Test-Path (Join-Path $PSScriptRoot '..\deploy.conf'))) {
+    throw "nv tree: ..\deploy.conf is missing, so DATA still belongs to the live set. Use the live tree's lookdev.ps1, or switch the game to the nv set first."
+}
+
 $src = Join-Path $GameDir 'remix-comp-proxy.ini'
 $dst = Join-Path $GameDir 'remix-comp-proxy.lookdev.ini'
 if (-not (Test-Path $src)) { throw "Normal INI not found: $src" }

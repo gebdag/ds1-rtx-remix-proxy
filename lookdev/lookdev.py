@@ -23,7 +23,11 @@ import sys
 import time
 from pathlib import Path
 
-GAME_DIR = Path(r"<game dir>\DATA")
+GAME_DATA = Path(r"<game dir>\DATA")
+# DS1_LOOKDEV_GAME_DIR points the host at another folder laid out like DATA (its own .trex, rtx.conf and
+# proxy inis, with rtx_comp and rtx-remix\mods linked to DATA's), so the nv set can render captures
+# without touching the live set in DATA.
+GAME_DIR = Path(os.environ.get("DS1_LOOKDEV_GAME_DIR", str(GAME_DATA)))
 CAPTURE_DIR = GAME_DIR / "rtx_comp" / "lookdev"
 HERE = Path(__file__).resolve().parent
 VIEWER = HERE / "bin" / "ds1_lookdev_viewer.exe"
@@ -45,6 +49,8 @@ DEPLOY_SWITCH = HERE.parent / "deploy.conf"
 
 
 def require_deploy_switch():
+    if GAME_DIR.resolve() != GAME_DATA.resolve():
+        return  # a separate host folder (DS1_LOOKDEV_GAME_DIR) is not the live set's DATA
     if not DEPLOY_SWITCH.exists():
         sys.exit(f"nv tree: {DEPLOY_SWITCH} is missing, so DATA still belongs to the live set. "
                  "Rename deploy.conf.DISABLED to deploy.conf to switch the game to the nv set.")
