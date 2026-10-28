@@ -38,29 +38,53 @@ namespace comp
 		static constexpr int SKIN_VTX_SIZE = 48;
 		// The overlay layout: SKIN_VTX_SIZE with the second uv set as TEXCOORD0, plus D3DCOLOR.
 		static constexpr int SKIN_OVERLAY_VTX_SIZE = 52;
-		static constexpr int SKIN_CACHE_SIZE = 64;
+		// Entries no draw has used for this many frames are released.
+		static constexpr UINT SKIN_CACHE_MAX_AGE = 600;
 
 		IDirect3DVertexDeclaration9* skin_exp_decl_ = nullptr;
 		IDirect3DVertexDeclaration9* skin_overlay_decl_ = nullptr;
 
-		// Expanded vertex buffer cache
-		IDirect3DVertexBuffer9* skin_exp_vb_[SKIN_CACHE_SIZE] = {};
-		unsigned int skin_exp_key_[SKIN_CACHE_SIZE] = {};
-		unsigned int skin_exp_nv_[SKIN_CACHE_SIZE] = {};
-		// Which layout the entry holds (base or overlay vertices).
-		bool skin_exp_overlay_[SKIN_CACHE_SIZE] = {};
-		// Sampled content fingerprint of the source range: the game can free a VB
-		// and create another at the same address, which a pointer key alone would
-		// serve the old character's vertices for.
-		uint64_t skin_exp_fp_[SKIN_CACHE_SIZE] = {};
-		// Highest blend index the expanded vertices use: the bones to upload.
-		int skin_exp_max_idx_[SKIN_CACHE_SIZE] = {};
+		// Expanded vertex buffer cache. Every source range keeps one buffer for as long as it is drawn:
+		// Remix pairs a draw with last frame's instance only through the same vertex buffer, and a
+		// skinned mesh bound to a single bone becomes a rigid instance whose motion vectors come from
+		// that pairing alone (hair, eyes, parts of the face).
+		struct skin_key {
+			IDirect3DVertexBuffer9* src_vb;
+			INT base_vtx;
+			UINT num_verts;
+			UINT stride;
+			bool overlay;   // which layout the entry holds (base or overlay vertices)
+			bool operator==(const skin_key&) const = default;
+		};
+		struct skin_key_hash {
+			size_t operator()(const skin_key& k) const {
+				size_t h = std::hash<uintptr_t>{}(reinterpret_cast<uintptr_t>(k.src_vb));
+				h ^= std::hash<INT>{}(k.base_vtx) + 0x9e3779b9 + (h << 6) + (h >> 2);
+				h ^= std::hash<UINT>{}(k.num_verts) + 0x9e3779b9 + (h << 6) + (h >> 2);
+				h ^= std::hash<UINT>{}(k.stride) + 0x9e3779b9 + (h << 6) + (h >> 2);
+				h ^= std::hash<bool>{}(k.overlay) + 0x9e3779b9 + (h << 6) + (h >> 2);
+				return h;
+			}
+		};
+		struct skin_entry {
+			IDirect3DVertexBuffer9* vb = nullptr;
+			// Sampled content fingerprint of the source range: the game can free a VB
+			// and create another at the same address, which a pointer key alone would
+			// serve the old character's vertices for.
+			uint64_t fp = 0;
+			// Highest blend index the expanded vertices use: the bones to upload.
+			int max_idx = 0;
+			UINT last_frame = 0;
+		};
+		std::unordered_map<skin_key, skin_entry, skin_key_hash> skin_cache_;
+		UINT last_prune_frame_ = 0;
 		int cur_max_idx_ = 0;
 
 		bool initialized_ = false;
 
 		void create_expanded_decl(IDirect3DDevice9* dev);
 		void release_cache();
+		void prune_cache(UINT frame);
 
 		// Vertex expansion (overlay: the SKIN_OVERLAY_VTX_SIZE layout)
 		IDirect3DVertexBuffer9* get_expanded_vb(IDirect3DDevice9* dev,

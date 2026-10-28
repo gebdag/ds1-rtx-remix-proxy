@@ -143,18 +143,30 @@ namespace comp
 
 	void skinning::release_cache()
 	{
-		for (int i = 0; i < SKIN_CACHE_SIZE; i++)
+		for (auto& [key, entry] : skin_cache_)
 		{
-			if (skin_exp_vb_[i])
-			{
-				skin_exp_vb_[i]->Release();
-				skin_exp_vb_[i] = nullptr;
-			}
-			skin_exp_key_[i] = 0;
-			skin_exp_nv_[i] = 0;
-			skin_exp_fp_[i] = 0;
-			skin_exp_max_idx_[i] = 0;
+			if (entry.vb)
+				entry.vb->Release();
 		}
+		skin_cache_.clear();
+	}
+
+	void skinning::prune_cache(UINT frame)
+	{
+		for (auto it = skin_cache_.begin(); it != skin_cache_.end(); )
+		{
+			if (frame - it->second.last_frame > SKIN_CACHE_MAX_AGE)
+			{
+				if (it->second.vb)
+					it->second.vb->Release();
+				it = skin_cache_.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+		last_prune_frame_ = frame;
 	}
 
 	uint64_t skinning::fingerprint(const unsigned char* src, UINT num_verts, UINT stride)
@@ -186,15 +198,12 @@ namespace comp
 		if (!src_vb || stride == 0 || num_verts == 0) return nullptr;
 		const UINT vtx_size = overlay ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE;
 
-		// Hash: src_vb pointer + base_vtx + num_verts + stride, and which layout
-		unsigned int key = static_cast<unsigned int>(reinterpret_cast<uintptr_t>(src_vb));
-		key ^= static_cast<unsigned int>(base_vtx) * 0x9E3779B9u;
-		key ^= num_verts * 0x517CC1B7u;
-		key ^= stride * 0x6C62272Eu;
-		if (overlay)
-			key ^= 0xA5A5A5A5u;
+		const UINT frame = shared::common::ffp_state::get().frame_count();
+		if (frame - last_prune_frame_ >= SKIN_CACHE_MAX_AGE)
+			prune_cache(frame);
 
-		int slot = key % SKIN_CACHE_SIZE;
+		auto& entry = skin_cache_[skin_key{ src_vb, base_vtx, num_verts, stride, overlay }];
+		entry.last_frame = frame;
 
 		// Lock source VB
 		unsigned char* src_data = nullptr;
@@ -204,30 +213,24 @@ namespace comp
 
 		const uint64_t fp = fingerprint(src_data, num_verts, stride);
 
-		// Cache hit: same range and still the same vertices
-		if (skin_exp_vb_[slot] && skin_exp_key_[slot] == key && skin_exp_nv_[slot] == num_verts &&
-			skin_exp_fp_[slot] == fp && skin_exp_overlay_[slot] == overlay)
+		// Cache hit: still the same vertices
+		if (entry.vb && entry.fp == fp)
 		{
 			src_vb->Unlock();
-			cur_max_idx_ = skin_exp_max_idx_[slot];
-			return skin_exp_vb_[slot];
+			cur_max_idx_ = entry.max_idx;
+			return entry.vb;
 		}
 
-		// Cache miss: evict and create
-		if (skin_exp_vb_[slot])
-		{
-			skin_exp_vb_[slot]->Release();
-			skin_exp_vb_[slot] = nullptr;
-		}
-
-		// Create expanded VB
-		IDirect3DVertexBuffer9* exp_vb = nullptr;
-		if (FAILED(dev->CreateVertexBuffer(num_verts * vtx_size, 0,
+		// Other vertices in the range re-expand into the entry's buffer, which the key sizes exactly:
+		// a new buffer would cost Remix the draw's instance pairing. A new range creates one.
+		IDirect3DVertexBuffer9* exp_vb = entry.vb;
+		if (!exp_vb && FAILED(dev->CreateVertexBuffer(num_verts * vtx_size, 0,
 			0, D3DPOOL_MANAGED, &exp_vb, nullptr)))
 		{
 			src_vb->Unlock();
 			return nullptr;
 		}
+		entry.vb = exp_vb;
 
 		// Lock and expand
 		unsigned char* dst_data = nullptr;
@@ -235,6 +238,7 @@ namespace comp
 		{
 			src_vb->Unlock();
 			exp_vb->Release();
+			entry.vb = nullptr;
 			return nullptr;
 		}
 
@@ -245,12 +249,8 @@ namespace comp
 		exp_vb->Unlock();
 		src_vb->Unlock();
 
-		skin_exp_vb_[slot] = exp_vb;
-		skin_exp_key_[slot] = key;
-		skin_exp_nv_[slot] = num_verts;
-		skin_exp_overlay_[slot] = overlay;
-		skin_exp_fp_[slot] = fp;
-		skin_exp_max_idx_[slot] = cur_max_idx_;
+		entry.fp = fp;
+		entry.max_idx = cur_max_idx_;
 
 		return exp_vb;
 	}
