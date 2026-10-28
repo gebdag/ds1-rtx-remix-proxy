@@ -2,6 +2,7 @@
 #include "shared/common/flags.hpp"
 #include "camera.hpp"
 #include "cheats.hpp"
+#include "debug_tools.hpp"
 #include "fps_unlock.hpp"
 #include "intro_skip.hpp"
 
@@ -125,6 +126,7 @@ namespace comp::game
 		fps_unlock::init();
 		intro_skip::init();
 		camera::init();
+		debug_tools::init();
 		cheats::init();
 	}
 

@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "cheats.hpp"
+#include "debug_tools.hpp"
 #include "shared/common/config.hpp"
 
 using shared::common::log;
@@ -87,12 +88,23 @@ namespace comp::game::cheats
 	static constexpr DWORD TELEPORT_BLOCK_OFFSET = 0xE0;
 	static constexpr DWORD TELEPORT_SECONDARY_BLOCK_OFFSET = 0x10;
 
+	// The only call of the game's fall-damage function (FUN_00e7fef0(ChrIns*), stdcall), in its landing
+	// handler: push edi (the falling ChrIns); call rel32. No Fall Damage points the call at a stub that
+	// returns at once when the ChrIns is the player, so enemies still take fall damage.
+	static constexpr const char* FALL_DAMAGE_CALL_AOB = "57 E8 ?? ?? ?? ?? F3 0F 10 44 24 08 F3 0F 5A C0";
+
 	static bool s_available = false;
 	static bool s_enabled = false;
 	static DWORD s_teleport_base_addr = 0;
 	static DWORD s_last_bonfire_base_addr = 0;
 	static int s_last_bonfire_index = 0;
 	static int s_teleport_index = 0;
+
+	// No Fall Damage: the call site, its original bytes and the cave.
+	static DWORD s_fall_call_addr = 0;
+	static BYTE s_fall_orig_bytes[6] = {};
+	static BYTE* s_fall_cave = nullptr;
+	static bool s_no_fall_damage = false;
 
 	// The code cave and original bytes
 	static BYTE* s_cave = nullptr;
@@ -139,6 +151,68 @@ namespace comp::game::cheats
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			return false;
 		}
+	}
+
+	// Enemies ignore the player: the game's own Player Hide (sight) and Player Silence (hearing) flags.
+	static bool enemies_ignore_player()
+	{
+		return debug_tools::read_flag(debug_tools::kFlagPlayerHide) && debug_tools::read_flag(debug_tools::kFlagPlayerSilence);
+	}
+
+	static bool set_enemies_ignore_player(bool on)
+	{
+		return debug_tools::write_flag(debug_tools::kFlagPlayerHide, on) && debug_tools::write_flag(debug_tools::kFlagPlayerSilence, on);
+	}
+
+	// The No Fall Damage stub, called in place of the fall-damage function with the same stdcall
+	// argument (the falling ChrIns, pushed by the call site):
+	//   mov eax, [WorldChrMan]; test eax, eax; jz go
+	//   mov eax, [eax+0x3C]; cmp eax, [esp+4]; jne go
+	//   ret 4                                  ; the local player falls: no damage
+	// go: jmp <fall damage>
+	static bool build_fall_cave()
+	{
+		const DWORD world_chr_man = debug_tools::world_chr_man();
+		if (!s_fall_call_addr || !world_chr_man)
+			return false;
+		s_fall_cave = static_cast<BYTE*>(VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+		if (!s_fall_cave)
+			return false;
+		const DWORD fall_damage = s_fall_call_addr + 6 + *reinterpret_cast<const DWORD*>(&s_fall_orig_bytes[2]);
+		const DWORD cave = reinterpret_cast<DWORD>(s_fall_cave);
+		const BYTE code[26] = {
+			0xA1, 0, 0, 0, 0,      // mov eax, [WorldChrMan]
+			0x85, 0xC0,            // test eax, eax
+			0x74, 0x0C,            // jz go
+			0x8B, 0x40, 0x3C,      // mov eax, [eax+0x3C]
+			0x3B, 0x44, 0x24, 0x04,// cmp eax, [esp+4]
+			0x75, 0x03,            // jne go
+			0xC2, 0x04, 0x00,      // ret 4
+			0xE9, 0, 0, 0, 0,      // go: jmp <fall damage>
+		};
+		std::memcpy(s_fall_cave, code, sizeof(code));
+		*reinterpret_cast<DWORD*>(&s_fall_cave[1]) = world_chr_man;
+		*reinterpret_cast<DWORD*>(&s_fall_cave[22]) = fall_damage - (cave + 26);
+		return true;
+	}
+
+	// Retargets only the call's rel32: one aligned 4-byte store, so a game thread at the call site
+	// sees the old target or the new one, never half of each.
+	static bool set_no_fall_damage(bool on)
+	{
+		const DWORD rel_addr = s_fall_call_addr + 2;
+		if (!s_fall_cave || (rel_addr & 3))
+			return false;
+		const DWORD original = *reinterpret_cast<const DWORD*>(&s_fall_orig_bytes[2]);
+		const DWORD to_stub = reinterpret_cast<DWORD>(s_fall_cave) - (s_fall_call_addr + 6);
+		DWORD old_protect;
+		if (!VirtualProtect(reinterpret_cast<void*>(rel_addr), 4, PAGE_EXECUTE_READWRITE, &old_protect))
+			return false;
+		InterlockedExchange(reinterpret_cast<volatile LONG*>(rel_addr), static_cast<LONG>(on ? to_stub : original));
+		VirtualProtect(reinterpret_cast<void*>(rel_addr), 4, old_protect, &old_protect);
+		FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(rel_addr), 4);
+		s_no_fall_damage = on;
+		return true;
 	}
 
 	static bool safe_write_vec3(DWORD addr, float x, float y, float z)
@@ -310,6 +384,23 @@ namespace comp::game::cheats
 		s_teleport_index = find_first_teleportable_index();
 		sync_last_bonfire_selection_from_game();
 
+		if (debug_tools::flags_available() && shared::common::config::get().cheats.enemies_ignore_player)
+		{
+			const bool ok = set_enemies_ignore_player(true);
+			log("Cheats", ok ? "Enemies ignore the player (from INI)" : "Could not set the hide / silence flags",
+				ok ? LOG_TYPE::LOG_TYPE_WARN : LOG_TYPE::LOG_TYPE_ERROR, true);
+		}
+
+		if (const DWORD fall_call = shared::utils::mem::find_pattern(FALL_DAMAGE_CALL_AOB, 0, "FallDamageCall", true, 0))
+		{
+			s_fall_call_addr = fall_call;
+			std::memcpy(s_fall_orig_bytes, reinterpret_cast<const void*>(fall_call), sizeof(s_fall_orig_bytes));
+		}
+		if (!build_fall_cave())
+			log("Cheats", "Fall damage call not found — No Fall Damage unavailable", LOG_TYPE::LOG_TYPE_WARN, true);
+		else if (shared::common::config::get().cheats.no_fall_damage && set_no_fall_damage(true))
+			log("Cheats", "No fall damage (from INI)", LOG_TYPE::LOG_TYPE_WARN, true);
+
 		DWORD found = shared::utils::mem::find_pattern(HP_WRITE_AOB, 0, "HP_Write", true, 0);
 		if (!found)
 		{
@@ -426,6 +517,7 @@ namespace comp::game::cheats
 
 	void tab_imgui()
 	{
+		debug_tools::online_warning();
 		if (!s_available)
 		{
 			ImGui::TextDisabled("God mode unavailable (AOB not found)");
@@ -440,6 +532,45 @@ namespace comp::game::cheats
 		{
 			ImGui::SameLine();
 			ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "ACTIVE");
+		}
+
+		if (!debug_tools::flags_available())
+		{
+			ImGui::TextDisabled("Enemies Ignore Player / Freeze Enemies unavailable (AOB not found)");
+		}
+		else
+		{
+			// Read back every frame: the checkbox shows the game's flags, not a remembered choice.
+			bool ignore = enemies_ignore_player();
+			if (ImGui::Checkbox("Enemies Ignore Player", &ignore))
+			{
+				const bool ok = set_enemies_ignore_player(ignore);
+				log("Cheats", ok ? std::format("Enemies ignore the player: {}", ignore ? "ON" : "off")
+					: std::string("Could not write the hide / silence flags"));
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("The game's own debug flags Player Hide (enemies do not see you) and\n"
+					"Player Silence (they do not hear you). On at start with [Cheats] EnemiesIgnorePlayer=1.");
+			debug_tools::flag_checkbox(debug_tools::kFlagAllNoUpdateAi, "Freeze Enemies",
+				"The game's All No Update AI debug flag: every AI character stands still (event-scripted\n"
+				"actions and projectiles in flight still happen).");
+		}
+
+		if (!s_fall_cave)
+		{
+			ImGui::TextDisabled("No Fall Damage unavailable (not found)");
+		}
+		else
+		{
+			bool no_fall = s_no_fall_damage;
+			if (ImGui::Checkbox("No Fall Damage", &no_fall))
+			{
+				const bool ok = set_no_fall_damage(no_fall);
+				log("Cheats", ok ? std::format("No fall damage: {}", no_fall ? "ON" : "off") : std::string("Could not patch the fall damage call"));
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("The player takes no fall damage (enemies still do). Bottomless pits and kill planes\n"
+					"still kill. On at start with [Cheats] NoFallDamage=1.");
 		}
 
 		ImGui::Separator();

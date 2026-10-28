@@ -182,6 +182,7 @@ namespace comp
 	private:
 		void tab_about();
 		void tab_dev();
+		void dev_general();
 		void tab_ffp();
 		void tab_postfx();
 		

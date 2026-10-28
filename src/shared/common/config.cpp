@@ -157,6 +157,8 @@ namespace shared::common
 
 		// [Cheats]
 		cheats.god_mode = get_bool("Cheats", "GodMode", false);
+		cheats.enemies_ignore_player = get_bool("Cheats", "EnemiesIgnorePlayer", false);
+		cheats.no_fall_damage = get_bool("Cheats", "NoFallDamage", false);
 
 		// [Diagnostics]
 		diagnostics.enabled = get_bool("Diagnostics", "Enabled", true);

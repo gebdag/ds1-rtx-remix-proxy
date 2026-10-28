@@ -590,7 +590,7 @@ namespace comp::perf
 			// Post-FX quad skipping (proxy-side, pre-existing feature)
 			ImGui::Checkbox("Post-FX fullscreen quads (proxy skip)", &cfg.ffp.skip_postfx);
 			ImGui::SameLine(430);
-			ImGui::TextDisabled("%d passes seen — details in Post-FX tab", cfg.postfx.pass_count);
+			ImGui::TextDisabled("%d passes seen — details in Dev > Post-FX", cfg.postfx.pass_count);
 		}
 
 		if (ImGui::CollapsingHeader("Post-Processing Filters (experimental)", ImGuiTreeNodeFlags_DefaultOpen))

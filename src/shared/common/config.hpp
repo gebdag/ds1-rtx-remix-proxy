@@ -185,6 +185,8 @@ namespace shared::common
 		struct cheats_settings
 		{
 			bool god_mode = false;
+			bool enemies_ignore_player = false;
+			bool no_fall_damage = false;
 		} cheats;
 
 		struct diagnostics_settings

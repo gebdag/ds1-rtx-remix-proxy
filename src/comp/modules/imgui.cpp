@@ -16,6 +16,7 @@
 #include "../game/fps_unlock.hpp"
 #include "../game/camera.hpp"
 #include "../game/cheats.hpp"
+#include "../game/debug_tools.hpp"
 #include "../game/frustum_culling.hpp"
 #include "../game/vanilla_view.hpp"
 
@@ -279,7 +280,35 @@ namespace comp
 		}
 	}
 
+	void tab_tracer();
+	void tab_diagnostics();
+
+	// Dev: the tools used rarely, each a sub-tab, so the top row keeps to the everyday ones.
 	void imgui::tab_dev()
+	{
+		if (!ImGui::BeginTabBar("dev_tabs"))
+			return;
+		const std::pair<const char*, void (*)()> tabs[] = {
+			{ "General", [] { imgui::get()->dev_general(); } },
+			{ "Diagnostics", tab_diagnostics },
+			{ "Tracer", tab_tracer },
+			{ "RT", rt_tracker::tab_imgui },
+			{ "Post-FX", [] { imgui::get()->tab_postfx(); } },
+			{ "Camera", game::camera::tab_imgui },
+		};
+		for (const auto& [name, draw] : tabs)
+		{
+			if (ImGui::BeginTabItem(name))
+			{
+				SPACEY8;
+				draw();
+				ImGui::EndTabItem();
+			}
+		}
+		ImGui::EndTabBar();
+	}
+
+	void imgui::dev_general()
 	{
 		auto& cfg = shared::common::config::get();
 
@@ -397,9 +426,9 @@ namespace comp
 		{
 			ImGui::SameLine();
 			if (cfg.postfx.skip_passes.empty())
-				ImGui::TextDisabled("(ALL — see Post-FX tab)");
+				ImGui::TextDisabled("(ALL — see Dev > Post-FX)");
 			else
-				ImGui::TextDisabled("(skipping %zu — see Post-FX tab)", cfg.postfx.skip_passes.size());
+				ImGui::TextDisabled("(skipping %zu — see Dev > Post-FX)", cfg.postfx.skip_passes.size());
 		}
 		ImGui::Checkbox("Suppress Aux Passes", &cfg.ffp.suppress_aux_passes);
 		ImGui::SameLine();
@@ -910,13 +939,9 @@ namespace comp
 			ImGui::PopStyleVar(1);
 			ADD_TAB("FFP", tab_ffp);
 			ADD_TAB("Perf", perf::tab_imgui);
-			ADD_TAB("Post-FX", tab_postfx);
-			ADD_TAB("Camera", game::camera::tab_imgui);
 			ADD_TAB("Cheats", game::cheats::tab_imgui);
-			ADD_TAB("RT", rt_tracker::tab_imgui);
+			ADD_TAB("Debug", game::debug_tools::tab_imgui);
 			ADD_TAB("Lights", tab_lights);
-			ADD_TAB("Diagnostics", tab_diagnostics);
-			ADD_TAB("Tracer", tab_tracer);
 			ADD_TAB("Dev", tab_dev);
 			ADD_TAB("About", tab_about);
 			ImGui::EndTabBar();
