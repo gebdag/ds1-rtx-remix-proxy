@@ -403,6 +403,16 @@ namespace shared::common
 			return stage >= 0 && cur_texture_[stage] != nullptr;
 		}
 
+		// The glass pass of a window glass draw (game/glass.hpp), after the came pass (whose
+		// stage-0 state it keeps): the vertices 2 mm off the came (their own Remix geometry, so the
+		// two never merge or z-fight), the derived glass texture on stage 0 (its came is alpha 0)
+		// and straight alpha blending, so without a replacement material only the glass shows,
+		// blended as the game does.
+		// No decal marker: the glass is a surface of its own. Returns true if the caller should
+		// re-issue the draw; the caller saves and restores the render states it changes.
+		bool setup_glass_pass(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts,
+			IDirect3DBaseTexture9* glass_texture);
+
 		// Tag the current FFP draw as a decal when the game itself renders it
 		// alpha-blended (terrain edge-fade strips blending onto the geometry
 		// beneath). Without the tag Remix treats such draws as unordered
@@ -419,11 +429,15 @@ namespace shared::common
 
 		// Expand SHORT2/SHORT4 texcoords to FLOAT2 with UV scale (1/1024) + c246 offset.
 		// Creates a temporary VB with FLOAT3 pos + FLOAT3 normal + D3DCOLOR diffuse.
-		// With overlay_uv, the second UV pair (TEXCOORD0.zw of a SHORT4/FLOAT4 source)
+		// With rigid_layer::overlay, the second UV pair (TEXCOORD0.zw of a SHORT4/FLOAT4 source)
 		// is written as TEXCOORD0 instead, into a separate VB cache — the distinct
 		// texcoord data gives Remix a distinct geometry hash for the overlay draw.
+		// rigid_layer::glass moves the positions kGlassOffset along -normal, into a cache of
+		// its own, for the same reason.
 		// Returns true if expansion succeeded; caller should draw with BaseVertexIndex=0.
-		bool expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts, bool overlay_uv = false);
+		enum class rigid_layer : uint8_t { base, overlay, glass };
+		bool expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts,
+			rigid_layer layer = rigid_layer::base);
 
 		// Expand texcoords for skinned vertices while preserving the full vertex layout
 		// (blend indices, weights, etc.). Only the texcoord element is promoted from
@@ -658,7 +672,7 @@ namespace shared::common
 		// is far cheaper than re-converting, while still catching a buffer that was
 		// recreated at the same address or drawn through a different declaration.
 		uint64_t fingerprint_source(const unsigned char* src, UINT total_verts,
-			UINT stride, bool overlay_uv) const;
+			UINT stride, rigid_layer layer) const;
 
 		// True when the FFP texture stage state set by setup_texture_stages is
 		// still resident, so TextureStages=1 can skip re-applying it.
@@ -669,6 +683,7 @@ namespace shared::common
 		bool nulled_high_stages_ = false;
 		std::unordered_map<uint64_t, rigid_vb_entry> rigid_exp_cache_;
 		std::unordered_map<uint64_t, rigid_vb_entry> rigid_overlay_cache_;
+		std::unordered_map<uint64_t, rigid_vb_entry> rigid_glass_cache_;
 
 		// Skinned vertex expansion — same cache structure but preserves full vertex layout.
 		// Keyed by source VB and byte offset like the rigid caches. The expanded vertex size

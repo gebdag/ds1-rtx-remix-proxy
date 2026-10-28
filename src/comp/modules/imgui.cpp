@@ -323,6 +323,10 @@ namespace comp
 			ImGui::TextDisabled("DS1 texture compositing via Remix decal blending (fire and forget)");
 			ImGui::TextDisabled("  - [M] materials: g_Diffuse_2 re-drawn as a vertex-alpha decal pass");
 			ImGui::TextDisabled("  - game's own alpha-blended edge-fade draws tagged as decals");
+
+			ImGui::Checkbox("Window Glass Split", &cfg.sky.glass_split);
+			ImGui::SameLine();
+			ImGui::TextDisabled("leaded came as an opaque cutout, glass as its own (ds1_glass translucent) surface");
 			ImGui::Separator();
 		}
 

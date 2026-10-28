@@ -888,12 +888,13 @@ namespace shared::common
 					++it;
 				}
 			}
-			for (auto it = rigid_overlay_cache_.begin(); it != rigid_overlay_cache_.end(); )
+			for (auto* cache : { &rigid_overlay_cache_, &rigid_glass_cache_ })
+			for (auto it = cache->begin(); it != cache->end(); )
 			{
 				if (frame_count_ - it->second.last_frame > 600)
 				{
 					if (it->second.vb) it->second.vb->Release();
-					it = rigid_overlay_cache_.erase(it);
+					it = cache->erase(it);
 				}
 				else
 				{
@@ -984,6 +985,11 @@ namespace shared::common
 			if (e.vb) e.vb->Release();
 		}
 		rigid_overlay_cache_.clear();
+		for (auto& [k, e] : rigid_glass_cache_)
+		{
+			if (e.vb) e.vb->Release();
+		}
+		rigid_glass_cache_.clear();
 		rigid_exp_active_ = false;
 		if (rigid_exp_decl_) { rigid_exp_decl_->Release(); rigid_exp_decl_ = nullptr; }
 
@@ -2172,10 +2178,32 @@ namespace shared::common
 		// Overlay VB with TEXCOORD0.zw as the UV set — its distinct texcoord data
 		// gives the draw its own geometry hash (and thus its own BLAS/instance) in
 		// Remix, so it cannot clobber the base draw's material.
-		if (!expand_rigid_texcoords(dev, base_vtx, min_vtx, num_verts, true))
+		if (!expand_rigid_texcoords(dev, base_vtx, min_vtx, num_verts, rigid_layer::overlay))
 			return false;
 
 		apply_overlay_decal_states(dev, overlay_texture);
+		return true;
+	}
+
+	bool ffp_state::setup_glass_pass(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts,
+		IDirect3DBaseTexture9* glass_texture)
+	{
+		if (!dev || !glass_texture)
+			return false;
+		if (!expand_rigid_texcoords(dev, base_vtx, min_vtx, num_verts, rigid_layer::glass))
+			return false;
+
+		// Stage 0 keeps the came pass's ops, so the glass texel's alpha is its opacity as in the game.
+		// No alpha test: the derived texture's came is already alpha 0. An inverted test (LESS the cut)
+		// made Remix drop the whole pass at a distance (frame_20261028_223122: the window went black).
+		dev->SetTexture(0, glass_texture);
+		dev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		dev->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 		return true;
 	}
 
@@ -2263,7 +2291,7 @@ namespace shared::common
 	// ---- Rigid vertex expansion ----
 
 	uint64_t ffp_state::fingerprint_source(const unsigned char* src, UINT total_verts,
-		UINT stride, bool overlay_uv) const
+		UINT stride, rigid_layer layer) const
 	{
 		// FNV-1a over the geometry dimensions, the declaration layout the
 		// expansion decodes with, and up to 16 evenly spaced 8-byte samples of the
@@ -2283,7 +2311,7 @@ namespace shared::common
 
 		mix(total_verts);
 		mix(stride);
-		mix(overlay_uv ? 1ull : 0ull);
+		mix(static_cast<uint64_t>(layer));
 		mix(static_cast<uint64_t>(cur_decl_pos_off_));
 		mix(cur_decl_has_normal_ ? ((static_cast<uint64_t>(cur_decl_normal_off_) << 8) | (cur_decl_normal_type_ & 0xFF)) : ~0ull);
 		mix(cur_decl_has_color_ ? ((static_cast<uint64_t>(cur_decl_color_off_) << 8) | (cur_decl_color_type_ & 0xFF)) : ~0ull);
@@ -2310,8 +2338,9 @@ namespace shared::common
 		return h;
 	}
 
-	bool ffp_state::expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts, bool overlay_uv)
+	bool ffp_state::expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts, rigid_layer layer)
 	{
+		const bool overlay_uv = layer == rigid_layer::overlay;
 		if (num_verts == 0) return false;
 
 		ffp_prof::scope prof(ffp_prof::step::expand);
@@ -2355,7 +2384,8 @@ namespace shared::common
 		uint64_t cache_key = reinterpret_cast<uintptr_t>(src_vb) ^
 			(static_cast<uint64_t>(byte_offset) << 32);
 
-		auto& entry = overlay_uv ? rigid_overlay_cache_[cache_key] : rigid_exp_cache_[cache_key];
+		auto& entry = layer == rigid_layer::overlay ? rigid_overlay_cache_[cache_key] :
+			layer == rigid_layer::glass ? rigid_glass_cache_[cache_key] : rigid_exp_cache_[cache_key];
 		entry.last_frame = frame_count_;
 
 		// The stock path always re-expands and never serves cached data: the game
@@ -2406,7 +2436,7 @@ namespace shared::common
 		// Fingerprint first: only the reuse path below records one, and it only runs on
 		// ranges found palette-free, so a match also answers the palette question.
 		const bool reuse_enabled = steps_ && steps_->expand_reuse;
-		const uint64_t fp = reuse_enabled ? fingerprint_source(src_data, total_verts, stride, overlay_uv) : 0;
+		const uint64_t fp = reuse_enabled ? fingerprint_source(src_data, total_verts, stride, layer) : 0;
 		const bool fingerprint_match = reuse_enabled &&
 			entry.has_fingerprint &&
 			entry.fingerprint == fp &&
@@ -2581,6 +2611,10 @@ namespace shared::common
 		}
 
 		const int tc_src = overlay_uv ? 2 : 0;
+		// Window glass sits this far off its came (metres), along -normal: enough for distinct
+		// geometry and no z-fighting at any distance, far below what the eye can see.
+		constexpr float kGlassOffset = 0.002f;
+		const float glass_offset = layer == rigid_layer::glass ? kGlassOffset : 0.0f;
 
 		{
 		ffp_prof::scope cprof(ffp_prof::step::exp_convert);
@@ -2653,6 +2687,13 @@ namespace shared::common
 					norm_out[1] *= inv_len;
 					norm_out[2] *= inv_len;
 				}
+			}
+
+			if (glass_offset != 0.0f)
+			{
+				pos_out[0] -= norm_out[0] * glass_offset;
+				pos_out[1] -= norm_out[1] * glass_offset;
+				pos_out[2] -= norm_out[2] * glass_offset;
 			}
 
 			*color_out = cur_decl_has_color_

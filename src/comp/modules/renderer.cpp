@@ -9,6 +9,7 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/glass.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/lightmap_sun.hpp"
@@ -27,6 +28,10 @@ namespace comp
 		// Stage 4's D3DTSS_CONSTANT on a blended shell drawn as a cutout ([Sky] ShellMode 2): the
 		// runtime renders it alpha-tested at rtx.ds1ShellCutoutAlpha (AlphaBlendToCutout).
 		constexpr DWORD kShellCutoutMarker = 0xD4000001;
+		// Stage 4's D3DTSS_CONSTANT on a window glass pass: the runtime keeps it single-sided by the
+		// game's cull mode, though it is blended. Anor Londo builds many windows twice, an outer pane
+		// facing out and an inner one facing in, and the game shows each view only its own pane.
+		constexpr DWORD kSingleSidedGlassMarker = 0xD4000002;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
 		// are blended over) in a pass whose camera is the main one: no user clip
@@ -144,6 +149,48 @@ namespace comp
 
 		for (const auto state : states)
 			ctx.save_rs(dev, state);
+	}
+
+	// A window glass draw (sky_meshes::glass_texture) with a derived glass texture: the derived
+	// texture, else null (the draw then goes through as before).
+	IDirect3DBaseTexture9* glass_split_texture(IDirect3DDevice9* dev, shared::common::ffp_state& ffp,
+		D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count, DWORD& cut)
+	{
+		if (!shared::common::config::get().sky.glass_split)
+			return nullptr;
+		uint8_t table_cut = 0;
+		const std::string* derived = nullptr;
+		const std::string* listed = game::sky_meshes::glass_texture(ffp.cur_ib(), type, start_index, prim_count,
+			table_cut, derived);
+		if (!listed)
+			return nullptr;
+		const int stage = shared::common::config::get().ffp.albedo_stage;
+		if (game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(stage))) != *listed)
+			return nullptr;
+		cut = table_cut;
+		return game::glass::derived_texture(dev, *derived);
+	}
+
+	// The came pass of a window glass draw: the game's texture, opaque, alpha test >= cut. Remix
+	// renders it as an alpha-tested opaque surface (lit, shadowing, culled by the game's cull mode).
+	// Both passes take the texture's alpha alone (the came tests it, the glass blends with it): the
+	// game's opaque glass shaders ignore vertex alpha, and several opaque glass meshes carry 0 there
+	// (m2400B1A15 mesh14); the blended panes' vertex alpha is 1. The stage states go back with
+	// ctx.restore_all, so the FFP stage cache holds.
+	void apply_came_pass_states(drawcall_mod_context& ctx, IDirect3DDevice9* dev, DWORD cut)
+	{
+		save_overlay_render_states(ctx, dev);
+		ctx.save_rs(dev, D3DRS_ALPHAFUNC);
+		ctx.save_rs(dev, D3DRS_ALPHAREF);
+		ctx.save_tss(dev, D3DTSS_ALPHAOP);
+		ctx.save_tss(dev, D3DTSS_ALPHAARG1);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+		dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+		dev->SetRenderState(D3DRS_ALPHAREF, cut);
+		dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	}
 
 
@@ -633,7 +680,14 @@ namespace comp
 					const int shell_mode = shared::common::config::get().sky.shell_mode;
 					const bool shell = shell_mode != 0 &&
 						game::sky_meshes::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
-					const bool base_decal = !shell && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					// Window glass is split into its came and its glass (game/glass.hpp): the base
+					// draw becomes the came, and neither pass is a decal.
+					DWORD glass_cut = 0;
+					IDirect3DBaseTexture9* const glass_texture = water_draw ? nullptr :
+						glass_split_texture(dev, ffp, PrimitiveType, startIndex, primCount, glass_cut);
+					if (glass_texture)
+						apply_came_pass_states(ctx, dev, glass_cut);
+					const bool base_decal = !shell && !glass_texture && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					if (shell && shell_mode == 2)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kShellCutoutMarker);
 					const bool tinted = ffp.apply_draw_tint(dev);
@@ -662,6 +716,17 @@ namespace comp
 					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal)
 						ffp.clear_decal_marker(dev);
+
+					if (glass_texture && SUCCEEDED(hr) &&
+						ffp.setup_glass_pass(dev, BaseVertexIndex, MinVertexIndex, NumVertices, glass_texture))
+					{
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kSingleSidedGlassMarker);
+						const auto glass_hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
+						shared::common::ffp_prof::count_converted_draw();
+						if (FAILED(glass_hr))
+							hr = glass_hr;
+					}
 
 					static int water_log_budget = 16;
 					if (water_draw && water_log_budget > 0)

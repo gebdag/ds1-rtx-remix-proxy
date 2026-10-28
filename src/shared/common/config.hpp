@@ -345,6 +345,10 @@ namespace shared::common
 			// draws (the old behaviour), 1 = plain blended geometry, 2 = cutouts at the runtime's
 			// rtx.ds1ShellCutoutAlpha (stage-4 D3DTSS_CONSTANT marker 0xD4000001, AlphaBlendToCutout).
 			int shell_mode = 2;
+			// Window glass (rtx_comp\sky\glass_meshes.txt): draw the leaded came as an alpha-tested
+			// opaque surface and the glass as a separate blended surface with its derived texture
+			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.
+			bool glass_split = true;
 		} sky;
 
 		struct resolution_settings

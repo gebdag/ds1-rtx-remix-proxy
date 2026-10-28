@@ -22,6 +22,15 @@ namespace comp::game::sky_meshes
 	// tagged as a decal took the lighting of whatever lay behind it, or vanished in front of the sky.
 	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// For a window glass mesh (rtx_comp\sky\glass_meshes.txt, scripts/gen_glass.py): the diffuse it is
+	// listed with, its alpha cut, and the texture its glass pass draws with. The texture paints the
+	// leaded came at alpha >= cut and the glass below it; the renderer draws the two apart
+	// (game/glass.hpp). Null for any other draw. Index data alone can collide (short face sets of
+	// pillars and rails share a hash with listed glass), so the caller checks the draw's own texture
+	// against the name.
+	const std::string* glass_texture(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
+		uint8_t& cut, const std::string*& derived);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }

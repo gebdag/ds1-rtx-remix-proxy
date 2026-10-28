@@ -268,6 +268,10 @@ if not "!DEPLOY_TARGET!"=="" (
         if exist "%ROOT%assets\sky" robocopy "%ROOT%assets\sky" "!DEPLOY_TARGET!\rtx_comp\sky" *.txt >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy the sky mesh table
         ver >nul
+        :: The derived window glass textures (scripts\gen_glass.py) go with the glass table.
+        if exist "%ROOT%assets\glass" robocopy "%ROOT%assets\glass" "!DEPLOY_TARGET!\rtx_comp\glass" *.dds >nul 2>&1
+        if errorlevel 8 echo WARNING: could not deploy the glass textures
+        ver >nul
         echo Deployed to: !DEPLOY_TARGET!
     ) else (
         echo WARNING: deploy.conf target not found: !DEPLOY_TARGET!
