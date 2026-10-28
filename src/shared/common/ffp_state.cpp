@@ -2245,6 +2245,11 @@ namespace shared::common
 		if (src != D3DBLEND_SRCALPHA || dst != D3DBLEND_INVSRCALPHA)
 			return false;
 
+		// A skinned mesh never lies on a surface: a character drawn blended (a dying one fading out,
+		// fur, a veil) is its own surface. As a decal Remix shaded it onto what is behind it.
+		if (cur_decl_is_skinned())
+			return false;
+
 		dev->SetTextureStageState(0, D3DTSS_CONSTANT, OVERLAY_DECAL_MARKER);
 		return true;
 	}

@@ -347,9 +347,12 @@ namespace comp::game::lightmap_sun
 			// MTD g_BlendMode 2 (_Alp) blends over INVSRCALPHA, mode 4 (Add: ghosts, fire) over ONE, both
 			// alpha-tested. Only unbumped _Alp draws are cards: hair, lashes, the FaceGen iris, fringes.
 			// The bumped ones (pixel shader samples s2, every *Bmp* shader and FRPG_Ghost) are the
-			// see-through ones: fur shells, lace, veils, wing membranes.
+			// see-through ones: fur shells, lace, veils, wing membranes. A character fading out (PS c139.w,
+			// the per-draw fade, below 1: a death) is no card either: its hair fades with the body.
+			const float* ps = ffp.ps_const_data();
+			const bool fading = ps && ps[139 * 4 + 3] < 0.999f;
 			const bool card = blend && test && dest == D3DBLEND_INVSRCALPHA &&
-				!(ffp.cur_ps_sampler_mask() & (1u << 2));
+				!(ffp.cur_ps_sampler_mask() & (1u << 2)) && !fading;
 			tag = card ? kSkinnedCardMarker : kSkinnedMarker;
 		}
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
