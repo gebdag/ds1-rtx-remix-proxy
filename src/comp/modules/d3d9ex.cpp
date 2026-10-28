@@ -1577,10 +1577,99 @@ namespace comp
 		return m_pIDirect3DDevice9->DeletePatch(Handle);
 	}
 
+	namespace
+	{
+		// An occlusion query whose sample count is reported at the game's native 1024x720.
+		//
+		// DS1's only occlusion query is the lens flare's sun test (LensFlareDrawEntity, 0x00FD3A20): a
+		// 24x24 reference-pixel quad at the sun, visibility = samples / 460.8, and a count of 1.2x that
+		// (691) or more is rejected as bogus, keeping the last accepted value. With [Resolution] at
+		// 3840x2160 the same quad passes 5184 samples, so a fully visible sun was always rejected: the
+		// flare latched at whatever partial count last got through (often full strength) and stayed,
+		// through walls, until the sun left the screen.
+		class native_scale_query final : public IDirect3DQuery9
+		{
+		public:
+			native_scale_query(IDirect3DQuery9* query, IDirect3DDevice9* device, double scale)
+				: query_(query), device_(device), scale_(scale) {}
+
+			HRESULT __stdcall QueryInterface(REFIID riid, void** ppv) override
+			{
+				if (!ppv)
+					return E_POINTER;
+				if (riid == __uuidof(IUnknown) || riid == __uuidof(IDirect3DQuery9))
+				{
+					*ppv = this;
+					AddRef();
+					return S_OK;
+				}
+				return query_->QueryInterface(riid, ppv);
+			}
+
+			ULONG __stdcall AddRef() override { return ++refs_; }
+
+			ULONG __stdcall Release() override
+			{
+				const ULONG refs = --refs_;
+				if (!refs)
+				{
+					query_->Release();
+					delete this;
+				}
+				return refs;
+			}
+
+			HRESULT __stdcall GetDevice(IDirect3DDevice9** ppDevice) override
+			{
+				if (!ppDevice)
+					return D3DERR_INVALIDCALL;
+				device_->AddRef();
+				*ppDevice = device_;
+				return D3D_OK;
+			}
+
+			D3DQUERYTYPE __stdcall GetType() override { return query_->GetType(); }
+			DWORD __stdcall GetDataSize() override { return query_->GetDataSize(); }
+			HRESULT __stdcall Issue(DWORD flags) override { return query_->Issue(flags); }
+
+			HRESULT __stdcall GetData(void* data, DWORD size, DWORD flags) override
+			{
+				const HRESULT hr = query_->GetData(data, size, flags);
+				if (hr == S_OK && data && size >= sizeof(DWORD))
+				{
+					DWORD& samples = *static_cast<DWORD*>(data);
+					const DWORD raw = samples;
+					samples = static_cast<DWORD>(raw * scale_ + 0.5);
+					// A few results for the log: a visible sun reads ~461 here, a hidden one 0.
+					static std::atomic<int> logged{ 0 };
+					if (raw && logged.fetch_add(1) < 8)
+						shared::common::log("Query", std::format("occlusion samples {} -> {} at 1024x720", raw, samples));
+				}
+				return hr;
+			}
+
+		private:
+			IDirect3DQuery9* query_;
+			IDirect3DDevice9* device_;
+			double scale_;
+			std::atomic<ULONG> refs_{ 1 };
+		};
+	}
+
 	HRESULT d3d9ex::D3D9Device::CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9** ppQuery)
 	{
 		TRACE_IF_ACTIVE(trace_CreateQuery, Type, ppQuery);
-		return m_pIDirect3DDevice9->CreateQuery(Type, ppQuery);
+		const HRESULT hr = m_pIDirect3DDevice9->CreateQuery(Type, ppQuery);
+
+		// ppQuery null only asks whether the type is supported.
+		const auto& res = shared::common::config::get().resolution;
+		if (SUCCEEDED(hr) && Type == D3DQUERYTYPE_OCCLUSION && ppQuery && *ppQuery &&
+			res.render_width > 0 && res.render_height > 0)
+		{
+			const double scale = (1024.0 * 720.0) / (double(res.render_width) * double(res.render_height));
+			*ppQuery = new native_scale_query(*ppQuery, this, scale);
+		}
+		return hr;
 	}
 
 #pragma endregion
