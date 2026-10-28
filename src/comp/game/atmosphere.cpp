@@ -668,6 +668,13 @@ namespace comp::game::atmosphere
 		else if (key == "FFPSteps.OverlaySaveLazy") steps.overlay_save_lazy = b;
 		else if (key == "FFPSteps.SkinUploadUsedBones") steps.skin_upload_used_bones = b;
 		else if (key == "FFPSteps.PoolDepthSurfaces") steps.pool_depth_surfaces = b;
+		else if (key == "Lights.GameFalloffFX" || key == "Lights.GameFalloffCharacter")
+		{
+			auto* gl = game_lights::get();
+			if (!gl)
+				return false;
+			gl->set_kind_game_falloff(key.back() == 'X' ? game_lights::light_kind::fx_direct : game_lights::light_kind::lerp_entity, b);
+		}
 		else return false;
 		return true;
 	}

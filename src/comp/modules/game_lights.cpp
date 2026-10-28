@@ -498,8 +498,17 @@ namespace comp
 				bridge.SetConfigVariable("rtx.ds1Lights.falloffTable", falloff_table.c_str()) == REMIXAPI_ERROR_CODE_SUCCESS;
 			const auto count = std::count(falloff_table.begin(), falloff_table.end(), ';');
 			const bool has_player = falloff_table.find(std::format("{:x}:", string_hash64("ds1_player_light"))) != std::string::npos;
-			shared::common::log("GameLights", std::format("game falloff for {} light(s){}{}", count,
-				has_player ? ", the player light among them" : "", ok ? "" : " (Remix refused the table)"));
+			// FX lights can change their range every frame: log only what the set looks like.
+			static long long s_logged_count = -1;
+			static bool s_logged_player = false, s_logged_ok = true;
+			if (count != s_logged_count || has_player != s_logged_player || ok != s_logged_ok)
+			{
+				shared::common::log("GameLights", std::format("game falloff for {} light(s){}{}", count,
+					has_player ? ", the player light among them" : "", ok ? "" : " (Remix refused the table)"));
+				s_logged_count = count;
+				s_logged_player = has_player;
+				s_logged_ok = ok;
+			}
 			falloff_table_sent_ = falloff_table;
 		}
 
@@ -1055,8 +1064,8 @@ namespace comp
 		ImGui::Checkbox("Game falloff:", &game_falloff_);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Flat to dwindle begin, linear to zero at dwindle end, as the game lights them,\n"
-				"for the kinds ticked here. Default: the lights mounted in the map (torches,\n"
-				"lanterns, synthesized flames). Off: inverse square for every light.");
+				"for the kinds ticked here. Default: every light the game gives a falloff (map,\n"
+				"character, FX and synthesized lights, the player light). Off: inverse square for every light.");
 		ImGui::BeginDisabled(!game_falloff_);
 		for (int k = static_cast<int>(kind::player); k < static_cast<int>(kind::count); ++k)
 		{

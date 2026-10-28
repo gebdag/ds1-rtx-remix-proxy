@@ -70,6 +70,9 @@ namespace comp
 			count
 		};
 
+		// F4 > Lights > Game falloff for one kind (also proxy.Lights.GameFalloff<Kind> live).
+		void set_kind_game_falloff(light_kind k, bool on) { kind_game_falloff_[static_cast<int>(k)] = on; }
+
 	private:
 		static inline game_lights* p_this = nullptr;
 
@@ -194,11 +197,11 @@ namespace comp
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
 		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true };
-		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square: the
-		// lights the game mounts in the map (map rows, Bank entities, synthesized flames), whose
-		// inverse-square hot spot on the wall behind them is where they differ most from the game, and
-		// the player's head light, which sits right at the body.
-		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, false, false, true, false };
+		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
+		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
+		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no
+		// parameters, stay out.
+		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, false };
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;
