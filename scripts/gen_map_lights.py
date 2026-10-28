@@ -57,6 +57,11 @@ EXTRA_FFX = {
     120059: "oolacile_lantern",   # m12_01, 11, glow sprite s01045
 }
 
+# Effects that are not torches carry their own colour, which wins over the map's torch row:
+# the constant colour keys of the effect's FFX colour block (sfx\*.ffx, R/G/B keyframes).
+#   540: Tomb of the Giants' lantern-reactive halo, R 0.392 G 0.824 B 1.0 (both colour blocks).
+EFFECT_COLOUR = {540: (100, 210, 255)}
+
 AREA_NAMES = {
     "m10_00": "Depths", "m10_01": "Undead Burg / Parish", "m10_02": "Firelink Shrine",
     "m11_00": "Painted World", "m12_00": "Darkroot Garden/Basin", "m12_01": "Oolacile (DLC)",
@@ -190,6 +195,7 @@ def build(map_stem, radius, keep_sub, wanted):
     prefix = param_prefix(map_stem)
     bank = read_bank(prefix)
     row_id, (begin, end, r, g, b, pct), why = torch_row(bank, lights)
+    own_colour = sorted({f for _n, f, _p in unlit if f in EFFECT_COLOUR})
 
     header = [
         f"# Synthesized point lights for {map_stem} ({AREA_NAMES.get(map_stem[:6], '?')})",
@@ -198,6 +204,7 @@ def build(map_stem, radius, keep_sub, wanted):
         f"# {len(flames)} flame placement(s) here; {len(flames) - len(unlit)} already have an",
         f"# MSB Light event within {radius:g} units and are left to the engine.",
         f"# Colour and falloff: {prefix}_PointLightBank row {row_id} ({why}).",
+        *([f"# Colour of FFX {', '.join(map(str, own_colour))}: the effect's own (EFFECT_COLOUR)."] if own_colour else []),
         "#",
         "# Edit freely -- press Reload Light Table in F4 > Lights to pick changes up.",
         "#",
@@ -206,7 +213,7 @@ def build(map_stem, radius, keep_sub, wanted):
         "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  category  name",
     ]
     body = [f"{p[0]:.4f} {p[1]:.4f} {p[2]:.4f}  {begin:.2f} {end:.2f}  "
-            f"{r} {g} {b}  {pct}  {wanted[f]}  {short_name(n)}"
+            f"{' '.join(map(str, EFFECT_COLOUR.get(f, (r, g, b))))}  {pct}  {wanted[f]}  {short_name(n)}"
             for n, f, p in unlit]
     return header + body, len(flames), len(unlit), f"{prefix} row {row_id}"
 

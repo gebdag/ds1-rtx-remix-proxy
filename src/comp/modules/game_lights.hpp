@@ -70,6 +70,20 @@ namespace comp
 			count
 		};
 
+		// Whether a list row's light reaches Remix, and if not, why.
+		enum class row_state : unsigned char
+		{
+			on,           // drawn
+			rejected,     // Remix refused the light
+			lights_off,   // the Point lights switch is off
+			no_params,    // the engine slot has no colour or range to draw
+			effect_off,   // a follows-effect stand-in whose effect is not drawn at its spot
+			source_off,   // its source's switch is off
+			disabled,     // switched off in the list
+			solo_other,   // another light is soloed
+			over_limit,   // past Max drawn
+		};
+
 		// F4 > Lights > Game falloff for one kind (also proxy.Lights.GameFalloff<Kind> live).
 		void set_kind_game_falloff(light_kind k, bool on) { kind_game_falloff_[static_cast<int>(k)] = on; }
 
@@ -105,9 +119,11 @@ namespace comp
 		{
 			uint64_t key = 0;
 			light_kind kind = light_kind::unresolved;
+			row_state state = row_state::on;
 			int slot = -1;
 			std::string name;
-			std::string origin;
+			std::string group;          // sub-group within its source (a stand-in's category), else empty
+			std::string origin;         // where the light comes from, for the Details column
 			float pos[3] = {};
 			float distance = 0.0f;      // from the player (0 for the sun)
 			float colour[3] = {};       // the game's colour
@@ -152,6 +168,7 @@ namespace comp
 		void sun_imgui();
 		void player_light_imgui();
 		void point_light_imgui(const light_row& row);
+		void list_row_imgui(const light_row& row);
 		void diagnostics_imgui();
 
 		std::unordered_map<int, live_light> live_lights_;
@@ -207,7 +224,8 @@ namespace comp
 		uint64_t selected_ = KEY_SUN;
 		uint64_t solo_ = 0;
 		bool flash_selected_ = false;
-		int sort_mode_ = 0;               // 0 type, 1 distance, 2 source, 3 name
+		bool group_rows_ = true;          // sections by source (stand-ins by category), else one flat list
+		int sort_mode_ = 0;               // within a section (or the flat list): 0 distance, 1 name
 		char filter_[64] = {};
 		std::string saved_text_;
 		std::string save_status_;

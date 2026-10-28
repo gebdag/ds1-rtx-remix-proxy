@@ -6,10 +6,10 @@
 #
 # Edited live in F4 > Lights > Light Categories; Save Categories writes this file.
 #
-# category  intensityScale  radiusScale  enabled
-torch_small  1.000  1.000  1            # 113 lights
-catacombs_brazier  1.000  1.000  1      # 110 lights
-lantern  1.000  1.000  1                # 49 lights
-candlestick  1.000  1.000  1            # 40 lights
-oolacile_lantern  1.000  1.000  1       # 11 lights
-kiln_embers  1.000  1.000  1            # 10 lights
+# category  intensityScale  radiusScale  enabled  followsEffect  effectAlpha
+torch_small  1.000  1.000  1  0  1.000            # 113 lights
+catacombs_brazier  1.000  1.000  1  0  1.000      # 110 lights
+lantern  1.000  1.000  1  1  0.196                # 49 lights
+candlestick  1.000  1.000  1  0  1.000            # 40 lights
+oolacile_lantern  1.000  1.000  1  0  1.000       # 11 lights
+kiln_embers  1.000  1.000  1  0  1.000            # 10 lights

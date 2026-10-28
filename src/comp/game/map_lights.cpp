@@ -1,10 +1,14 @@
 #include "std_include.hpp"
 #include "map_lights.hpp"
 #include "host_feed.hpp"
+#include "camera.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 
 namespace comp::game::map_lights
 {
@@ -42,9 +46,30 @@ namespace comp::game::map_lights
 		point_lights::light base;
 		size_t category = 0;
 		std::string name;       // last column of the table row, e.g. "o4404_1000"
+		float effect_alpha_frame = 0.0f; // strongest sprite alpha at the light since the last gate update
+		float effect_alpha_last = 0.0f;  // the same, as of the last gate update
+		float effect_level = 0.0f;       // follows-effect brightness, 0-1 (update_effect_gate)
 	};
 
+	// Follows-effect level. A sprite triangle centred within kEffectRadius of a light counts as
+	// its effect drawn there (the lantern halos sit on their SFX region's origin); the strongest
+	// such alpha over the category's full alpha is the light's target level. The level rises
+	// to it with kRiseSeconds and falls with kFallSeconds (exponential), which rides over a
+	// frame with no particle alive without hiding the halo's own fade. A light whose effect
+	// the game would not draw keeps its level: only a spot inside the map camera's view (less
+	// kViewMargin of it at each edge) and within kViewRange, short of the halos' draw distance
+	// (about 36 units), that shows nothing has lost its effect.
+	static constexpr float kEffectRadius = 1.5f;
+	static constexpr float kEffectCell = 2.0f * kEffectRadius;
+	static constexpr float kRiseSeconds = 0.05f;
+	static constexpr float kFallSeconds = 0.2f;
+	static constexpr float kViewRange = 30.0f;
+	static constexpr float kViewMargin = 0.1f;
+	static std::chrono::steady_clock::time_point s_gate_time;
+
 	static std::vector<raw_light> s_raw;
+	// Every light by the grid cells its kEffectRadius sphere touches (cell size kEffectCell).
+	static std::unordered_map<unsigned long long, std::vector<size_t>> s_effect_grid;
 	static std::vector<point_lights::light> s_lights;
 	static std::vector<category> s_categories;
 	static std::string s_loaded_map;
@@ -135,14 +160,18 @@ namespace comp::game::map_lights
 			std::istringstream in(line);
 			std::string name;
 			float intensity = 1.0f, radius = 1.0f;
-			int on = 1;
+			int on = 1, follows = 0;
+			float effect_alpha = 1.0f;
 			if (!(in >> name >> intensity >> radius >> on))
 				continue;
+			in >> follows >> effect_alpha;   // optional: older files have four columns
 
 			auto& c = s_categories[category_index(name)];
 			c.intensity = intensity;
 			c.radius = radius;
 			c.enabled = on != 0;
+			c.follows_effect = follows != 0;
+			c.effect_alpha = effect_alpha > 0.0f ? effect_alpha : 1.0f;
 		}
 	}
 
@@ -159,10 +188,14 @@ namespace comp::game::map_lights
 			 << "# map's own POINT_LIGHT_BANK row. Categories are global: torch_small covers\n"
 			 << "# every torch in the game.\n"
 			 << "#\n"
-			 << "# category  intensityScale  radiusScale  enabled\n";
+			 << "# followsEffect 1: each light follows its effect's sprites drawn at its spot, at\n"
+			 << "# (sprite alpha / effectAlpha) of its brightness (effects that come and go, like\n"
+			 << "# Tomb of the Giants' lantern halos). effectAlpha: the sprites' alpha at full strength.\n"
+			 << "#\n"
+			 << "# category  intensityScale  radiusScale  enabled  followsEffect  effectAlpha\n";
 		for (const auto& c : s_categories)
-			file << std::format("{}  {:.3f}  {:.3f}  {}\n",
-				c.name, c.intensity, c.radius, c.enabled ? 1 : 0);
+			file << std::format("{}  {:.3f}  {:.3f}  {}  {}  {:.3f}\n",
+				c.name, c.intensity, c.radius, c.enabled ? 1 : 0, c.follows_effect ? 1 : 0, c.effect_alpha);
 		return true;
 	}
 
@@ -228,9 +261,38 @@ namespace comp::game::map_lights
 		return true;
 	}
 
+	static unsigned long long effect_cell(int ix, int iy, int iz)
+	{
+		constexpr unsigned long long mask = 0x1FFFFF;
+		return (static_cast<unsigned long long>(ix) & mask) | ((static_cast<unsigned long long>(iy) & mask) << 21) |
+			((static_cast<unsigned long long>(iz) & mask) << 42);
+	}
+
+	static int effect_cell_index(float v)
+	{
+		return static_cast<int>(std::floor(v / kEffectCell));
+	}
+
+	// The follows-effect lights only: the observer looks every sprite up in it.
+	static void build_effect_grid()
+	{
+		s_effect_grid.clear();
+		for (size_t i = 0; i < s_raw.size(); ++i)
+		{
+			if (!s_categories[s_raw[i].category].follows_effect)
+				continue;
+			const auto& l = s_raw[i].base;
+			for (int ix = effect_cell_index(l.x - kEffectRadius); ix <= effect_cell_index(l.x + kEffectRadius); ++ix)
+				for (int iy = effect_cell_index(l.y - kEffectRadius); iy <= effect_cell_index(l.y + kEffectRadius); ++iy)
+					for (int iz = effect_cell_index(l.z - kEffectRadius); iz <= effect_cell_index(l.z + kEffectRadius); ++iz)
+						s_effect_grid[effect_cell(ix, iy, iz)].push_back(i);
+		}
+	}
+
 	static void load(const std::string& map_name)
 	{
 		s_raw.clear();
+		s_effect_grid.clear();
 		s_lights.clear();
 		s_loaded_map = map_name;
 		s_source_path = lights_dir() + map_name + ".txt";
@@ -271,6 +333,7 @@ namespace comp::game::map_lights
 		}
 
 		rebuild();
+		build_effect_grid();
 		s_status = rejected == 0
 			? std::format("{} light(s)", s_raw.size())
 			: std::format("{} light(s), {} malformed line(s) skipped", s_raw.size(), rejected);
@@ -301,6 +364,7 @@ namespace comp::game::map_lights
 		{
 			s_lights.clear();
 			s_raw.clear();
+			s_effect_grid.clear();
 			s_loaded_map.clear();
 			return s_lights;
 		}
@@ -337,14 +401,99 @@ namespace comp::game::map_lights
 
 	const std::vector<category>& categories() { return s_categories; }
 
-	void set_category(size_t index, float intensity, float radius, bool on)
+	void set_category(size_t index, float intensity, float radius, bool on, bool follows_effect)
 	{
 		if (index >= s_categories.size()) return;
 		auto& c = s_categories[index];
 		c.intensity = std::max(0.0f, intensity);
 		c.radius = std::max(0.01f, radius);
 		c.enabled = on;
+		if (c.follows_effect != follows_effect)
+		{
+			c.follows_effect = follows_effect;
+			build_effect_grid();
+		}
 		rebuild();
+	}
+
+	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count)
+	{
+		if (s_effect_grid.empty() || !points)
+			return;
+		for (UINT v = 0; v < count; ++v)
+		{
+			const auto& p = points[v];
+			const auto it = s_effect_grid.find(effect_cell(effect_cell_index(p.x), effect_cell_index(p.y), effect_cell_index(p.z)));
+			if (it == s_effect_grid.end())
+				continue;
+			for (const size_t i : it->second)
+			{
+				auto& raw = s_raw[i];
+				const float dx = p.x - raw.base.x, dy = p.y - raw.base.y, dz = p.z - raw.base.z;
+				if (dx * dx + dy * dy + dz * dz <= kEffectRadius * kEffectRadius)
+					raw.effect_alpha_frame = std::max(raw.effect_alpha_frame, p.alpha);
+			}
+		}
+	}
+
+	bool wants_sprites() { return !s_effect_grid.empty(); }
+
+	// Whether the game would draw an effect at `p` this frame: inside the map camera's view
+	// (less kViewMargin at each edge) and within kViewRange of it. Map pieces are drawn
+	// camera-relative, so the map view-projection takes p - camera.
+	static bool effect_spot_in_view(const point_lights::light& p, const float* view_proj, const float* camera)
+	{
+		const float d[3] = { p.x - camera[0], p.y - camera[1], p.z - camera[2] };
+		if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] > kViewRange * kViewRange)
+			return false;
+		auto row = [&](int r) { return view_proj[r * 4] * d[0] + view_proj[r * 4 + 1] * d[1] + view_proj[r * 4 + 2] * d[2] + view_proj[r * 4 + 3]; };
+		const float w = row(3);
+		if (w <= 0.0f)
+			return false;
+		const float limit = w * (1.0f - kViewMargin);
+		return std::abs(row(0)) <= limit && std::abs(row(1)) <= limit;
+	}
+
+	void update_effect_gate()
+	{
+		float camera[3] = {};
+		const float* view_proj = shared::common::ffp_state::get().map_viewproj_rows();
+		const bool have_view = view_proj && camera::get_override_pos(camera[0], camera[1], camera[2]);
+		const auto now = std::chrono::steady_clock::now();
+		const float dt = std::clamp(std::chrono::duration<float>(now - s_gate_time).count(), 0.0f, 0.5f);
+		s_gate_time = now;
+		const float rise = 1.0f - std::exp(-dt / kRiseSeconds);
+		const float fall = 1.0f - std::exp(-dt / kFallSeconds);
+		for (auto& raw : s_raw)
+		{
+			const float alpha = raw.effect_alpha_frame;
+			raw.effect_alpha_last = alpha;
+			raw.effect_alpha_frame = 0.0f;
+			auto& c = s_categories[raw.category];
+			if (!c.follows_effect)
+				continue;
+			c.effect_alpha_seen = std::max(c.effect_alpha_seen, alpha);
+			// Nothing drawn at the light: gone if the game would have drawn it, else unknown.
+			if (alpha <= 0.0f && !(have_view && effect_spot_in_view(raw.base, view_proj, camera)))
+				continue;
+			// Full strength at the effect's full alpha, or the highest seen if the game draws it brighter.
+			const float target = std::min(1.0f, alpha / std::max(c.effect_alpha, c.effect_alpha_seen));
+			raw.effect_level += (target - raw.effect_level) * (target > raw.effect_level ? rise : fall);
+		}
+	}
+
+	float effect_level(int slot)
+	{
+		const int index = slot - SYNTHETIC_SLOT_BASE;
+		if (index < 0 || index >= static_cast<int>(s_raw.size()))
+			return 1.0f;
+		return s_categories[s_raw[index].category].follows_effect ? s_raw[index].effect_level : 1.0f;
+	}
+
+	float effect_sprite_alpha(int slot)
+	{
+		const int index = slot - SYNTHETIC_SLOT_BASE;
+		return index < 0 || index >= static_cast<int>(s_raw.size()) ? 0.0f : s_raw[index].effect_alpha_last;
 	}
 
 	void reset_categories()

@@ -15,6 +15,7 @@
 
 #include "game/camera.hpp"
 #include "game/atmosphere.hpp"
+#include "game/map_lights.hpp"
 #include "game/swamp.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/d3dx_texture_watch.hpp"
@@ -58,6 +59,7 @@ namespace comp
 			auto& ffp = shared::common::ffp_state::get();
 			auto& cam_s = game::camera::get_settings();
 			ffp.set_camera_override(camera_pos_provider);
+			ffp.set_sprite_observer(game::map_lights::wants_sprites() ? game::map_lights::observe_sprites : nullptr);
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}

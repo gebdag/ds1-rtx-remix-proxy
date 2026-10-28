@@ -1911,6 +1911,33 @@ namespace shared::common
 				out[v].u = 0.0f; out[v].v = 0.0f;
 			}
 		}
+		if (sprite_observer_fn_ && count)
+		{
+			// One point per drawn triangle, through the draw's own indices (list, strip or fan).
+			auto vertex_of = [&](UINT i) -> UINT
+			{
+				if (!indices) return i;
+				return index_format == D3DFMT_INDEX32 ? static_cast<const uint32_t*>(indices)[i]
+					: static_cast<const uint16_t*>(indices)[i];
+			};
+			sprite_points_.clear();
+			for (UINT t = 0; t < prim_count; t++)
+			{
+				UINT v[3];
+				if (prim == D3DPT_TRIANGLELIST) { v[0] = vertex_of(3 * t); v[1] = vertex_of(3 * t + 1); v[2] = vertex_of(3 * t + 2); }
+				else if (prim == D3DPT_TRIANGLESTRIP) { v[0] = vertex_of(t); v[1] = vertex_of(t + 1); v[2] = vertex_of(t + 2); }
+				else { v[0] = vertex_of(0); v[1] = vertex_of(t + 1); v[2] = vertex_of(t + 2); }
+				if (v[0] >= count || v[1] >= count || v[2] >= count)
+					continue;
+				sprite_point p { (out[v[0]].x + out[v[1]].x + out[v[2]].x) / 3.0f, (out[v[0]].y + out[v[1]].y + out[v[2]].y) / 3.0f,
+					(out[v[0]].z + out[v[1]].z + out[v[2]].z) / 3.0f,
+					static_cast<float>(std::max({ out[v[0]].color >> 24, out[v[1]].color >> 24, out[v[2]].color >> 24 })) / 255.0f };
+				if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z))
+					sprite_points_.push_back(p);
+			}
+			if (!sprite_points_.empty())
+				sprite_observer_fn_(sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
+		}
 
 		IDirect3DVertexDeclaration9* game_decl = nullptr;
 		dev->GetVertexDeclaration(&game_decl);

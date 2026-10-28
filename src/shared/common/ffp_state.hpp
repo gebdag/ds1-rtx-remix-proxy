@@ -162,6 +162,15 @@ namespace shared::common
 		using camera_pos_fn = bool(*)(float& x, float& y, float& z);
 		void set_camera_override(camera_pos_fn fn) { camera_override_fn_ = fn; }
 
+		// Sprite observer: the comp layer sees where effects are drawn. Called with every sprite
+		// batch draw_sprite_up draws: one point per triangle it draws, the triangle's centre in the
+		// game's world space (the space of MSB positions and the light manager) and the strongest
+		// vertex alpha of the three. Only the vertices the draw's indices reach: the game's batches
+		// declare more, and the rest hold stale positions of earlier sprites.
+		struct sprite_point { float x, y, z, alpha; };
+		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
+		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
+
 		// Per-frame flags — set by the comp layer's camera module
 		void set_inject_view_pos(bool v) { inject_view_pos_ = v; }
 		void set_offset_world(bool v) { offset_world_ = v; }
@@ -440,6 +449,7 @@ namespace shared::common
 
 		// Camera override from comp layer
 		camera_pos_fn camera_override_fn_ = nullptr;
+		sprite_observer_fn sprite_observer_fn_ = nullptr;
 		bool inject_view_pos_ = false;
 		bool offset_world_ = false;
 
@@ -516,6 +526,7 @@ namespace shared::common
 		float map_viewproj_rows_[16] = {};
 		bool have_map_viewproj_ = false;
 		std::vector<unsigned char> sprite_vertices_;
+		std::vector<sprite_point> sprite_points_;
 		// Average colour (rgba, 0-1) of textures used as sprite masks, from their smallest mip.
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
 		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);

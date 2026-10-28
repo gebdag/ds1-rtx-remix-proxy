@@ -53,14 +53,66 @@ namespace comp
 		constexpr float kHoldRadius = 3.0f;
 
 		constexpr float kFlashMultiplier = 20.0f;
+		// A follows-effect stand-in below this level is not drawn (its effect has faded out).
+		constexpr float kEffectLevelOff = 0.002f;
 		constexpr uint64_t kSessionKeyBit = 0x4000000000000000ull;
 		constexpr float kRadToDeg = 57.2957795f;
 
-		// Column text per kind, in sort-by-type order.
+		// Short source name per kind (switches, the selected light's heading), in section order.
 		const char* const kKindSource[] = {
-			"Sun", "Player", "MSB map", "Bank", "Character", "FX", "Synthesized", "Unresolved",
+			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "No parameters",
 		};
 		static_assert(std::size(kKindSource) == static_cast<size_t>(kind::count));
+
+		// Section heading per kind in the grouped list.
+		const char* const kKindSection[] = {
+			"Sun", "Player",
+			"Map lights (MSB Light events)",
+			"Map lights (bank entities)",
+			"Character lights",
+			"Effect lights (spells, items, SFX)",
+			"Stand-ins (synthesized for unlit flames)",
+			"Engine slots without parameters (never drawn)",
+		};
+		static_assert(std::size(kKindSection) == static_cast<size_t>(kind::count));
+
+		// State column text and colour.
+		const char* state_text(game_lights::row_state s)
+		{
+			using st = game_lights::row_state;
+			switch (s)
+			{
+			case st::on: return "on";
+			case st::rejected: return "rejected";
+			case st::lights_off: return "off";
+			case st::no_params: return "no params";
+			case st::effect_off: return "effect off";
+			case st::source_off: return "source off";
+			case st::disabled: return "disabled";
+			case st::solo_other: return "solo'd out";
+			case st::over_limit: return "over limit";
+			}
+			return "?";
+		}
+
+		ImVec4 state_colour(game_lights::row_state s)
+		{
+			using st = game_lights::row_state;
+			if (s == st::on) return ImVec4(0.4f, 0.9f, 0.4f, 1.0f);
+			if (s == st::rejected) return ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+			if (s == st::disabled || s == st::over_limit) return ImVec4(1.0f, 0.75f, 0.3f, 1.0f);
+			return ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
+		}
+
+		// "torch_small" -> "Torch small".
+		std::string pretty_category(const std::string& category)
+		{
+			std::string s = category;
+			std::replace(s.begin(), s.end(), '_', ' ');
+			if (!s.empty())
+				s[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
+			return s;
+		}
 
 		const char* const kFrameNames[] = { "World", "View", "Character" };
 
@@ -325,34 +377,44 @@ namespace comp
 		switch (row.kind)
 		{
 		case kind::map_row:
-			row.name = "Map light";
-			row.origin = std::format("slot {}, MSB light row", l.slot);
+			row.name = std::format("Map light {}", l.slot);
+			row.origin = std::format("engine slot {}, colour from its MSB Light event's POINT_LIGHT_BANK row", l.slot);
 			break;
 		case kind::bank_entity:
-			row.name = "Map light (" + bank_row_text(l.entity, false) + ")";
-			row.origin = std::format("slot {}, Bank entity", l.slot);
+			row.name = std::format("Map light {} ({})", l.slot, bank_row_text(l.entity, false));
+			row.origin = std::format("engine slot {}, BankPointLightEntity", l.slot);
 			break;
 		case kind::lerp_entity:
-			row.name = "Character light (" + bank_row_text(l.entity, true) + ")";
-			row.origin = std::format("slot {}, LerpBank entity", l.slot);
+			row.name = std::format("Character light {} ({})", l.slot, bank_row_text(l.entity, true));
+			row.origin = std::format("engine slot {}, LerpBankPointLightEntity (blends two rows)", l.slot);
 			break;
 		case kind::fx_direct:
-			row.name = "FX light";
-			row.origin = std::format("slot {}, Direct entity", l.slot);
+			row.name = std::format("Effect light {}", l.slot);
+			row.origin = std::format("engine slot {}, DirectPointLightEntity (colour set by the effect)", l.slot);
 			break;
 		case kind::synthetic:
 		{
 			std::string name, category;
 			if (game::map_lights::describe(l.slot, name, category))
-				row.name = category + " " + name;
+			{
+				row.group = pretty_category(category);
+				row.name = row.group + " " + name;
+				row.origin = std::format("{}.txt, category '{}'", game::map_lights::current_map_name(), category);
+			}
 			else
-				row.name = "Stand-in light";
-			row.origin = game::map_lights::current_map_name() + ".txt";
+			{
+				row.name = "Stand-in";
+				row.origin = game::map_lights::current_map_name() + ".txt";
+			}
 			break;
 		}
 		default:
-			row.name = "No parameters";
-			row.origin = std::format("slot {}, handle 0x{:08X}", l.slot, l.entity_handle);
+			row.name = std::format("Engine slot {}", l.slot);
+			row.origin = l.entity
+				? std::format("entity 0x{:08X} of an unknown class gave no colour or range", l.entity)
+				: l.entity_handle
+					? std::format("handle 0x{:08X} did not resolve to a light entity", l.entity_handle)
+					: std::string("no light entity and no POINT_LIGHT_BANK row");
 			break;
 		}
 		return row;
@@ -379,6 +441,7 @@ namespace comp
 
 		const auto& synthetic = game::map_lights::get();
 		synthetic_count_ = static_cast<int>(synthetic.size());
+		game::map_lights::update_effect_gate();
 
 		std::vector<const game::point_lights::light*> sources;
 		sources.reserve(harvested.size() + synthetic.size());
@@ -399,10 +462,19 @@ namespace comp
 			const auto& src = *src_ptr;
 			light_row row = make_row(src, have_player ? player_pos : nullptr);
 
-			const float mult = edit_multiplier(row.key);
-			const bool draw = generic && src.has_params && kind_enabled_[static_cast<int>(row.kind)] &&
-				mult > 0.0f && (max_active_lights_ <= 0 || active < max_active_lights_);
-			if (!draw)
+			// Stand-ins of an effect that comes and goes shine as strongly as it is drawn.
+			const float effect = row.kind == kind::synthetic ? game::map_lights::effect_level(src.slot) : 1.0f;
+			const float mult = edit_multiplier(row.key) * effect;
+			const auto* edit = find_override(row.key);
+			row.state = !generic ? row_state::lights_off
+				: !src.has_params ? row_state::no_params
+				: effect < kEffectLevelOff ? row_state::effect_off
+				: !kind_enabled_[static_cast<int>(row.kind)] ? row_state::source_off
+				: edit && edit->disabled ? row_state::disabled
+				: mult <= 0.0f ? row_state::solo_other
+				: max_active_lights_ > 0 && active >= max_active_lights_ ? row_state::over_limit
+				: row_state::on;
+			if (row.state != row_state::on)
 			{
 				rows_.push_back(std::move(row));
 				continue;
@@ -485,6 +557,8 @@ namespace comp
 			}
 
 			row.drawn = light.handle != nullptr;
+			if (!row.drawn)
+				row.state = row_state::rejected;
 			row.radiance[0] = radiance.x; row.radiance[1] = radiance.y; row.radiance[2] = radiance.z;
 			rows_.push_back(std::move(row));
 		}
@@ -1093,11 +1167,13 @@ namespace comp
 			ImGui::SetTooltip("0 = unlimited");
 
 		ImGui::SetNextItemWidth(220.0f);
-		ImGui::InputText("Filter (name / origin)", filter_, sizeof(filter_));
+		ImGui::InputText("Filter (name / details)", filter_, sizeof(filter_));
+		ImGui::SameLine();
+		ImGui::Checkbox("Group by source", &group_rows_);
 		ImGui::SameLine();
 		ImGui::TextUnformatted("Sort:");
-		static const char* kSortNames[] = { "type", "distance", "source", "name" };
-		for (int i = 0; i < 4; ++i)
+		static const char* kSortNames[] = { "distance", "name" };
+		for (int i = 0; i < 2; ++i)
 		{
 			ImGui::SameLine();
 			if (ImGui::RadioButton(kSortNames[i], sort_mode_ == i))
@@ -1125,29 +1201,20 @@ namespace comp
 		else
 			ImGui::TextDisabled("%s", save_status_.empty() ? "no changes" : save_status_.c_str());
 
-		// --- the table: sun and player pinned, then the rest filtered and sorted
+		// --- the table: sun and player pinned, then the rest filtered, sorted and (by default)
+		// in a section per source, stand-ins split by category
 		std::vector<const light_row*> rows;
 		rows.reserve(rows_.size());
 		for (const auto& r : rows_)
-			if (contains_no_case(r.name, filter_) || contains_no_case(r.origin, filter_))
+			if (contains_no_case(r.name, filter_) || contains_no_case(r.origin, filter_) || contains_no_case(r.group, filter_))
 				rows.push_back(&r);
 
 		std::sort(rows.begin(), rows.end(), [&](const light_row* a, const light_row* b)
 		{
-			switch (sort_mode_)
-			{
-			case 1:
-				return a->distance < b->distance;
-			case 2:
-				if (a->kind != b->kind) return a->kind < b->kind;
-				return a->origin < b->origin;
-			case 3:
-				if (a->name != b->name) return a->name < b->name;
-				return a->distance < b->distance;
-			default:
-				if (a->kind != b->kind) return a->kind < b->kind;
-				return a->distance < b->distance;
-			}
+			if (group_rows_ && a->kind != b->kind) return a->kind < b->kind;
+			if (group_rows_ && a->group != b->group) return a->group < b->group;
+			if (sort_mode_ == 1 && a->name != b->name) return a->name < b->name;
+			return a->distance < b->distance;
 		});
 
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(), sun_fallback_colour);
@@ -1167,6 +1234,7 @@ namespace comp
 			sun_row.radiance[2] = sun_info_.radiance.z;
 		}
 		sun_row.drawn = sun_handle_ != nullptr;
+		sun_row.state = sun_row.drawn ? row_state::on : row_state::lights_off;
 
 		light_row player_row;
 		player_row.key = KEY_PLAYER;
@@ -1189,72 +1257,75 @@ namespace comp
 		}
 		std::memcpy(player_row.radiance, player_radiance_, sizeof(player_row.radiance));
 		player_row.drawn = player_light_.handle != nullptr;
+		player_row.state = player_row.drawn ? row_state::on : player_seen_ ? row_state::lights_off : row_state::no_params;
 
-		rows.insert(rows.begin(), { &sun_row, &player_row });
-
-		constexpr size_t kMaxRows = 400;
-		if (rows.size() > kMaxRows)
-		{
-			ImGui::TextDisabled("showing the first %zu of %zu rows", kMaxRows, rows.size());
-			rows.resize(kMaxRows);
-		}
-
-		const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
-			ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
-		if (ImGui::BeginTable("##lights", 9, flags, ImVec2(0.0f, 300.0f)))
+		const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+			ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
+		if (ImGui::BeginTable("##lights", 7, flags, ImVec2(0.0f, 340.0f)))
 		{
 			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 2.0f);
 			ImGui::TableSetupColumn("State");
 			ImGui::TableSetupColumn("");
-			ImGui::TableSetupColumn("Source");
-			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Type");
 			ImGui::TableSetupColumn("Dist");
 			ImGui::TableSetupColumn("Colour");
 			ImGui::TableSetupColumn("Range");
-			ImGui::TableSetupColumn("Origin", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch, 3.0f);
 			ImGui::TableHeadersRow();
 
-			for (const auto* r : rows)
+			list_row_imgui(sun_row);
+			list_row_imgui(player_row);
+
+			// A collapsible heading row with how many of its lights are drawn.
+			auto section = [](const std::string& label, const light_row* const* first, const light_row* const* last,
+				bool open_by_default, const char* id)
 			{
+				const auto on = std::count_if(first, last, [](const light_row* r) { return r->state == row_state::on; });
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
+				return ImGui::TreeNodeEx(std::format("{}  ({} of {} drawn)###{}", label, on, last - first, id).c_str(),
+					ImGuiTreeNodeFlags_SpanAllColumns | (open_by_default ? ImGuiTreeNodeFlags_DefaultOpen : 0));
+			};
 
-				const auto* o = find_override(r->key);
-				const bool pinned = r->kind == kind::sun || r->kind == kind::player;
-				const char* state = r->drawn ? "on" : (o && o->disabled) || (solo_ && solo_ != r->key) ? "off" : "-";
-				if (ImGui::Selectable(std::format("{}{}##{:016x}", state, solo_ == r->key ? " S" : "", r->key).c_str(),
-					selected_ == r->key, ImGuiSelectableFlags_SpanAllColumns))
-					selected_ = r->key;
-
-				ImGui::TableNextColumn();
+			if (!group_rows_)
+			{
+				for (const auto* r : rows)
+					list_row_imgui(*r);
+			}
+			else
+			{
+				for (size_t i = 0; i < rows.size();)
 				{
-					// Hue at a glance: the drawn colour scaled so its brightest channel is 1.
-					const float* c = o && o->recolour ? o->colour : r->colour;
-					const float peak = std::max({ c[0], c[1], c[2], 1e-6f });
-					ImGui::ColorButton(std::format("##sw{:016x}", r->key).c_str(),
-						ImVec4(c[0] / peak, c[1] / peak, c[2] / peak, 1.0f),
-						ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, ImVec2(12, 12));
+					const kind k = rows[i]->kind;
+					size_t end = i;
+					while (end < rows.size() && rows[end]->kind == k)
+						++end;
+					if (section(kKindSection[static_cast<int>(k)], &rows[i], &rows[0] + end, k != kind::unresolved,
+						std::format("kind{}", static_cast<int>(k)).c_str()))
+					{
+						for (size_t g = i; g < end;)
+						{
+							size_t g_end = g;
+							while (g_end < end && rows[g_end]->group == rows[g]->group)
+								++g_end;
+							if (rows[g]->group.empty())
+							{
+								for (size_t r = g; r < g_end; ++r)
+									list_row_imgui(*rows[r]);
+							}
+							else if (section(rows[g]->group, &rows[g], &rows[0] + g_end, true,
+								std::format("group{}{}", static_cast<int>(k), rows[g]->group).c_str()))
+							{
+								for (size_t r = g; r < g_end; ++r)
+									list_row_imgui(*rows[r]);
+								ImGui::TreePop();
+							}
+							g = g_end;
+						}
+						ImGui::TreePop();
+					}
+					i = end;
 				}
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(kKindSource[static_cast<int>(r->kind)]);
-				ImGui::TableNextColumn();
-				if (pinned)
-					ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s", r->name.c_str());
-				else
-					ImGui::TextUnformatted(r->name.c_str());
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(r->kind == kind::sun ? "Distant" : "Point");
-				ImGui::TableNextColumn();
-				if (r->kind == kind::sun) ImGui::TextUnformatted("-");
-				else ImGui::Text("%.1f", r->distance);
-				ImGui::TableNextColumn();
-				ImGui::Text("%.2f %.2f %.2f", r->colour[0], r->colour[1], r->colour[2]);
-				ImGui::TableNextColumn();
-				if (r->range_end > 0.0f) ImGui::Text("%.1f-%.1f", r->range_begin, r->range_end);
-				else ImGui::TextUnformatted("-");
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(r->origin.c_str());
 			}
 			ImGui::EndTable();
 		}
@@ -1465,15 +1536,55 @@ namespace comp
 		}
 	}
 
+	void game_lights::list_row_imgui(const light_row& r)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		const bool pinned = r.kind == kind::sun || r.kind == kind::player;
+		if (pinned)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.4f, 1.0f));
+		if (ImGui::Selectable(std::format("{}{}##{:016x}", r.name, solo_ == r.key ? "  [solo]" : "", r.key).c_str(),
+			selected_ == r.key, ImGuiSelectableFlags_SpanAllColumns))
+			selected_ = r.key;
+		if (pinned)
+			ImGui::PopStyleColor();
+
+		ImGui::TableNextColumn();
+		ImGui::TextColored(state_colour(r.state), "%s", state_text(r.state));
+
+		ImGui::TableNextColumn();
+		{
+			// Hue at a glance: the drawn colour scaled so its brightest channel is 1.
+			const auto* o = find_override(r.key);
+			const float* c = o && o->recolour ? o->colour : r.colour;
+			const float peak = std::max({ c[0], c[1], c[2], 1e-6f });
+			ImGui::ColorButton(std::format("##sw{:016x}", r.key).c_str(),
+				ImVec4(c[0] / peak, c[1] / peak, c[2] / peak, 1.0f),
+				ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, ImVec2(12, 12));
+		}
+		ImGui::TableNextColumn();
+		if (r.kind == kind::sun) ImGui::TextDisabled("-");
+		else ImGui::Text("%.1f", r.distance);
+		ImGui::TableNextColumn();
+		ImGui::Text("%.2f %.2f %.2f", r.colour[0], r.colour[1], r.colour[2]);
+		ImGui::TableNextColumn();
+		if (r.range_end > 0.0f) ImGui::Text("%.1f-%.1f", r.range_begin, r.range_end);
+		else ImGui::TextDisabled("-");
+		ImGui::TableNextColumn();
+		ImGui::TextDisabled("%s", r.origin.c_str());
+	}
+
 	void game_lights::point_light_imgui(const light_row& row)
 	{
 		ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s  [%s, point light]",
-			row.name.c_str(), kKindSource[static_cast<int>(row.kind)]);
-		ImGui::TextDisabled("  %s   position %.2f %.2f %.2f   %.1f from the player",
-			row.origin.c_str(), row.pos[0], row.pos[1], row.pos[2], row.distance);
-		ImGui::TextDisabled("  game colour %.3f %.3f %.3f   range %.2f - %.2f   Remix radiance %.2f %.2f %.2f  %s",
-			row.colour[0], row.colour[1], row.colour[2], row.range_begin, row.range_end,
-			row.radiance[0], row.radiance[1], row.radiance[2], row.drawn ? "drawn" : "not drawn");
+			row.name.c_str(), kKindSection[static_cast<int>(row.kind)]);
+		ImGui::SameLine();
+		ImGui::TextColored(state_colour(row.state), "%s", state_text(row.state));
+		ImGui::TextDisabled("  %s", row.origin.c_str());
+		ImGui::TextDisabled("  position %.2f %.2f %.2f, %.1f from the player   game colour %.3f %.3f %.3f   range %.2f - %.2f",
+			row.pos[0], row.pos[1], row.pos[2], row.distance, row.colour[0], row.colour[1], row.colour[2],
+			row.range_begin, row.range_end);
+		ImGui::TextDisabled("  Remix radiance %.2f %.2f %.2f", row.radiance[0], row.radiance[1], row.radiance[2]);
 		if (!is_static(row.kind))
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
 				"  moving light: edits follow its slot for this session and are not saved");
@@ -1508,10 +1619,16 @@ namespace comp
 					if (categories[i].name != category)
 						continue;
 					bool on = categories[i].enabled;
+					bool follows = categories[i].follows_effect;
 					float intensity = categories[i].intensity;
 					float radius = categories[i].radius;
 					ImGui::TextDisabled("Category '%s' (%d on this map), every map:", category.c_str(), categories[i].count);
 					bool changed = ImGui::Checkbox("Category on", &on);
+					ImGui::SameLine();
+					changed |= ImGui::Checkbox("Follows effect", &follows);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Each light follows its effect's sprites drawn at its spot, as bright as they are\n"
+							"opaque, for effects that come and go (Tomb of the Giants' lantern halos). Off: always lit.");
 					ImGui::SameLine();
 					ImGui::SetNextItemWidth(140.0f);
 					changed |= ImGui::DragFloat("Category intensity", &intensity, 0.01f, 0.0f, 20.0f, "x%.2f");
@@ -1519,7 +1636,11 @@ namespace comp
 					ImGui::SetNextItemWidth(140.0f);
 					changed |= ImGui::DragFloat("Category radius", &radius, 0.01f, 0.05f, 10.0f, "x%.2f");
 					if (changed)
-						game::map_lights::set_category(i, intensity, radius, on);
+						game::map_lights::set_category(i, intensity, radius, on, follows);
+					if (categories[i].follows_effect)
+						ImGui::TextDisabled("Effect: sprite alpha %.3f at this light, full %.3f (highest seen %.3f), level %.2f",
+							game::map_lights::effect_sprite_alpha(row.slot), categories[i].effect_alpha,
+							categories[i].effect_alpha_seen, game::map_lights::effect_level(row.slot));
 				}
 			}
 		}
