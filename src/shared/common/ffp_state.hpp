@@ -468,6 +468,9 @@ namespace shared::common
 		float cached_proj_raw_[16] = {}; // uncleaned: cam2world × VP — used by disengage for vertex capture
 		float cached_world_[16] = {};
 		bool transforms_cached_ = false;
+		// The device holds other transforms than the cached converted ones (disengage
+		// set the raw projection, BeginScene an identity WORLD): re-apply on engage.
+		bool device_transforms_stale_ = false;
 
 		// Shader tracking
 		IDirect3DVertexShader9* last_vs_ = nullptr;
@@ -629,6 +632,13 @@ namespace shared::common
 			UINT     src_verts = 0;     // vertex count the fingerprint covers
 			UINT     src_stride = 0;    // source stride at expansion time
 			bool     has_fingerprint = false;
+			// Palette draws (index-only vertices on several bones): the bone
+			// matrices relative to bone 0 that the expansion baked in, for each
+			// bone the vertices used, so an unchanged palette can reuse it too.
+			bool     palette_valid = false;
+			uint64_t palette_fp = 0;
+			std::vector<uint8_t> palette_used;
+			std::vector<float>   palette_rel;
 		};
 
 		// Cheap fingerprint of everything a rigid expansion reads: evenly spaced

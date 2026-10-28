@@ -157,6 +157,14 @@ namespace shared::common
 			// every converted draw. When true they are saved only once the
 			// overlay is actually going to be drawn.
 			bool overlay_save_lazy = false;
+
+			// Skinned draws upload only the bones their weighted vertices reach,
+			// not every bone the palette ever held (83 in Blighttown, ~4 used).
+			bool skin_upload_used_bones = true;
+
+			// Hand the game's per-frame depth-stencil surfaces out again instead
+			// of creating new ones, each of which waits for the Remix server.
+			bool pool_depth_surfaces = true;
 		} ffp_steps;
 
 		struct postfx_settings

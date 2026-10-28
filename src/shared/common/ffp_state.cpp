@@ -919,6 +919,9 @@ namespace shared::common
 	{
 		ffp_setup_ = false;
 		scene_count_++;
+		// on_begin_scene_cb sets WORLD to identity right after this: Transforms=1 must
+		// apply the transforms again before the next converted draw.
+		device_transforms_stale_ = true;
 	}
 
 	void ffp_state::on_reset()
@@ -1231,10 +1234,11 @@ namespace shared::common
 		// constant actually changed, 0 = never (diagnostic only — the geometry
 		// will be placed with whatever transform was last set).
 		const int tf_level = steps_ ? steps_->transforms : 2;
-		if (tf_level >= 2 || (tf_level == 1 && (view_proj_dirty_ || world_dirty_ || !transforms_cached_)))
+		if (tf_level >= 2 || (tf_level == 1 && (view_proj_dirty_ || world_dirty_ || !transforms_cached_ || device_transforms_stale_)))
 		{
 			ffp_prof::scope tprof(ffp_prof::step::transforms);
 			apply_transforms(dev);
+			device_transforms_stale_ = false;
 		}
 		else if (tf_level == 1)
 		{
@@ -1295,6 +1299,9 @@ namespace shared::common
 			dev->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX*>(cached_view_));
 			dev->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(cached_proj_raw_));
 			dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(cached_world_));
+			// The device now holds the raw projection, not the cleaned one engage
+			// sets: Transforms=1 must apply them again on the next engage.
+			device_transforms_stale_ = true;
 		}
 	}
 
@@ -1308,6 +1315,7 @@ namespace shared::common
 		dev->SetTexture(0, albedo);
 		for (DWORD ts = 1; ts < 8; ts++)
 			dev->SetTexture(ts, nullptr);
+		nulled_high_stages_ = true;
 	}
 
 	void ffp_state::restore_textures(IDirect3DDevice9* dev)
@@ -1317,9 +1325,9 @@ namespace shared::common
 		ffp_prof::scope prof(ffp_prof::step::restore_tex);
 
 		// RestoreTexturesLevel 2 = all 8 stages (stock), 1 = only the stages the
-		// conversion actually rebound, 0 = none. Level 1 is safe as long as the
-		// albedo path is the only thing that touches bindings, which it is:
-		// stage 0 is always overwritten, stages 1-7 only when AlbedoNullStages.
+		// conversion actually rebound, 0 = none. Level 1 relies on every path that
+		// nulls stages 1-7 (the albedo binds, the skinned albedo and the overlay)
+		// setting nulled_high_stages_.
 		const int level = steps_ ? steps_->restore_textures : 2;
 		if (level == 0) return;
 
@@ -2161,6 +2169,9 @@ namespace shared::common
 		dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 		dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
 		dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+		// Stage 0's alpha now differs from setup_texture_stages; TextureStages=1 must
+		// re-apply it for the next converted draw.
+		ffp_stages_applied_ = false;
 		// Per-draw decal tag consumed by the custom RTX Remix runtime
 		// (rtx.fixedFunctionDecalMarkerEnabled). D3DTSS_CONSTANT is inert unless a
 		// stage argument references D3DTA_CONSTANT.
@@ -2245,6 +2256,9 @@ namespace shared::common
 		mix(cur_decl_has_normal_ ? ((static_cast<uint64_t>(cur_decl_normal_off_) << 8) | (cur_decl_normal_type_ & 0xFF)) : ~0ull);
 		mix(cur_decl_has_color_ ? ((static_cast<uint64_t>(cur_decl_color_off_) << 8) | (cur_decl_color_type_ & 0xFF)) : ~0ull);
 		mix(cur_decl_has_texcoord_ ? ((static_cast<uint64_t>(cur_decl_texcoord_off_) << 8) | (cur_decl_texcoord_type_ & 0xFF)) : ~0ull);
+		// The bone indices decide whether a range is expanded through the palette.
+		mix(cur_decl_has_blend_indices_ ? ((static_cast<uint64_t>(cur_decl_blend_indices_off_) << 8) | (cur_decl_blend_indices_type_ & 0xFF)) : ~0ull);
+		mix(cur_decl_is_skinned_ ? 1ull : 0ull);
 
 		const UINT span = total_verts * stride;
 		if (span == 0) return h;
@@ -2357,29 +2371,36 @@ namespace shared::common
 				return false;
 		}
 
+		// Fingerprint first: only the reuse path below records one, and it only runs on
+		// ranges found palette-free, so a match also answers the palette question.
+		const bool reuse_enabled = steps_ && steps_->expand_reuse;
+		const uint64_t fp = reuse_enabled ? fingerprint_source(src_data, total_verts, stride, overlay_uv) : 0;
+		const bool fingerprint_match = reuse_enabled &&
+			entry.has_fingerprint &&
+			entry.fingerprint == fp &&
+			entry.src_verts == total_verts &&
+			entry.src_stride == stride &&
+			entry.expanded >= total_verts;
+
 		// Most index-only draws (map pieces) use bone 0 throughout and keep the plain
 		// path. A palette rewrite is not a pure function of the source bytes (the same
 		// vertices with a moved palette must be re-expanded), so it is not eligible
-		// for fingerprint reuse.
+		// for fingerprint reuse. The scan reads every vertex (2.25 million a frame in
+		// Blighttown), so a range the fingerprint matches skips it.
 		bool palette_needed = false;
-		if (palette_possible)
+		if (palette_possible && !fingerprint_match)
 		{
 			for (UINT v = 0; v < total_verts && !palette_needed; v++)
 				palette_needed = src_data[v * stride + cur_decl_blend_indices_off_] != 0;
 		}
 
-		const bool try_reuse = steps_ && steps_->expand_reuse && !palette_needed;
+		const bool try_reuse = reuse_enabled && !palette_needed;
 		uint64_t pending_fp = 0;
 		bool have_pending_fp = false;
 
 		if (try_reuse)
 		{
-			const uint64_t fp = fingerprint_source(src_data, total_verts, stride, overlay_uv);
-			const bool hit = entry.has_fingerprint &&
-				entry.fingerprint == fp &&
-				entry.src_verts == total_verts &&
-				entry.src_stride == stride &&
-				entry.expanded >= total_verts;
+			const bool hit = fingerprint_match;
 
 			if (hit)
 			{
@@ -2408,18 +2429,6 @@ namespace shared::common
 		// this range. Clear the claim so a failure part-way cannot be served as
 		// a hit next frame.
 		entry.has_fingerprint = false;
-
-		// Lock destination VB
-		unsigned char* dst_data = nullptr;
-		{
-			ffp_prof::scope lprof(ffp_prof::step::exp_lock);
-			if (FAILED(entry.vb->Lock(0, dst_bytes,
-				reinterpret_cast<void**>(&dst_data), 0)))
-			{
-				src_vb->Unlock();
-				return false;
-			}
-		}
 
 		constexpr float kScale = 1.0f / 1024.0f;
 
@@ -2485,6 +2494,58 @@ namespace shared::common
 			use_palette_indices = load_palette_world(0, base_world);
 			if (use_palette_indices)
 				mat4_invert_rigid(base_world_inv, base_world);
+		}
+
+		// A palette draw whose source is unchanged can still be served from the cache when every
+		// bone it used kept its place relative to bone 0: the expansion bakes inverse(bone 0) *
+		// bone i into the vertices, and the camera offset both matrices carry cancels in that
+		// product. A static prop therefore matches to float noise (about 1e-5) frame after frame,
+		// and the tolerance keeps the served vertices within 0.1 mm of a fresh expansion; a moving
+		// part (a chest lid) fails it and is expanded again. Blighttown has 65 such draws a frame.
+		constexpr float kPaletteReuseTolerance = 1e-4f;
+		if (use_palette_indices && reuse_enabled && entry.palette_valid && entry.palette_fp == fp &&
+			entry.src_verts == total_verts && entry.src_stride == stride && entry.expanded >= total_verts)
+		{
+			bool same = true;
+			for (size_t i = 0; i < entry.palette_used.size() && same; i++)
+			{
+				float selected_world[16] = {};
+				if (!load_palette_world(entry.palette_used[i], selected_world))
+					std::memcpy(selected_world, base_world, sizeof(selected_world));
+				float rel[16];
+				mat4_mul(rel, selected_world, base_world_inv);
+				const float* cached = &entry.palette_rel[i * 16];
+				for (int k = 0; k < 16 && same; k++)
+					same = std::fabs(rel[k] - cached[k]) <= kPaletteReuseTolerance;
+			}
+			if (same)
+			{
+				{
+					ffp_prof::scope uprof(ffp_prof::step::exp_unlock);
+					src_vb->Unlock();
+				}
+				ffp_prof::add_saved_bytes(dst_bytes);
+				ffp_prof::count_expand_reuse_hit();
+
+				ffp_prof::scope bprof(ffp_prof::step::exp_bind);
+				dev->SetVertexDeclaration(rigid_exp_decl_);
+				dev->SetStreamSource(0, entry.vb, 0, rigid_vtx_size);
+				rigid_exp_active_ = true;
+				return true;
+			}
+		}
+		entry.palette_valid = false;
+
+		// Lock destination VB
+		unsigned char* dst_data = nullptr;
+		{
+			ffp_prof::scope lprof(ffp_prof::step::exp_lock);
+			if (FAILED(entry.vb->Lock(0, dst_bytes,
+				reinterpret_cast<void**>(&dst_data), 0)))
+			{
+				src_vb->Unlock();
+				return false;
+			}
 		}
 
 		const int tc_src = overlay_uv ? 2 : 0;
@@ -2612,6 +2673,23 @@ namespace shared::common
 			entry.src_verts = total_verts;
 			entry.src_stride = stride;
 			entry.has_fingerprint = true;
+		}
+		else if (use_palette_indices && reuse_enabled)
+		{
+			// ... and this palette: the bones the vertices used, as they were baked in.
+			entry.palette_used.clear();
+			entry.palette_rel.clear();
+			for (int i = 0; i < 256; i++)
+			{
+				if (!relative_valid[i])
+					continue;
+				entry.palette_used.push_back(static_cast<uint8_t>(i));
+				entry.palette_rel.insert(entry.palette_rel.end(), relative_mats[i], relative_mats[i] + 16);
+			}
+			entry.palette_fp = fp;
+			entry.src_verts = total_verts;
+			entry.src_stride = stride;
+			entry.palette_valid = true;
 		}
 
 		{

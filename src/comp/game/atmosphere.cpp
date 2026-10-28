@@ -3,6 +3,8 @@
 
 #include "shared/common/remix_api.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/ffp_prof.hpp"
+#include "shared/common/config.hpp"
 #include "shared/globals.hpp"
 #include "sun_light.hpp"
 #include "../modules/game_lights.hpp"
@@ -598,6 +600,31 @@ namespace comp::game::atmosphere
 	// rtx_comp\look_state.txt current with every game value it hands to Remix.
 	bool g_dev_file = false;
 
+	// "proxy.FFPSteps.<Key> = value" in the live options file: the [FFPSteps] switches, which the
+	// conversion reads every draw, so they take effect at once (A/B without a restart).
+	bool set_proxy_option(const std::string& key, const std::string& value)
+	{
+		auto& steps = shared::common::config::get().ffp_steps;
+		const int v = std::atoi(value.c_str());
+		const bool b = v != 0 || value == "true" || value == "True";
+		if (key == "FFPSteps.Profile")
+		{
+			steps.profile = b;
+			shared::common::ffp_prof::set_profiling(b);
+		}
+		else if (key == "FFPSteps.TextureStages")   steps.tex_stages = std::clamp(v, 0, 2);
+		else if (key == "FFPSteps.Transforms")      steps.transforms = std::clamp(v, 0, 2);
+		else if (key == "FFPSteps.RestoreTextures") steps.restore_textures = std::clamp(v, 0, 2);
+		else if (key == "FFPSteps.AlbedoNullStages") steps.albedo_null_stages = b;
+		else if (key == "FFPSteps.ExpandReuse")     steps.expand_reuse = b;
+		else if (key == "FFPSteps.DecalQuery")      steps.decal_query = b;
+		else if (key == "FFPSteps.OverlaySaveLazy") steps.overlay_save_lazy = b;
+		else if (key == "FFPSteps.SkinUploadUsedBones") steps.skin_upload_used_bones = b;
+		else if (key == "FFPSteps.PoolDepthSurfaces") steps.pool_depth_surfaces = b;
+		else return false;
+		return true;
+	}
+
 	void apply_live_options(unsigned int frame)
 	{
 		static FILETIME last {};
@@ -625,6 +652,11 @@ namespace comp::game::atmosphere
 				return a == std::string::npos ? std::string() : t.substr(a, b - a + 1);
 			};
 			const auto key = trim(s.substr(0, eq)), value = trim(s.substr(eq + 1));
+			if (key.rfind("proxy.", 0) == 0)
+			{
+				(set_proxy_option(key.substr(6), value) ? applied : refused)++;
+				continue;
+			}
 			(set(key.c_str(), value) ? applied : refused)++;
 		}
 		fclose(f);

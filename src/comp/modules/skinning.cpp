@@ -3,6 +3,7 @@
 
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/ffp_prof.hpp"
 #include "../game/texture_scroll.hpp"
 
 namespace comp
@@ -25,6 +26,21 @@ namespace comp
 		UINT start_idx, UINT prim_count)
 	{
 		auto& ffp = shared::common::ffp_state::get();
+
+		struct stats_scope
+		{
+			LARGE_INTEGER start {};
+			stats_scope() { if (shared::common::ffp_prof::profiling()) QueryPerformanceCounter(&start); }
+			~stats_scope()
+			{
+				if (!start.QuadPart)
+					return;
+				LARGE_INTEGER end;
+				QueryPerformanceCounter(&end);
+				s_stats.ticks += end.QuadPart - start.QuadPart;
+				++s_stats.draws;
+			}
+		} stats;
 
 		// Create expanded declaration on first use
 		if (!skin_exp_decl_)
@@ -218,6 +234,7 @@ namespace comp
 		{
 			src_vb->Unlock();
 			cur_max_idx_ = entry.max_idx;
+			cur_raw_max_idx_ = entry.raw_max_idx;
 			return entry.vb;
 		}
 
@@ -243,6 +260,7 @@ namespace comp
 		}
 
 		cur_max_idx_ = 0;
+		cur_raw_max_idx_ = 0;
 		for (UINT v = 0; v < num_verts; v++)
 			expand_skin_vertex(&dst_data[v * vtx_size], &src_data[v * stride], overlay);
 
@@ -251,6 +269,7 @@ namespace comp
 
 		entry.fp = fp;
 		entry.max_idx = cur_max_idx_;
+		entry.raw_max_idx = cur_raw_max_idx_;
 
 		return exp_vb;
 	}
@@ -319,6 +338,15 @@ namespace comp
 			// Indices whose weight is zero never reach the output.
 			if (w[i] != 0.0f && bi[i] > cur_max_idx_)
 				cur_max_idx_ = bi[i];
+		}
+		// Remix sizes and hashes its palette by the raw indices of every bone the vertex blend
+		// mode reads (upload_bones: 2, 3 or 4), zero weights included.
+		const int nw = ffp.cur_decl_num_weights();
+		const int raw_count = nw <= 1 ? 2 : (nw == 2 ? 3 : 4);
+		for (int i = 0; i < raw_count; i++)
+		{
+			if (bi[i] > cur_raw_max_idx_)
+				cur_raw_max_idx_ = bi[i];
 		}
 
 		// Normal (FLOAT3 at offset 28)
@@ -428,8 +456,14 @@ namespace comp
 		// whatever the last constant write covered: upload every bone a vertex of
 		// this draw can reach, from the same constants the GPU would read.
 		const int palette_capacity = (256 - bone_start) / regs_per_bone;
-		int max_bones = std::max(num_bones, cur_max_idx_ + 1);
+		// num_bones is the palette's high-water mark over the whole session (every bone any draw's
+		// constant writes ever reached, 83 in Blighttown); a mesh's vertices only index up to
+		// cur_raw_max_idx_, the bones Remix reads and hashes (zero weights included).
+		int max_bones = shared::common::config::get().ffp_steps.skin_upload_used_bones
+			? std::max(cur_max_idx_, cur_raw_max_idx_) + 1 : std::max(num_bones, cur_max_idx_ + 1);
 		max_bones = std::min({ max_bones, palette_capacity, 256 });
+		if (shared::common::ffp_prof::profiling())
+			s_stats.bones += static_cast<unsigned int>(std::max(max_bones, 0));
 
 		// The main pass draws camera-relative; apply_transforms moves World into
 		// absolute space by adding the camera position, and every bone needs the

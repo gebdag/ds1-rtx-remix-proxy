@@ -145,6 +145,8 @@ namespace shared::common
 		ffp_steps.expand_reuse      = get_bool("FFPSteps", "ExpandReuse", true);
 		ffp_steps.decal_query       = get_bool("FFPSteps", "DecalQuery", true);
 		ffp_steps.overlay_save_lazy = get_bool("FFPSteps", "OverlaySaveLazy", false);
+		ffp_steps.skin_upload_used_bones = get_bool("FFPSteps", "SkinUploadUsedBones", true);
+		ffp_steps.pool_depth_surfaces = get_bool("FFPSteps", "PoolDepthSurfaces", true);
 
 		// [PostFX] Comma-separated list of pass indices to skip (empty = skip all)
 		postfx.skip_passes_str = get_string("PostFX", "SkipPasses", "");

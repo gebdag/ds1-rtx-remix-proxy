@@ -31,6 +31,237 @@ namespace {
 	// Per-frame UP draw pass counter for individual post-FX control
 	static int s_postfx_pass_idx = 0;
 
+	// Where the game thread's frame goes, with [FFPSteps] Profile on: inside draw calls (the proxy's
+	// routing and conversion plus the bridge client), inside Present (the bridge hands the frame to
+	// the Remix server and may wait for it), and the rest (the game itself and every other device
+	// call). Logged every 600 frames with the FFP step totals.
+	struct frame_split
+	{
+		long long draw_ticks = 0, present_ticks = 0, limiter_ticks = 0, last_present = 0, frame_ticks = 0;
+		unsigned long long tsc_start = 0;
+		long long qpc_start = 0;
+		long long skin_ticks = 0;
+		double skin_draws = 0, skin_bones = 0;
+		unsigned int draws = 0, frames = 0;
+		double draw_ms = 0, present_ms = 0, frame_ms = 0, ffp_ms = 0;
+	};
+	frame_split s_split;
+
+	long long split_now()
+	{
+		LARGE_INTEGER t;
+		QueryPerformanceCounter(&t);
+		return t.QuadPart;
+	}
+
+	double split_ms(long long ticks)
+	{
+		static const double inv = []
+		{
+			LARGE_INTEGER f;
+			QueryPerformanceFrequency(&f);
+			return 1000.0 / static_cast<double>(f.QuadPart);
+		}();
+		return static_cast<double>(ticks) * inv;
+	}
+
+	// Per device method, with [FFPSteps] Profile on: time inside the wrapper (the proxy's own work
+	// plus the bridge client), in TSC ticks, and calls. Every wrapped method opens with
+	// TRACE_IF_ACTIVE, so the macro carries the scope.
+	struct api_stat
+	{
+		const char* name;
+		unsigned long long ticks = 0;
+		unsigned int calls = 0;
+	};
+	std::vector<api_stat*>& api_stats()
+	{
+		static std::vector<api_stat*> stats;
+		return stats;
+	}
+	api_stat* register_api_stat(const char* name)
+	{
+		auto* s = new api_stat { name };
+		api_stats().push_back(s);
+		return s;
+	}
+	struct api_scope
+	{
+		api_stat* stat;
+		unsigned long long start;
+		explicit api_scope(api_stat* s) : stat(s), start(shared::common::ffp_prof::profiling() ? __rdtsc() : 0) {}
+		~api_scope()
+		{
+			if (start)
+			{
+				stat->ticks += __rdtsc() - start;
+				++stat->calls;
+			}
+		}
+	};
+
+#undef TRACE_IF_ACTIVE
+#undef TRACE_IF_ACTIVE_NOARGS
+#define TRACE_IF_ACTIVE(fn, ...) \
+	static api_stat* const api_stat_ = register_api_stat(#fn + 6); \
+	api_scope api_scope_(api_stat_); \
+	do { if (comp::tracer::is_active()) fn(comp::tracer::ref(), __VA_ARGS__); } while(0)
+#define TRACE_IF_ACTIVE_NOARGS(fn) \
+	static api_stat* const api_stat_ = register_api_stat(#fn + 6); \
+	api_scope api_scope_(api_stat_); \
+	do { if (comp::tracer::is_active()) fn(comp::tracer::ref()); } while(0)
+
+	// The game creates and releases a handful of depth-stencil surfaces every frame (5 in
+	// Blighttown). Over the bridge each Create waits for the Remix server, about 0.2 ms apiece, so
+	// the proxy keeps one reference to each surface it handed out and hands it out again once the
+	// game has released it: AddRef returning 2 means only the pool holds it. A depth-stencil
+	// surface's contents are undefined on creation, so a reused one is as good as a new one.
+	struct depth_pool_key
+	{
+		IDirect3DDevice9* device;
+		UINT width, height;
+		D3DFORMAT format;
+		D3DMULTISAMPLE_TYPE multisample;
+		DWORD quality;
+		BOOL discard;
+		bool operator==(const depth_pool_key&) const = default;
+	};
+	constexpr size_t kDepthPoolMax = 16;
+	std::vector<std::pair<depth_pool_key, IDirect3DSurface9*>> s_depth_pool;
+
+	IDirect3DSurface9* take_pooled_depth(const depth_pool_key& key)
+	{
+		for (auto& [k, surface] : s_depth_pool)
+		{
+			if (!(k == key))
+				continue;
+			if (surface->AddRef() == 2)
+				return surface;
+			surface->Release();
+		}
+		return nullptr;
+	}
+
+	void release_depth_pool()
+	{
+		for (auto& [k, surface] : s_depth_pool)
+			surface->Release();
+		s_depth_pool.clear();
+	}
+
+	// True when the game holds none of the pooled surfaces.
+	bool depth_pool_unused()
+	{
+		for (auto& [k, surface] : s_depth_pool)
+		{
+			const ULONG refs = surface->AddRef();
+			surface->Release();
+			if (refs != 2)
+				return false;
+		}
+		return true;
+	}
+
+	// A full pool drops one surface the game no longer holds, so sizes the game stopped
+	// using do not keep the pool from taking new ones.
+	bool make_depth_pool_room()
+	{
+		for (auto it = s_depth_pool.begin(); it != s_depth_pool.end(); ++it)
+		{
+			if (it->second->AddRef() == 2)
+			{
+				it->second->Release();
+				it->second->Release();
+				s_depth_pool.erase(it);
+				return true;
+			}
+			it->second->Release();
+		}
+		return false;
+	}
+
+	struct draw_split_scope
+	{
+		long long start = shared::common::ffp_prof::profiling() ? split_now() : 0;
+		~draw_split_scope()
+		{
+			if (start)
+			{
+				s_split.draw_ticks += split_now() - start;
+				++s_split.draws;
+			}
+		}
+	};
+
+	void split_on_present(long long present_ticks)
+	{
+		if (!shared::common::ffp_prof::profiling())
+		{
+			s_split = {};
+			return;
+		}
+		const long long now = split_now();
+		if (!s_split.tsc_start)
+		{
+			s_split.tsc_start = __rdtsc();
+			s_split.qpc_start = now;
+		}
+		if (s_split.last_present)
+			s_split.frame_ticks += now - s_split.last_present;
+		s_split.last_present = now;
+		s_split.present_ticks += present_ticks;
+		s_split.ffp_ms += shared::common::ffp_prof::total_ms();
+		s_split.skin_ticks += comp::skinning::s_stats.ticks;
+		s_split.skin_draws += comp::skinning::s_stats.draws;
+		s_split.skin_bones += comp::skinning::s_stats.bones;
+		comp::skinning::s_stats = {};
+		if (++s_split.frames < 600)
+			return;
+		const double n = static_cast<double>(s_split.frames);
+		const double frame = split_ms(s_split.frame_ticks) / n, draw = split_ms(s_split.draw_ticks) / n;
+		const double present = split_ms(s_split.present_ticks) / n, limiter = split_ms(s_split.limiter_ticks) / n;
+		shared::common::log("FrameSplit", std::format(
+			"last {} frames: frame {:.2f} ms ({:.1f} fps) = draw calls {:.2f} ms ({:.0f} draws, FFP steps {:.2f} ms) + "
+			"Present {:.2f} ms + FPS limiter wait {:.2f} ms + game and other calls {:.2f} ms",
+			s_split.frames, frame, 1000.0 / frame, draw, s_split.draws / n, s_split.ffp_ms / n, present, limiter,
+			frame - draw - present - limiter));
+		// The device methods, ranked: TSC ticks to ms through the QPC span of the window.
+		const double tsc_per_ms = static_cast<double>(__rdtsc() - s_split.tsc_start) / split_ms(now - s_split.qpc_start);
+		std::vector<api_stat*> ranked = api_stats();
+		std::sort(ranked.begin(), ranked.end(), [](const api_stat* a, const api_stat* b) { return a->ticks > b->ticks; });
+		std::string methods;
+		double methods_ms = 0.0;
+		for (const auto* s : ranked)
+			methods_ms += static_cast<double>(s->ticks) / tsc_per_ms / n;
+		for (size_t i = 0; i < ranked.size() && i < 14 && ranked[i]->ticks; ++i)
+			methods += std::format("{}{} {:.2f} ms/{:.0f}", i ? ", " : "", ranked[i]->name,
+				static_cast<double>(ranked[i]->ticks) / tsc_per_ms / n, ranked[i]->calls / n);
+		shared::common::log("FrameSplit", std::format("device methods {:.2f} ms per frame (draws included): {}", methods_ms, methods));
+		{
+			namespace prof = shared::common::ffp_prof;
+			std::string steps;
+			for (int i = 0; i < prof::STEP_COUNT; ++i)
+			{
+				const auto s = static_cast<prof::step>(i);
+				if (prof::self_ms(s) >= 0.05)
+					steps += std::format("{}{} {:.2f} ms/{}", steps.empty() ? "" : ", ", prof::label(s), prof::self_ms(s), prof::calls(s));
+			}
+			shared::common::log("FrameSplit", std::format(
+				"FFP steps (last frames, smoothed): {} | converted {} passthrough {} | expand {:.2f} MB, reuse hits {} misses {} | "
+				"skinned draws {:.2f} ms/{:.0f}, bones uploaded {:.0f}",
+				steps, prof::converted_draws(), prof::passthrough_draws(), prof::expand_mb(), prof::reuse_hits(), prof::reuse_misses(),
+				split_ms(s_split.skin_ticks) / n, s_split.skin_draws / n, s_split.skin_bones / n));
+		}
+		for (auto* s : api_stats())
+		{
+			s->ticks = 0;
+			s->calls = 0;
+		}
+		const long long last = s_split.last_present;
+		s_split = {};
+		s_split.last_present = last;
+	}
+
 	// Lookdev mode is the vanilla reference: draws and render targets go to the
 	// device untouched, past every Remix-oriented route (prepass drop, UV
 	// expansion, sky/HUD markers, post-FX skip, category filters, RT redirects).
@@ -296,6 +527,13 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE_NOARGS(trace_Release);
 		ULONG count = m_pIDirect3DDevice9->Release();
+		// Each pooled depth surface keeps a reference to the device. When those are all that
+		// is left, the game has let go of the device: release them, and with them the device.
+		if (count && count == s_depth_pool.size() && depth_pool_unused())
+		{
+			release_depth_pool();
+			count = 0;
+		}
 		if (!count) delete this;
 		return count;
 	}
@@ -395,6 +633,7 @@ namespace comp
 			pPresentationParameters ? pPresentationParameters->BackBufferWidth : 0,
 			pPresentationParameters ? pPresentationParameters->BackBufferHeight : 0);
 		if (auto* t = tracer::get()) t->on_reset();
+		release_depth_pool();
 		shared::common::ffp_state::get().on_reset();
 		rt_tracker::on_reset();
 		if (auto* s = skinning::get()) s->on_reset();
@@ -441,8 +680,15 @@ namespace comp
 		shared::common::ffp_prof::on_present();
 		game::render_toggles::on_present();
 		ffp.on_present();
-		game::fps_unlock::on_present();
+		{
+			const long long limiter_start = shared::common::ffp_prof::profiling() ? split_now() : 0;
+			game::fps_unlock::on_present();
+			if (limiter_start)
+				s_split.limiter_ticks += split_now() - limiter_start;
+		}
+		const long long present_start = shared::common::ffp_prof::profiling() ? split_now() : 0;
 		auto hr = m_pIDirect3DDevice9->Present(pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+		split_on_present(present_start ? split_now() - present_start : 0);
 		benchmark::on_present();
 		if (auto* t = tracer::get()) t->on_present();
 		return hr;
@@ -575,10 +821,25 @@ namespace comp
 			Width = res.render_width;
 			Height = res.render_height;
 		}
+		const depth_pool_key key { m_pIDirect3DDevice9, Width, Height, Format, MultiSample, MultisampleQuality, Discard };
+		const bool pool = shared::common::config::get().ffp_steps.pool_depth_surfaces && ppSurface && !pSharedHandle && !lookdev_passthrough();
+		if (pool)
+		{
+			if (auto* pooled = take_pooled_depth(key))
+			{
+				*ppSurface = pooled;
+				return D3D_OK;
+			}
+		}
 		const crash_context::stopwatch sw;
 		const auto hr = m_pIDirect3DDevice9->CreateDepthStencilSurface(Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
 		if (FAILED(hr))
 			crash_context::note("DS %ux%u f=%s t=%u hr=%08X", Width, Height, format_tag(Format).c_str(), sw.ms(), hr);
+		else if (pool && *ppSurface && (s_depth_pool.size() < kDepthPoolMax || make_depth_pool_room()))
+		{
+			(*ppSurface)->AddRef();
+			s_depth_pool.emplace_back(key, *ppSurface);
+		}
 		return hr;
 	}
 
@@ -919,6 +1180,7 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawPrimitive([[maybe_unused]] D3DPRIMITIVETYPE PrimitiveType, [[maybe_unused]] UINT StartVertex, [[maybe_unused]] UINT PrimitiveCount)
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitive, PrimitiveType, StartVertex, PrimitiveCount);
+		draw_split_scope split_scope;
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
@@ -943,6 +1205,7 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount)
 	{
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitive, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+		draw_split_scope split_scope;
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
@@ -964,6 +1227,7 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		draw_split_scope split_scope;
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		// UP draws (sprites, UI, post passes) carry no haze set or lightmap of their own.
@@ -1020,6 +1284,7 @@ namespace comp
 		[[maybe_unused]] UINT VertexStreamZeroStride)
 	{
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitiveUP, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		draw_split_scope split_scope;
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);

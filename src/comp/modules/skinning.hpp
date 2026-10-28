@@ -34,6 +34,16 @@ namespace comp
 		// Called on device reset
 		void on_reset();
 
+		// With [FFPSteps] Profile on: this frame's skinned draws, their time (QPC ticks) and the
+		// bone matrices they uploaded. d3d9ex's frame split reads and clears it at Present.
+		struct frame_stats
+		{
+			long long ticks = 0;
+			unsigned int draws = 0;
+			unsigned int bones = 0;
+		};
+		static inline frame_stats s_stats {};
+
 	private:
 		static constexpr int SKIN_VTX_SIZE = 48;
 		// The overlay layout: SKIN_VTX_SIZE with the second uv set as TEXCOORD0, plus D3DCOLOR.
@@ -74,11 +84,14 @@ namespace comp
 			uint64_t fp = 0;
 			// Highest blend index the expanded vertices use: the bones to upload.
 			int max_idx = 0;
+			// Highest blend index any vertex lists among the bones the blend mode reads.
+			int raw_max_idx = 0;
 			UINT last_frame = 0;
 		};
 		std::unordered_map<skin_key, skin_entry, skin_key_hash> skin_cache_;
 		UINT last_prune_frame_ = 0;
 		int cur_max_idx_ = 0;
+		int cur_raw_max_idx_ = 0;
 
 		bool initialized_ = false;
 
