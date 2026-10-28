@@ -15,6 +15,16 @@ namespace comp::game::camera
 	// game_lights' player light readout, which prints it next to the camera heading.
 	bool get_char_heading(float& radians);
 
+	// The world position of the camera the frame being drawn uses: the render thread's
+	// entity for the culling camera (GameRend+0x14), in the engine's raw order like the
+	// apexes. False before the renderer exists. Unlike the apexes it cannot be confused
+	// with the water-reflection camera, and unlike the game-side camera objects it never
+	// leads the drawn frame.
+	bool get_render_cam_pos(float& x, float& y, float& z);
+
+	// That entity's world-space culling frustum (the pointer the frustum tests receive).
+	const void* render_cam_frustum();
+
 	// True camera world position recovered from the main culling frustum's apex,
 	// in the engine's raw {X, Z, Y} order. False until a main camera frustum has been
 	// identified (see the lock in camera.cpp).

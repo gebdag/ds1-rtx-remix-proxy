@@ -63,8 +63,33 @@ namespace comp::game::camera
 		// The consumer works in the engine's raw {X, Z, Y} order. Frustum apexes already
 		// use it; gameplay entities are read as render order and need the swap. Doing it
 		// here keeps every consumer of the override on one convention.
+		// Which source answered, and how far the camera object strayed from the apex, logged
+		// every 10 s: the player fallback is what makes lights slide.
+		static ULONGLONG s_window_start = 0;
+		static UINT s_by_source[4] = {};
+		static float s_max_gap = 0.0f;
+		static UINT s_matched = 0; // reads whose own frustum apex was found to compare against
+		auto tally = [&](const char* label)
+		{
+			const int i = label[0] == 'c' && label[1] == 'a' ? 0 : label[0] == 'f' ? 1 : label[0] == 'p' ? 2 : 3;
+			++s_by_source[i];
+			const ULONGLONG now = GetTickCount64();
+			if (!s_window_start) s_window_start = now;
+			if (now - s_window_start >= 10000)
+			{
+				log("Camera", std::format("last 10 s: camera entity {}, frustum apex {}, player (approx) {}, character {}; "
+					"camera entity vs its own apex max gap {:.4f} over {} compared reads", s_by_source[0], s_by_source[1], s_by_source[2],
+					s_by_source[3], s_max_gap, s_matched));
+				s_window_start = now;
+				std::fill(std::begin(s_by_source), std::end(s_by_source), 0u);
+				s_max_gap = 0.0f;
+				s_matched = 0;
+			}
+		};
+
 		auto accept = [&](const char* label, float px, float py, float pz, bool render_order)
 		{
+			tally(label);
 			if (render_order)
 			{
 				std::swap(py, pz);
@@ -82,8 +107,41 @@ namespace comp::game::camera
 
 		float px = 0.0f, py = 0.0f, pz = 0.0f;
 
-		// The camera-relative main pass never uploads the camera position, but the engine
-		// builds culling frustums in world space, so the main camera's apex is it.
+		// The camera-relative main pass never uploads the camera position; the render thread's
+		// camera entity holds the one this frame is drawn with.
+		if (s.override_source_mode != 2 &&
+			get_render_cam_pos(px, py, pz) && is_nonzero_position(px, py, pz))
+		{
+			s_lock.used_player_fallback = false;
+			// Its own frustum's apex (entity+0x150) must be the same point; a gap would mean the
+			// entity read is not the camera the culling of this frame used.
+			if (const void* own = render_cam_frustum())
+			{
+				frustum_culling::apex_sample apexes[frustum_culling::MAX_FRAME_APEXES];
+				const int count = frustum_culling::frame_apexes(apexes, static_cast<int>(std::size(apexes)));
+				for (int i = 0; i < count; ++i)
+				{
+					if (apexes[i].frustum != own)
+						continue;
+					const float ax = apexes[i].x, ay = apexes[i].y, az = apexes[i].z;
+					const float gap = std::sqrt((ax - px) * (ax - px) + (ay - py) * (ay - py) + (az - pz) * (az - pz));
+					s_max_gap = std::max(s_max_gap, gap);
+					++s_matched;
+					static UINT logged = 0;
+					if (gap > 0.01f && logged < 20)
+					{
+						++logged;
+						log("Camera", std::format("render camera entity vs its own frustum apex differ by {:.3f} ({:.2f}, {:.2f}, {:.2f} vs {:.2f}, {:.2f}, {:.2f})",
+							gap, px, py, pz, ax, ay, az));
+					}
+					break;
+				}
+			}
+			return accept("camera entity", px, py, pz, false);
+		}
+
+		// Before the camera object exists: the engine builds culling frustums in world
+		// space, so the main camera's apex is the camera.
 		if (s.use_frustum_apex && s.override_source_mode != 2 &&
 			get_camera_apex_pos(px, py, pz) && is_nonzero_position(px, py, pz))
 		{
@@ -134,6 +192,59 @@ namespace comp::game::camera
 		}
 	}
 
+	// The camera the frame being drawn uses lives on the render (HG) thread, which issues the
+	// D3D calls and therefore runs the proxy. The game-side camera objects (GameRend+0x14, the
+	// culling camera, and +0x18, FrpgPersCam) are written by the main thread while it records the
+	// next frame, so in motion they lead the drawn frame (up to 2 units seen live). Each one sends
+	// its matrix by token 0x3D to its render entity, handle at +0x04; the HG thread stores it at
+	// entity+0x10 (translation at +0x40) and builds the culling frustum at entity+0x140, whose
+	// planes the frustum tests receive at entity+0x150. GameRend+0x14 is also the camera whose
+	// position the engine subtracts to make the main pass camera-relative (token 0x800E).
+	// See analysis/camera_object_review_2026-10-27.md.
+	static DWORD render_camera_entity()
+	{
+		constexpr DWORD HGMAN_SLOT_VA = 0x013783C0;
+		constexpr DWORD GAMEREND_OFFSET = 0x6F8;
+		constexpr DWORD CULL_CAM_OFFSET = 0x14;
+		constexpr DWORD FRPG_CAMERA_ENTITY_VTABLE = 0x01174478;
+		const DWORD hgman = safe_read_ptr(HGMAN_SLOT_VA);
+		const DWORD gamerend = hgman ? safe_read_ptr(hgman + GAMEREND_OFFSET) : 0;
+		const DWORD cam = gamerend ? safe_read_ptr(gamerend + CULL_CAM_OFFSET) : 0;
+		const DWORD handle = cam ? safe_read_ptr(cam + 0x04) : 0;
+		if (!(handle & 0x80000000u))
+			return 0;
+		// Handle -> entity through the HGEntityManager (findings.db #240):
+		// [[[[HGMan+0x0C]+0x04]]+0x18]+0x04 is the entity table, indexed by handle & 0xFFFFFF.
+		const DWORD ctx = safe_read_ptr(hgman + 0x0C);
+		const DWORD q = ctx ? safe_read_ptr(safe_read_ptr(ctx + 0x04)) : 0;
+		const DWORD mgr = q ? safe_read_ptr(q + 0x18) : 0;
+		const DWORD table = mgr ? safe_read_ptr(mgr + 0x04) : 0;
+		const DWORD entity = table ? safe_read_ptr(table + 4 * (handle & 0x00FFFFFFu)) : 0;
+		// The engine itself ignores the generation byte; the entity keeps its full handle at +0x08,
+		// which rules out another camera entity briefly holding a reused slot after a re-create.
+		// HGCameraEntity is only the base class's vtable while an entity is being destroyed.
+		if (!entity || safe_read_ptr(entity) != FRPG_CAMERA_ENTITY_VTABLE || safe_read_ptr(entity + 0x08) != handle)
+			return 0;
+		return entity;
+	}
+
+	bool get_render_cam_pos(float& x, float& y, float& z)
+	{
+		const DWORD entity = render_camera_entity();
+		if (!entity)
+			return false;
+		x = safe_read_float(entity + 0x40);
+		y = safe_read_float(entity + 0x44);
+		z = safe_read_float(entity + 0x48);
+		return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+	}
+
+	const void* render_cam_frustum()
+	{
+		const DWORD entity = render_camera_entity();
+		return entity ? reinterpret_cast<const void*>(entity + 0x150) : nullptr;
+	}
+
 	static DWORD get_char_object_ptr()
 	{
 		DWORD wcm = safe_read_ptr(world_chr_man_addr);
@@ -180,32 +291,10 @@ namespace comp::game::camera
 		return true;
 	}
 
-	// Bootstrap only: the main camera orbits the character at a measured 1.6-5.4 units.
+	// Bootstrap only: the main camera orbits the character at a measured 1.6-5.4 units,
+	// and the water-reflection frustum (the same camera mirrored through the water plane)
+	// lands 15-20 away, so this separates them with margin at the moment of acquisition.
 	static constexpr float BOOTSTRAP_ORBIT_DISTANCE = 12.0f;
-
-	// The water-reflection frustum is the main camera mirrored through the water plane:
-	// the same x and z, below the water where the main camera is above it. Over deep water
-	// it lands 15-20 away, but standing in shallow water (the Firelink tunnel) puts it
-	// closer to the character than the main camera, so distance alone picked it and the
-	// lock then followed it for the whole session: the world went in 2.7 units too low and
-	// every light ended up above the ceiling. An apex with a twin straight above it is the
-	// reflection.
-	static constexpr float MIRROR_TWIN_TOLERANCE = 0.01f;
-
-	static bool is_reflection(const frustum_culling::apex_sample& a,
-		const frustum_culling::apex_sample* apexes, int count)
-	{
-		for (int i = 0; i < count; ++i)
-		{
-			const auto& b = apexes[i];
-			if (std::fabs(b.x - a.x) < MIRROR_TWIN_TOLERANCE && std::fabs(b.z - a.z) < MIRROR_TWIN_TOLERANCE &&
-				b.y > a.y + MIRROR_TWIN_TOLERANCE)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
 
 	// Once acquired the main camera is followed by its frustum OBJECT, so it may travel
 	// any distance from the character — cutscenes, wide rooms and elevators all move the
@@ -270,10 +359,6 @@ namespace comp::game::camera
 				{
 					break; // stale lock — fall through and re-acquire
 				}
-				if (is_reflection(apexes[i], apexes, count))
-				{
-					break; // locked onto the water reflection — re-acquire
-				}
 				return accept(apexes[i], distance);
 			}
 			s_lock.frustum = nullptr;
@@ -289,10 +374,6 @@ namespace comp::game::camera
 		float best_distance = 0.0f;
 		for (int i = 0; i < count; ++i)
 		{
-			if (is_reflection(apexes[i], apexes, count))
-			{
-				continue;
-			}
 			const float distance = distance_to_char(apexes[i]);
 			if (best < 0 || distance < best_distance)
 			{
