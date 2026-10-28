@@ -180,6 +180,7 @@ namespace comp
 		// The draw's own haze set, as for indexed draws (so it never inherits the last one's tag).
 		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
+		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data());
 		game::lightmap_sun::untag(dev);
 
 		auto hr = S_OK;
@@ -381,6 +382,8 @@ namespace comp
 		// ... and Remix hazes the draw's surfaces with its own set, as the game does.
 		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
+		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
+		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data());
 		// ... and lightmapped draws carry their lightmap's level, which the runtime scales the sun by.
 		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 

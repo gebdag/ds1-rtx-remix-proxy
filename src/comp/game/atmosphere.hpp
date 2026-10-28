@@ -40,6 +40,16 @@ namespace comp::game::atmosphere
 	// (renderer for DIP/DP, d3d9ex for the UP draws), so no draw inherits another's tag.
 	void tag_haze_set(IDirect3DDevice9* dev, bool has_haze, const float* ps_const, const float* vs_const, unsigned int frame);
 
+	// Self-lit ambient: a few region light sets switch the probe off (c86 = 0) and give both
+	// hemispheres one bright colour, so the HemEnv shaders draw their surfaces as texture * c100 *
+	// that colour however the scene is lit. That is how the game makes a plain rock plane its
+	// glowing lava (Tomb of the Giants, s13 LightBank row 9: (10, 0, 0)). Remix lights those
+	// surfaces itself, so the draw is tagged with c100 * colour (gamma space) in stage 3's
+	// D3DTSS_CONSTANT (0xD5rrggbb) and the runtime adds albedo * value^2.2 as emission
+	// (Surface::ds1SelfLit), the game's own output in linear light. Every draw goes through here,
+	// as through tag_haze_set; `ambient` is false for draws without the HemEnv lighting (PS_AMBIENT).
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const);
+
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);
 

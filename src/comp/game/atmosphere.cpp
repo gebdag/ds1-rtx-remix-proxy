@@ -154,6 +154,14 @@ namespace comp::game::atmosphere
 		bool g_slots_dirty = false;
 		DWORD g_tag_set = ~0u; // the stage 7 constant as last set; ~0 = unknown (set it)
 
+		// Self-lit tag: kSelfLitMarker | r << 16 | g << 8 | b, each byte c100 * hemisphere * 255 / 16.
+		// Only a colour of at least kSelfLitMin is self-lit: ordinary ambient stays below it (the
+		// brightest uniform hemisphere that is not a glow, the Kiln's 2.5 at c100 0.6, gives 1.5).
+		constexpr DWORD kSelfLitMarker = 0xD5000000;
+		constexpr float kSelfLitMin = 3.0f;
+		constexpr float kSelfLitRange = 16.0f;
+		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
+
 		// Ambient: the probe-lit set most of the frame uses (dominant_set), and the cube sent.
 		struct ambient_source
 		{
@@ -495,9 +503,48 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	namespace
+	{
+		// A probe-lit draw's self-lit colour (c100 * its uniform hemisphere ambient, gamma space), when
+		// its light set is a glow rather than ambient light (atmosphere.hpp tag_self_lit).
+		bool self_lit_colour(const float* ps_const, float value[3])
+		{
+			const float* probe = &ps_const[86 * 4];
+			const float* upper = &ps_const[98 * 4];
+			const float* lower = &ps_const[99 * 4];
+			const float* diffuse = &ps_const[100 * 4];
+			bool uniform_unprobed = true;
+			float peak = 0.0f;
+			for (int c = 0; c < 3; c++)
+			{
+				uniform_unprobed &= probe[c] == 0.0f && std::fabs(upper[c] - lower[c]) <= 0.01f * std::max(upper[c], lower[c]);
+				value[c] = std::max(diffuse[c] * 0.5f * (upper[c] + lower[c]), 0.0f);
+				peak = std::max(peak, value[c]);
+			}
+			return uniform_unprobed && peak >= kSelfLitMin;
+		}
+	}
+
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const)
+	{
+		DWORD tag = 0;
+		if (float value[3]; ambient && ps_const && self_lit_colour(ps_const, value))
+		{
+			tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+				tag |= static_cast<DWORD>(std::lround(std::min(value[c] / kSelfLitRange, 1.0f) * 255.0f)) << (16 - 8 * c);
+		}
+		if (tag != g_self_lit_tag_set)
+		{
+			dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
+			g_self_lit_tag_set = tag;
+		}
+	}
+
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count)
 	{
-		if (!ps_const || !probe)
+		// A self-lit set is a glow, not the area's ambient light (it emits in Remix instead).
+		if (float self_lit[3]; !ps_const || !probe || self_lit_colour(ps_const, self_lit))
 			return;
 		if (frame != g_ambient_frame_id)
 		{
@@ -768,8 +815,9 @@ namespace comp::game::atmosphere
 						g_slots[i].sent_frame = std::max(frame, 1u); // 0 means unsent
 			}
 		}
-		// Re-assert the draw tag once per frame (a device reset clears texture stage states).
+		// Re-assert the draw tags once per frame (a device reset clears texture stage states).
 		g_tag_set = ~0u;
+		g_self_lit_tag_set = ~0u;
 		// The adaptation constants and c135.y, when they change (c54.x moves with the frame time).
 		if (const float divisor = g_haze_ready.exposure[1]; g_have_grade && g_have_haze && g_c54[3] > 0.0f && divisor > 0.0f &&
 			(std::memcmp(g_c54, g_c54_sent, sizeof(g_c54)) != 0 || divisor != g_divisor_sent))
