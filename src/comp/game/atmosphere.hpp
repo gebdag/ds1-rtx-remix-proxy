@@ -48,7 +48,12 @@ namespace comp::game::atmosphere
 	// D3DTSS_CONSTANT (0xD5rrggbb) and the runtime adds albedo * value^2.2 as emission
 	// (Surface::ds1SelfLit), the game's own output in linear light. Every draw goes through here,
 	// as through tag_haze_set; `ambient` is false for draws without the HemEnv lighting (PS_AMBIENT).
-	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const);
+	// Lava (`lava`, its diffuse is a lava texture) is lit the same way but probe-lit: its region sets
+	// give it ten times a map surface's light (Lost Izalith: c100 2.6 * (c86 3 * probe + c98 (2, 2, 0)),
+	// about 13), so the game draws even its crust saturated yellow; it is tagged with
+	// c100 * (c86 * the probe's upward face + c98), its own region's value.
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
+		IDirect3DBaseTexture9* probe = nullptr, bool lava = false);
 
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);

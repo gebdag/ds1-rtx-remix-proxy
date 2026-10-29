@@ -525,10 +525,26 @@ namespace comp::game::atmosphere
 		}
 	}
 
-	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const)
+	namespace
+	{
+		// A lava draw's light, c100 * (c86 * probe(+Y) + c98), gamma space (see tag_self_lit).
+		bool lava_colour(const float* ps_const, IDirect3DBaseTexture9* probe, float value[3])
+		{
+			std::array<std::array<float, 3>, 6> faces {};
+			const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
+			const float* scale = &ps_const[86 * 4];
+			const float* upper = &ps_const[98 * 4];
+			const float* diffuse = &ps_const[100 * 4];
+			for (int c = 0; c < 3; c++)
+				value[c] = std::max(diffuse[c] * ((probed ? faces[2][c] : 0.0f) * scale[c] + upper[c]), 0.0f);
+			return std::max({ value[0], value[1], value[2] }) > 0.0f;
+		}
+	}
+
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava)
 	{
 		DWORD tag = 0;
-		if (float value[3]; ambient && ps_const && self_lit_colour(ps_const, value))
+		if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
 		{
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)

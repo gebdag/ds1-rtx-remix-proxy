@@ -228,7 +228,8 @@ namespace comp
 		// The draw's own haze set, as for indexed draws (so it never inherits the last one's tag).
 		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
-		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data());
+		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
+			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))));
 		game::lightmap_sun::untag(dev);
 
 		auto hr = S_OK;
@@ -431,7 +432,8 @@ namespace comp
 		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
 		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
-		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data());
+		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
+			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))));
 		// ... and lightmapped draws carry their lightmap's level, which the runtime scales the sun by.
 		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 

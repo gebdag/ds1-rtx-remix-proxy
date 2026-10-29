@@ -17,6 +17,7 @@ namespace comp::game::texture_names
 			std::string name;
 			bool atmospheric = false;
 			bool lit_effect = false;
+			bool lava = false;
 		};
 
 		std::shared_mutex g_mutex;
@@ -185,6 +186,14 @@ namespace comp::game::texture_names
 			return s == "s00502" || s == "s00504";
 		}
 
+		// The lava materials' diffuse textures (m14_n_lava_00/01/03 and copies, "mNN_n_lava_*"); not
+		// m14_n_wall_14_lav, the rock that borders it.
+		bool classify_lava(const std::string& s)
+		{
+			return s.size() > 10 && s[0] == 'm' && std::isdigit(static_cast<unsigned char>(s[1])) &&
+				std::isdigit(static_cast<unsigned char>(s[2])) && s.compare(3, 8, "_n_lava_") == 0;
+		}
+
 		bool classify_atmospheric(const std::string& s)
 		{
 			if (s.size() < 5 || s[0] != 'm' || !std::isdigit(static_cast<unsigned char>(s[1])) ||
@@ -220,6 +229,7 @@ namespace comp::game::texture_names
 		entry e{ stem(*name), false };
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
+		e.lava = classify_lava(e.name);
 		++g_named;
 		if (e.atmospheric)
 		{
@@ -248,6 +258,15 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.atmospheric;
 	}
 
+	bool is_lava(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.lava;
+	}
+
 	bool is_lit_effect(IDirect3DBaseTexture9* texture)
 	{
 		if (!texture)
@@ -271,6 +290,7 @@ namespace comp::game::texture_names
 		entry e{ stem(name), false };
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
+		e.lava = classify_lava(e.name);
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);
 	}

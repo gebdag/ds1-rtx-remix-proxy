@@ -26,6 +26,9 @@ namespace comp::game::texture_names
 	// game::effect_lights stands a light in for.
 	bool is_lit_effect(IDirect3DBaseTexture9* texture);
 
+	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
+	bool is_lava(IDirect3DBaseTexture9* texture);
+
 	// Name recovered for the texture, or empty.
 	std::string name_of(IDirect3DBaseTexture9* texture);
 
