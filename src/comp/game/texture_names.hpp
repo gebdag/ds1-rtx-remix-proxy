@@ -22,6 +22,10 @@ namespace comp::game::texture_names
 	// overlays on a surface.
 	bool is_atmospheric(IDirect3DBaseTexture9* texture);
 
+	// True for an effect texture the game lights only briefly (the lightning breath's bolts), which
+	// game::effect_lights stands a light in for.
+	bool is_lit_effect(IDirect3DBaseTexture9* texture);
+
 	// Name recovered for the texture, or empty.
 	std::string name_of(IDirect3DBaseTexture9* texture);
 

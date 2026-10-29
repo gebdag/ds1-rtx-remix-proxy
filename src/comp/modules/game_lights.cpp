@@ -2,6 +2,7 @@
 #include "game_lights.hpp"
 #include "../game/point_lights.hpp"
 #include "../game/map_lights.hpp"
+#include "../game/effect_lights.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
@@ -60,7 +61,7 @@ namespace comp
 
 		// Short source name per kind (switches, the selected light's heading), in section order.
 		const char* const kKindSource[] = {
-			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "No parameters",
+			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "Effect stand-in", "No parameters",
 		};
 		static_assert(std::size(kKindSource) == static_cast<size_t>(kind::count));
 
@@ -72,6 +73,7 @@ namespace comp
 			"Character lights",
 			"Effect lights (spells, items, SFX)",
 			"Stand-ins (synthesized for unlit flames)",
+			"Effect stand-ins (lightning bolts)",
 			"Engine slots without parameters (never drawn)",
 		};
 		static_assert(std::size(kKindSection) == static_cast<size_t>(kind::count));
@@ -149,6 +151,7 @@ namespace comp
 		{
 			using src = game::point_lights::param_source;
 			if (l.source == src::synthetic) return kind::synthetic;
+			if (l.source == src::effect) return kind::effect;
 			if (l.source == src::bank_row) return kind::map_row;
 			if (l.source == src::entity)
 			{
@@ -408,6 +411,10 @@ namespace comp
 			}
 			break;
 		}
+		case kind::effect:
+			row.name = "Lightning bolts";
+			row.origin = "synthesized from the breath's bolt draws (s00502 / s00504): the game lights only its first flash";
+			break;
 		default:
 			row.name = std::format("Engine slot {}", l.slot);
 			row.origin = l.entity
@@ -442,12 +449,14 @@ namespace comp
 		const auto& synthetic = game::map_lights::get();
 		synthetic_count_ = static_cast<int>(synthetic.size());
 		game::map_lights::update_effect_gate();
+		const auto& effects = game::effect_lights::collect();
 
 		std::vector<const game::point_lights::light*> sources;
-		sources.reserve(harvested.size() + synthetic.size());
+		sources.reserve(harvested.size() + synthetic.size() + effects.size());
 		for (const auto& l : harvested)
 			if (&l != player) sources.push_back(&l);
 		for (const auto& l : synthetic) sources.push_back(&l);
+		for (const auto& l : effects) sources.push_back(&l);
 
 		harvested_count_ = static_cast<int>(sources.size());
 		create_failed_ = 0;

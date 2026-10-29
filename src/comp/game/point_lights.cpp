@@ -192,18 +192,23 @@ namespace comp::game::point_lights
 		return safe_read_ptr(manager + MANAGER_TABLE);
 	}
 
+	// Light vtables are DARKSOULS.exe addresses, and the exe has no ASLR: it always loads at its
+	// image base. EXE_BASE is the running module, which in the lookdev host is the host exe (relocated),
+	// so comparing a captured vtable against it classified every light from a capture as unresolved.
+	constexpr DWORD kGameImageBase = 0x00400000;
+
 	static bool is_light_vtable(DWORD vtable)
 	{
-		return vtable == EXE_BASE + VTABLE_BANK_RVA
-			|| vtable == EXE_BASE + VTABLE_DIRECT_RVA
-			|| vtable == EXE_BASE + VTABLE_LERP_BANK_RVA;
+		return vtable == kGameImageBase + VTABLE_BANK_RVA
+			|| vtable == kGameImageBase + VTABLE_DIRECT_RVA
+			|| vtable == kGameImageBase + VTABLE_LERP_BANK_RVA;
 	}
 
 	const char* entity_class_name(unsigned vtable)
 	{
-		if (vtable == EXE_BASE + VTABLE_BANK_RVA) return "Bank";
-		if (vtable == EXE_BASE + VTABLE_DIRECT_RVA) return "Direct";
-		if (vtable == EXE_BASE + VTABLE_LERP_BANK_RVA) return "LerpBank";
+		if (vtable == kGameImageBase + VTABLE_BANK_RVA) return "Bank";
+		if (vtable == kGameImageBase + VTABLE_DIRECT_RVA) return "Direct";
+		if (vtable == kGameImageBase + VTABLE_LERP_BANK_RVA) return "LerpBank";
 		return "?";
 	}
 

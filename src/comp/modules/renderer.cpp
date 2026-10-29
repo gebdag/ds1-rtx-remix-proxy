@@ -10,6 +10,7 @@
 #include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/glass.hpp"
+#include "../game/effect_lights.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/lightmap_sun.hpp"
@@ -691,6 +692,10 @@ namespace comp
 					if (shell && shell_mode == 2)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kShellCutoutMarker);
 					const bool tinted = ffp.apply_draw_tint(dev);
+					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
+					game::effect_lights::observe_draw(dev,
+						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
+						ffp.vs_const_data(), ffp.ps_const_data());
 					// The swamp's surface carries the swamp marker (see the skinned path).
 					const bool swamp = !base_decal && swamp_pass == game::swamp::pass::Surface;
 					if (swamp)

@@ -16,6 +16,7 @@ namespace comp::game::texture_names
 		{
 			std::string name;
 			bool atmospheric = false;
+			bool lit_effect = false;
 		};
 
 		std::shared_mutex g_mutex;
@@ -177,6 +178,13 @@ namespace comp::game::texture_names
 		// Map textures are named "mNN_...": m10_sky, m10_01_cloud_01, m10_mist,
 		// m10_bg_shaft, m11_light_shaft, m10_bg_giant_tree, m10_back_ground.
 		// The "cloudshadow" textures are lit terrain overlays, not layers.
+		// Effect textures the game lights only briefly; game::effect_lights stands in a light for them:
+		// the lightning breath's bolts.
+		bool classify_lit_effect(const std::string& s)
+		{
+			return s == "s00502" || s == "s00504";
+		}
+
 		bool classify_atmospheric(const std::string& s)
 		{
 			if (s.size() < 5 || s[0] != 'm' || !std::isdigit(static_cast<unsigned char>(s[1])) ||
@@ -211,6 +219,7 @@ namespace comp::game::texture_names
 
 		entry e{ stem(*name), false };
 		e.atmospheric = classify_atmospheric(e.name);
+		e.lit_effect = classify_lit_effect(e.name);
 		++g_named;
 		if (e.atmospheric)
 		{
@@ -239,6 +248,15 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.atmospheric;
 	}
 
+	bool is_lit_effect(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.lit_effect;
+	}
+
 	std::string name_of(IDirect3DBaseTexture9* texture)
 	{
 		std::shared_lock lock(g_mutex);
@@ -252,6 +270,7 @@ namespace comp::game::texture_names
 			return;
 		entry e{ stem(name), false };
 		e.atmospheric = classify_atmospheric(e.name);
+		e.lit_effect = classify_lit_effect(e.name);
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);
 	}

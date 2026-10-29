@@ -66,6 +66,7 @@ namespace comp
 			lerp_entity,  // LerpBankPointLightEntity (character lights)
 			fx_direct,    // DirectPointLightEntity (FX / SFX / item lights)
 			synthetic,    // stand-in from rtx_comp\lights\<map>.txt
+			effect,       // stand-in for a lit effect's draws (game::effect_lights)
 			unresolved,   // live slot with no usable parameters
 			count
 		};
@@ -213,12 +214,12 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
-		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true };
+		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true };
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
 		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
 		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no
 		// parameters, stay out.
-		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, false };
+		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, false };
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;

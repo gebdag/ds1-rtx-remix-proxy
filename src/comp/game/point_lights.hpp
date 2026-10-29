@@ -12,6 +12,7 @@ namespace comp::game::point_lights
 		bank_row,   // POINT_LIGHT_BANK row on the slot (map lights placed by the MSB)
 		entity,     // the entity's own GetLightParams (FX/SFX lights, item lights, lerp lights)
 		synthetic,  // not from the engine at all — see game::map_lights
+		effect,     // stands in for an effect the engine lights only briefly — see game::effect_lights
 	};
 
 	struct light
