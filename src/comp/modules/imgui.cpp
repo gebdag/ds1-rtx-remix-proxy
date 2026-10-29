@@ -18,6 +18,7 @@
 #include "../game/cheats.hpp"
 #include "../game/debug_tools.hpp"
 #include "../game/frustum_culling.hpp"
+#include "../game/input_customizer.hpp"
 #include "../game/vanilla_view.hpp"
 
 // Allow us to directly call the ImGui WndProc function.
@@ -36,6 +37,8 @@ namespace comp
 	
 	LRESULT __stdcall wnd_proc_hk(HWND window, UINT message_type, WPARAM wparam, LPARAM lparam)
 	{
+		game::input_customizer::on_window_message(window);
+
 		bool block = false;
 
 		if (message_type != WM_MOUSEMOVE && message_type != WM_NCMOUSEMOVE)

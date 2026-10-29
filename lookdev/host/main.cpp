@@ -100,13 +100,18 @@ namespace
 			// looks in this exe's folder first: that is the game's DATA\d3d9.dll, the
 			// deployed proxy, which must never start inside the host. With the
 			// system d3d9.dll already loaded, the import binds to it instead.
-			wchar_t system_d3d9[MAX_PATH];
-			GetSystemDirectoryW(system_d3d9, MAX_PATH);
-			wcscat_s(system_d3d9, L"\\d3d9.dll");
-			if (!LoadLibraryW(system_d3d9))
+			// The same goes for the proxy's dinput8.dll import: DATA may hold an input
+			// mod (Dark Souls Input Customizer), which refuses any exe but the game.
+			for (const wchar_t* dll : { L"\\d3d9.dll", L"\\dinput8.dll" })
 			{
-				std::printf("could not load the system d3d9.dll\n");
-				return false;
+				wchar_t system_dll[MAX_PATH];
+				GetSystemDirectoryW(system_dll, MAX_PATH);
+				wcscat_s(system_dll, dll);
+				if (!LoadLibraryW(system_dll))
+				{
+					std::printf("could not load the system %ls\n", dll + 1);
+					return false;
+				}
 			}
 
 			HMODULE mod = LoadLibraryW(path.c_str());

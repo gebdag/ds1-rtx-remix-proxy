@@ -4,6 +4,7 @@
 #include "cheats.hpp"
 #include "debug_tools.hpp"
 #include "fps_unlock.hpp"
+#include "input_customizer.hpp"
 #include "intro_skip.hpp"
 
 namespace comp::game
@@ -128,6 +129,7 @@ namespace comp::game
 		camera::init();
 		debug_tools::init();
 		cheats::init();
+		input_customizer::init();
 	}
 
 #undef PATTERN_OFFSET_SIMPLE
