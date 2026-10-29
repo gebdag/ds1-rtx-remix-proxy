@@ -211,6 +211,7 @@ namespace comp
 		const auto& cfg = shared::common::config::get();
 		enabled = cfg.lights.enabled;
 		intensity_scale = cfg.lights.intensity_scale;
+		fire_light_scale = cfg.lights.fire_light_scale;
 		radius_scale = cfg.lights.radius_scale;
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		game::point_lights::set_resolve_entities(cfg.lights.resolve_entity_params);
@@ -449,6 +450,7 @@ namespace comp
 		const auto& synthetic = game::map_lights::get();
 		synthetic_count_ = static_cast<int>(synthetic.size());
 		game::map_lights::update_effect_gate();
+		game::effect_lights::set_fire_scale(fire_light_scale);
 		const auto& effects = game::effect_lights::collect();
 
 		std::vector<const game::point_lights::light*> sources;
@@ -456,7 +458,44 @@ namespace comp
 		for (const auto& l : harvested)
 			if (&l != player) sources.push_back(&l);
 		for (const auto& l : synthetic) sources.push_back(&l);
-		for (const auto& l : effects) sources.push_back(&l);
+		// A particle stand-in is dropped where an engine or table light already stands within
+		// kParticleCover of it: the game lights that fire itself (a bonfire, a torch).
+		constexpr float kParticleCover = 3.0f;
+		static unsigned particle_log_frame = 0;
+		const bool particle_log = frame - particle_log_frame >= 300;
+		if (particle_log)
+			particle_log_frame = frame;
+		for (const auto& l : effects)
+		{
+			if (l.entity_vtable != game::effect_lights::kParticleMarker)
+			{
+				sources.push_back(&l);
+				continue;
+			}
+			const game::point_lights::light* nearest = nullptr;
+			float nearest_d2 = std::numeric_limits<float>::max();
+			for (const auto* s : sources)
+			{
+				const float d2 = (s->x - l.x) * (s->x - l.x) + (s->y - l.y) * (s->y - l.y) + (s->z - l.z) * (s->z - l.z);
+				if (s->source != game::point_lights::param_source::effect && d2 < nearest_d2)
+				{
+					nearest = s;
+					nearest_d2 = d2;
+				}
+			}
+			// The calibration data: the particles' summed light next to the game's own light for them.
+			if (particle_log)
+			{
+				shared::common::log("EffectLights", nearest
+					? std::format("particles at ({:.1f}, {:.1f}, {:.1f}): light ({:.3f}, {:.3f}, {:.3f}) range {:.1f}; nearest game light {:.1f} m away: ({:.3f}, {:.3f}, {:.3f}) dwindle {:.1f}-{:.1f}",
+						l.x, l.y, l.z, l.r, l.g, l.b, l.dwindle_end, std::sqrt(nearest_d2), nearest->r, nearest->g, nearest->b, nearest->dwindle_begin, nearest->dwindle_end)
+					: std::format("particles at ({:.1f}, {:.1f}, {:.1f}): light ({:.3f}, {:.3f}, {:.3f}) range {:.1f}; no game light",
+						l.x, l.y, l.z, l.r, l.g, l.b, l.dwindle_end));
+			}
+			if (nearest && nearest_d2 <= kParticleCover * kParticleCover)
+				continue;
+			sources.push_back(&l);
+		}
 
 		harvested_count_ = static_cast<int>(sources.size());
 		create_failed_ = 0;
@@ -999,6 +1038,7 @@ namespace comp
 
 		ok &= cfg.set_string("Lights", "Enabled", flag(enabled));
 		ok &= cfg.set_string("Lights", "IntensityScale", std::format("{:.3f}", intensity_scale));
+		ok &= cfg.set_string("Lights", "FireLightScale", std::format("{:.3f}", fire_light_scale));
 		ok &= cfg.set_string("Lights", "RadiusScale", std::format("{:.3f}", radius_scale));
 		ok &= cfg.set_string("Lights", "GameFalloff", game_falloff_ ? "1" : "0");
 		ok &= cfg.set_string("Lights", "ResolveEntityParams", flag(game::point_lights::resolve_entities()));
@@ -1061,6 +1101,7 @@ namespace comp
 		auto& cfg = shared::common::config::get();
 		enabled = cfg.get_bool("Lights", "Enabled", true);
 		intensity_scale = cfg.get_float("Lights", "IntensityScale", 1.0f);
+		fire_light_scale = std::max(0.0f, cfg.get_float("Lights", "FireLightScale", 2.0f));
 		radius_scale = cfg.get_float("Lights", "RadiusScale", 1.0f);
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
@@ -1161,6 +1202,11 @@ namespace comp
 		ImGui::SliderFloat("Intensity scale", &intensity_scale, 0.01f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("All point lights. 1.0 is the tuned default. Not the sun or the player light.");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::SliderFloat("Fire lights", &fire_light_scale, 0.0f, 10.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Lights stood in for fire effects the game does not light (a fire breath). 1.0 = torch to bonfire strength.");
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(140.0f);
 		ImGui::SliderFloat("Radius scale", &radius_scale, 0.1f, 10.0f, "%.2f");

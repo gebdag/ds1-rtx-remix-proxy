@@ -257,6 +257,9 @@ namespace shared::common
 			// Inject the stand-in lights in rtx_comp\lights\<map>.txt for maps the
 			// engine never lights (Blighttown's torches and friends).
 			bool synthesized_lights = true;
+			// Scale on the lights stood in for fire effects the game does not light (a fire breath;
+			// game::effect_lights): 1 = torch to bonfire strength; 2, the default, reads as a fire breath lighting its surroundings (frame_20261029_144153).
+			float fire_light_scale = 2.0f;
 		} lights;
 
 		// The light the game hangs on the player's head (a LerpBank point light on a

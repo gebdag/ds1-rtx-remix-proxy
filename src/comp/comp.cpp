@@ -20,6 +20,7 @@
 #include "game/vanilla_view.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
+#include "game/effect_lights.hpp"
 
 namespace comp
 {
@@ -27,6 +28,14 @@ namespace comp
 	static bool camera_pos_provider(float& x, float& y, float& z)
 	{
 		return game::camera::get_override_pos(x, y, z);
+	}
+
+	// Drawn particles: the table lights that follow their effect, and the effect stand-in lights.
+	static void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count)
+	{
+		if (game::map_lights::wants_sprites())
+			game::map_lights::observe_sprites(points, count);
+		game::effect_lights::observe_sprites(points, count);
 	}
 
 	void on_begin_scene_cb()
@@ -59,7 +68,7 @@ namespace comp
 			auto& ffp = shared::common::ffp_state::get();
 			auto& cam_s = game::camera::get_settings();
 			ffp.set_camera_override(camera_pos_provider);
-			ffp.set_sprite_observer(game::map_lights::wants_sprites() ? game::map_lights::observe_sprites : nullptr);
+			ffp.set_sprite_observer(observe_sprites);
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}

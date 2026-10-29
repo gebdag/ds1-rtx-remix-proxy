@@ -167,7 +167,10 @@ namespace shared::common
 		// game's world space (the space of MSB positions and the light manager) and the strongest
 		// vertex alpha of the three. Only the vertices the draw's indices reach: the game's batches
 		// declare more, and the rest hold stale positions of earlier sprites.
-		struct sprite_point { float x, y, z, alpha; };
+		// One drawn particle triangle: its centre (world), strongest vertex alpha, the colour it adds
+		// per unit area where it is additive (vertex colour * alpha * the texture's mean colour and
+		// alpha), its area and whether it is drawn additively (SrcAlpha + One).
+		struct sprite_point { float x, y, z, alpha; float r, g, b; float area; bool additive; };
 		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
 		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
 

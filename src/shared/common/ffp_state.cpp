@@ -1919,6 +1919,11 @@ namespace shared::common
 		}
 		if (sprite_observer_fn_ && count)
 		{
+			DWORD blend_on = FALSE, dst_blend = 0;
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_on);
+			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
+			const bool additive = blend_on && dst_blend == D3DBLEND_ONE;
+			const auto tex = additive && cur_texture_[0] ? texture_average(cur_texture_[0]) : std::array<float, 4> { 1.0f, 1.0f, 1.0f, 1.0f };
 			// One point per drawn triangle, through the draw's own indices (list, strip or fan).
 			auto vertex_of = [&](UINT i) -> UINT
 			{
@@ -1938,7 +1943,24 @@ namespace shared::common
 				sprite_point p { (out[v[0]].x + out[v[1]].x + out[v[2]].x) / 3.0f, (out[v[0]].y + out[v[1]].y + out[v[2]].y) / 3.0f,
 					(out[v[0]].z + out[v[1]].z + out[v[2]].z) / 3.0f,
 					static_cast<float>(std::max({ out[v[0]].color >> 24, out[v[1]].color >> 24, out[v[2]].color >> 24 })) / 255.0f };
-				if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z))
+				float rgb[3] = {};
+				for (const UINT vi : v)
+				{
+					const DWORD c = out[vi].color;
+					const float va = static_cast<float>(c >> 24) / 255.0f;
+					rgb[0] += static_cast<float>((c >> 16) & 0xFF) / 255.0f * va;
+					rgb[1] += static_cast<float>((c >> 8) & 0xFF) / 255.0f * va;
+					rgb[2] += static_cast<float>(c & 0xFF) / 255.0f * va;
+				}
+				p.r = rgb[0] / 3.0f * tex[0] * tex[3];
+				p.g = rgb[1] / 3.0f * tex[1] * tex[3];
+				p.b = rgb[2] / 3.0f * tex[2] * tex[3];
+				const float e1[3] = { out[v[1]].x - out[v[0]].x, out[v[1]].y - out[v[0]].y, out[v[1]].z - out[v[0]].z };
+				const float e2[3] = { out[v[2]].x - out[v[0]].x, out[v[2]].y - out[v[0]].y, out[v[2]].z - out[v[0]].z };
+				const float cx = e1[1] * e2[2] - e1[2] * e2[1], cy = e1[2] * e2[0] - e1[0] * e2[2], cz = e1[0] * e2[1] - e1[1] * e2[0];
+				p.area = 0.5f * std::sqrt(cx * cx + cy * cy + cz * cz);
+				p.additive = additive;
+				if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) && std::isfinite(p.area))
 					sprite_points_.push_back(p);
 			}
 			if (!sprite_points_.empty())
