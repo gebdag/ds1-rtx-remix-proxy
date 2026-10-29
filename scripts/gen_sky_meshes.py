@@ -17,7 +17,8 @@ Rules (per FLVER in map/mNN_NN_NN_NN):
   - EXTRA_LAYERS: far blended layers checked against captures one by one (Ash Lake's mist).
 
 Also writes assets/sky/shell_meshes.txt, same format: the blended shells (see blended_shells), which
-the proxy draws as their own surfaces instead of decals.
+the proxy draws as their own surfaces instead of decals. Outside SHELL_MAPS only solid shells count (see
+solid_shell): terrain pieces the game draws blended but paints opaque, fading only at their vertex edges.
 
 Each listed mesh contributes one line per face set (every LOD the engine may draw):
   <FNV-1a 64 of the u16 index bytes, hex> <index count> <map>/<model>/mesh<i>/lod<j> <texture>
@@ -45,6 +46,21 @@ SHELL_SAMPLES = 300
 SHELL_MAPS = {
     'm13_02_00_00',  # Ash Lake (frame_20261027_000113, frame_20261027_094848)
 }
+# Solid shells, everywhere (solid_shell): a blended terrain piece off any surface whose texture is opaque
+# and whose body is: the game fades it out at its edges only. As a decal it was pasted onto whatever lay
+# behind it and dropped where nothing did (m16 m2750B0A16 mesh15, frame_20261029_082729: the Valley of
+# Drakes hillside went flat and dark, with a white hole). Real decals carry their shape in the texture's
+# alpha and edge-fade strips lie on their surface, so neither qualifies.
+SOLID_ON_SURFACE = 0.3        # fewer of its visible vertices than this lie on an opaque surface
+# ... and fewer than this within SOLID_NEAR of one: overlays a few centimetres over their own model's
+# ground (m10_01 m3170B1A10, m18_00 m0010B0A18: 53-96% within 20 cm) are blends, not terrain; the
+# pieces off any surface have at most 34% there.
+SOLID_NEAR = 0.2
+SOLID_NEAR_SHARE = 0.4
+SOLID_TEXTURE_OPAQUE = 0.95   # texels at alpha >= 250 (the diffuse)
+SOLID_BODY = 0.3              # vertices with alpha >= 0.9
+# Plain map materials only: waterfalls, crystals and glass are blended by design.
+SOLID_MTD = re.compile(r'^(m\[|m_4stone|a12_ground)')
 MIN_SKY_LAYER = 150.0
 MIN_BACKDROP = 1000.0
 
@@ -140,6 +156,48 @@ def point_triangles_distance(q, a, b, c):
     return np.linalg.norm(q - closest, axis=1)
 
 
+def texture_opaque_share(data_dir, name):
+    """Share of the diffuse's top-level texels at alpha >= 250 (map textures, DXT1/DXT5), None if unknown."""
+    import gen_glass as G
+    path = os.path.join(data_dir, 'map', name[:3], name + '.dds')
+    dds = G.read_dds(path) if os.path.exists(path) else None
+    if not dds:
+        return None
+    header, width, height, mips, fourcc, data = dds
+    if fourcc == b'DXT5':
+        return float((G.top_alpha(header, width, height, mips, data) >= 250).mean())
+    if fourcc == b'DXT1':
+        # Punch-through texels: blocks in 3-colour mode (c0 <= c1) using index 3.
+        bw, bh = (width + 3) // 4, (height + 3) // 4
+        blocks = np.frombuffer(data, np.uint8, bw * bh * 8).reshape(-1, 8)
+        c0 = blocks[:, 0].astype(np.uint16) | (blocks[:, 1].astype(np.uint16) << 8)
+        c1 = blocks[:, 2].astype(np.uint16) | (blocks[:, 3].astype(np.uint16) << 8)
+        bits = (blocks[:, 4].astype(np.uint32) | (blocks[:, 5].astype(np.uint32) << 8)
+                | (blocks[:, 6].astype(np.uint32) << 16) | (blocks[:, 7].astype(np.uint32) << 24))
+        codes = np.stack([(bits >> (2 * t)) & 3 for t in range(16)], 1)
+        clear = (c0 <= c1)[:, None] & (codes == 3)
+        return float(1.0 - clear.mean())
+    return None
+
+
+def body_share(mesh):
+    """Share of the mesh's vertices with alpha >= 0.9. Per vertex: a piece whose alpha steps 0/1 has
+    no triangle averaging 0.9 when each touches a faded vertex (the m10_01_cliff_01 pieces)."""
+    a = mesh_alpha(mesh)
+    return 1.0 if a is None else float((np.asarray(a) >= 0.9).mean())
+
+
+def solid_shell(map_id, mtd, name, mesh, on_surface, near_share, data_dir):
+    """Whether a blended shell outside SHELL_MAPS is a solid terrain piece (see SOLID_*). Its texture must
+    be one of its own area's: a border piece dressed in a neighbouring area's textures can lie on that
+    area's ground, which this map's geometry does not show."""
+    if (on_surface >= SOLID_ON_SURFACE or near_share >= SOLID_NEAR_SHARE or name[:3] != map_id[:3]
+            or not SOLID_MTD.search(mtd.lower())):
+        return False
+    opaque = texture_opaque_share(data_dir, name)
+    return opaque is not None and opaque >= SOLID_TEXTURE_OPAQUE and body_share(mesh) >= SOLID_BODY
+
+
 def blended_shells(map_id, flvers, in_sky):
     """(model, mesh index, mesh, diffuse, fraction on a surface) of the map's blended shells.
 
@@ -149,7 +207,8 @@ def blended_shells(map_id, flvers, in_sky):
     upper half fading into the mist, a sleeve standing 5-50 cm off a trunk. As a decal a shell took
     the lighting of whatever was behind it, or vanished where only sky was. A mesh is a shell when
     fewer than half of its visible vertices (alpha > 0.25, up to SHELL_SAMPLES) lie within
-    SHELL_ON_SURFACE of an opaque triangle of the map (all map pieces at the map origin).
+    SHELL_ON_SURFACE of an opaque triangle of the map (all map pieces at the map origin). Also returns
+    the share within SOLID_NEAR, for solid_shell.
     """
     opaque, blended = [], []
     for model, flver, names, sizes, layers in flvers:
@@ -173,15 +232,17 @@ def blended_shells(map_id, flvers, in_sky):
         if len(visible) == 0:
             continue
         sample = visible[rng.choice(len(visible), min(SHELL_SAMPLES, len(visible)), replace=False)]
-        near = ((hi >= sample.min(0) - SHELL_ON_SURFACE) & (lo <= sample.max(0) + SHELL_ON_SURFACE)).all(1)
+        reach = max(SHELL_ON_SURFACE, SOLID_NEAR)
+        near = ((hi >= sample.min(0) - reach) & (lo <= sample.max(0) + reach)).all(1)
         t = tris[near]
-        on = 0
+        on = close = 0
         for q in sample:
-            if len(t) and point_triangles_distance(q, t[:, 0], t[:, 1], t[:, 2]).min() < SHELL_ON_SURFACE:
-                on += 1
+            d = point_triangles_distance(q, t[:, 0], t[:, 1], t[:, 2]).min() if len(t) else np.inf
+            on += d < SHELL_ON_SURFACE
+            close += d < SOLID_NEAR
         on_surface = on / len(sample)
         if on_surface < 0.5:
-            shells.append((model, i, mesh, name, on_surface))
+            shells.append((model, i, mesh, name, on_surface, close / len(sample)))
     return shells
 
 
@@ -195,6 +256,7 @@ def main():
     args = ap.parse_args()
 
     sys.path.insert(0, args.bbformats)
+    sys.path.insert(0, here)
     from bbformats.flver import read_flver
 
     lines = []
@@ -202,6 +264,12 @@ def main():
     models = 0
     enclosures = 0
     in_sky = set()
+
+    # Every map face set's key (index hash, count) -> its sources: the proxy matches a draw by its
+    # indices alone, so a solid shell whose key another mesh shares would turn that mesh into a cutout
+    # too (m12_01 m1780B1A12 mesh11 lod0 = m12_00 m1501B0A12 mesh22 lod0, a Darkroot edge strip).
+    keys = {}
+    solid = []
 
     def add(map_id, model, i, mesh, name, out=lines):
         if out is lines:
@@ -215,6 +283,11 @@ def main():
         flvers = []
         for path in sorted(glob.glob(os.path.join(map_dir, '*.flver'))):
             flver = read_flver(open(path, 'rb').read())
+            model_name = os.path.basename(path).rsplit('.', 1)[0]
+            for i, mesh in enumerate(flver.meshes):
+                for fs in mesh.face_sets:
+                    idx = np.asarray(fs.indices, dtype='<u2')
+                    keys.setdefault((fnv1a64(idx.tobytes()), len(idx)), set()).add(f'{map_id}/{model_name}/mesh{i}')
             names = [diffuse_name(flver.materials[m.material_index]) for m in flver.meshes]
             sizes = [extent(m) for m in flver.meshes]
             layers = {i for i, n in enumerate(names)
@@ -250,9 +323,26 @@ def main():
                     add(map_id, model, i, mesh, names[i])
 
         # Blended shells: straight-alpha meshes that do not lie on an opaque surface of the map.
-        for model, i, mesh, name, on_surface in blended_shells(map_id, flvers, in_sky) if map_id in SHELL_MAPS else []:
-            print(f'shell {map_id}/{model}/mesh{i} {name}: {on_surface:.0%} on a surface')
-            add(map_id, model, i, mesh, name, shell_lines)
+        for model, i, mesh, name, on_surface, near_share in blended_shells(map_id, flvers, in_sky):
+            if map_id in SHELL_MAPS:
+                print(f'shell {map_id}/{model}/mesh{i} {name}: {on_surface:.0%} on a surface')
+                add(map_id, model, i, mesh, name, shell_lines)
+                continue
+            mtd = next(os.path.basename(f.materials[f.meshes[i].material_index].mtd)
+                       for m, f, *_ in flvers if m == model)
+            if solid_shell(map_id, mtd, name, mesh, on_surface, near_share, args.data):
+                print(f'solid shell {map_id}/{model}/mesh{i} {name} ({mtd}): {on_surface:.0%} on a surface, '
+                      f'{near_share:.0%} within {SOLID_NEAR:g} m')
+                add(map_id, model, i, mesh, name, solid)
+
+    for line in solid:
+        key, count, source = line.split()[:3]
+        owner = source.rsplit('/', 1)[0]
+        others = keys.get((int(key, 16), int(count)), set()) - {owner}
+        if others:
+            print(f'solid shell {source} dropped: its indices are also {", ".join(sorted(others))}')
+        else:
+            shell_lines.append(line)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8', newline='\n') as f:
