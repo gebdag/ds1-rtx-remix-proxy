@@ -12,6 +12,10 @@
 // loads (also done in that detour). It stays hidden and confined while the F4 menu is open; ImGui
 // draws its own cursor there.
 //
+// The mod confines the cursor to the game's client area, which the system clamps to the screen. A
+// window as large as the screen reaches under the taskbar, so the hidden cursor could slide onto
+// the taskbar and the camera spun. The pump narrows the mod's clip to the monitor's work area.
+//
 // F4 menu: the mod reads all of its input (camera mouse motion, bound keys and buttons) through
 // its own import of GetRawInputData while messages are retrieved, before any window procedure
 // runs, so the menu's WndProc block does not reach it. Its import is redirected so that presses
@@ -84,7 +88,34 @@ namespace comp::game::input_customizer
 		return target >= base && target < base + nt->OptionalHeader.SizeOfImage;
 	}
 
-	static void CALLBACK clip_pump(HWND, UINT, UINT_PTR, DWORD)
+	// Keeps the mod's clip off the taskbar and anything else outside the monitor's work area.
+	// user32!ClipCursor is only a jump to win32u!NtUserClipCursor; calling that directly sets the
+	// clip without going through the mod's detour, which would replace the rect with its own.
+	static void keep_clip_in_work_area(HWND window)
+	{
+		using clip_cursor_t = BOOL(WINAPI*)(const RECT*);
+		static const auto real_clip_cursor = reinterpret_cast<clip_cursor_t>(
+			GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserClipCursor"));
+		if (!real_clip_cursor || GetForegroundWindow() != window)
+			return;
+
+		RECT clip;
+		const RECT screen = { GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+			GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+			GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+		if (!GetClipCursor(&clip) || EqualRect(&clip, &screen))
+			return; // the mod has the cursor released
+
+		MONITORINFO monitor = { sizeof(MONITORINFO) };
+		if (!GetMonitorInfoA(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor))
+			return;
+
+		RECT inside;
+		if (IntersectRect(&inside, &clip, &monitor.rcWork) && !EqualRect(&inside, &clip))
+			real_clip_cursor(&inside);
+	}
+
+	static void CALLBACK clip_pump(HWND window, UINT, UINT_PTR, DWORD)
 	{
 		if (!mod_hooks_clip_cursor())
 			return;
@@ -95,6 +126,7 @@ namespace comp::game::input_customizer
 			shared::common::log("InputCustomizer", "The mod's ClipCursor hook is in; cursor pump live.");
 		}
 		ClipCursor(nullptr);
+		keep_clip_in_work_area(window);
 	}
 
 	void init()
