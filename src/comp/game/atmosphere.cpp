@@ -162,6 +162,10 @@ namespace comp::game::atmosphere
 		constexpr float kSelfLitRange = 16.0f;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
 
+		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
+		constexpr DWORD kViewFadeMarker = 0xD6000000;
+		DWORD g_view_fade_tag_set = ~0u; // the stage 2 constant as last set; ~0 = unknown (set it)
+
 		// Ambient: the probe-lit set most of the frame uses (dominant_set), and the cube sent.
 		struct ambient_source
 		{
@@ -619,6 +623,23 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	void tag_view_fade(IDirect3DDevice9* dev, bool fade, const float* ps_const)
+	{
+		DWORD tag = 0;
+		if (fade && ps_const)
+		{
+			const float* c176 = &ps_const[176 * 4];
+			const long offset = std::clamp(std::lround(c176[0] * 255.0f), 0L, 255L);
+			const long scale = std::clamp(std::lround(c176[1] * 16.0f), 0L, 255L);
+			tag = kViewFadeMarker | static_cast<DWORD>(offset) << 8 | static_cast<DWORD>(scale);
+		}
+		if (tag != g_view_fade_tag_set)
+		{
+			dev->SetTextureStageState(2, D3DTSS_CONSTANT, tag);
+			g_view_fade_tag_set = tag;
+		}
+	}
+
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count)
 	{
 		// A self-lit set is a glow, not the area's ambient light (it emits in Remix instead).
@@ -903,6 +924,7 @@ namespace comp::game::atmosphere
 		// Re-assert the draw tags once per frame (a device reset clears texture stage states).
 		g_tag_set = ~0u;
 		g_self_lit_tag_set = ~0u;
+		g_view_fade_tag_set = ~0u;
 		// The adaptation constants and c135.y, when they change (c54.x moves with the frame time).
 		if (const float divisor = g_haze_ready.exposure[1]; g_have_grade && g_have_haze && g_c54[3] > 0.0f && divisor > 0.0f &&
 			(std::memcmp(g_c54, g_c54_sent, sizeof(g_c54)) != 0 || divisor != g_divisor_sent))

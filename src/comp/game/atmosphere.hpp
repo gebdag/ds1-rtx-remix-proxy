@@ -59,6 +59,14 @@ namespace comp::game::atmosphere
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
 		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false);
 
+	// View fade: FRPG_NtoA multiplies its alpha by sat((|N.V| - c176.x) * c176.y), so its foliage cards
+	// (M_Tree[D]_Edge, alpha tested) vanish edge-on and its additive shells (Bed of Chaos's seal) glow
+	// only where they face the camera. Remix has no view-dependent alpha, so the draw is tagged with
+	// c176 in stage 2's D3DTSS_CONSTANT (0xD600oocc: oo = c176.x * 255, cc = c176.y * 16) and the
+	// runtime fades its opacity per pixel (Surface::ds1ViewFade). `fade` is false for draws that do not
+	// read c176 (ffp_state PS_VIEW_FADE); every draw goes through here, so none inherits a tag.
+	void tag_view_fade(IDirect3DDevice9* dev, bool fade, const float* ps_const);
+
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);
 

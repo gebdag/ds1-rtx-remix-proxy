@@ -1233,6 +1233,7 @@ namespace comp
 		// UP draws (sprites, UI, post passes) carry no haze set, self-lit ambient or lightmap of their own.
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		comp::game::atmosphere::tag_self_lit(m_pIDirect3DDevice9, false, nullptr);
+		comp::game::atmosphere::tag_view_fade(m_pIDirect3DDevice9, false, nullptr);
 		comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 		if (auto& ffp = shared::common::ffp_state::get(); ffp.cur_ps_light_flags() & ffp.PS_GRADE)
 			comp::game::atmosphere::observe_grade(ffp.ps_const_data(), m_pIDirect3DDevice9);
@@ -1290,6 +1291,7 @@ namespace comp
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		comp::game::atmosphere::tag_self_lit(m_pIDirect3DDevice9, false, nullptr);
+		comp::game::atmosphere::tag_view_fade(m_pIDirect3DDevice9, false, nullptr);
 		comp::game::lightmap_sun::untag(m_pIDirect3DDevice9);
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{

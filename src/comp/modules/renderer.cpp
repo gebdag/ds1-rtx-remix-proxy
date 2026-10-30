@@ -231,6 +231,7 @@ namespace comp
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT));
+		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::lightmap_sun::untag(dev);
 
 		auto hr = S_OK;
@@ -436,6 +437,7 @@ namespace comp
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT));
+		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		// ... and lightmapped draws carry their lightmap's level, which the runtime scales the sun by.
 		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 
