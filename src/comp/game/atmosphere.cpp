@@ -541,6 +541,42 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	namespace
+	{
+		// An additive (SrcAlpha + One) lit draw: the game adds its texture times its region's light
+		// (New Londo's ghosts: c100 0.3 * hemisphere (0.16..2.0)), about 0.3 in gamma. Remix gives an
+		// additive surface a fixed emission (rtx.emissiveBlendOverrideEmissiveIntensity 2), so the
+		// ghosts blazed and gave themselves away from afar. Tagged with that light, averaged over
+		// the directions (c100 * (c86 * the probe's mean face + the hemisphere's mean)), the runtime
+		// emits texture * light instead.
+		bool additive_lit_colour(IDirect3DDevice9* dev, const float* ps_const, IDirect3DBaseTexture9* probe, float value[3])
+		{
+			DWORD blend = FALSE, dst = 0;
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+			dev->GetRenderState(D3DRS_DESTBLEND, &dst);
+			if (!blend || dst != D3DBLEND_ONE)
+				return false;
+			std::array<std::array<float, 3>, 6> faces {};
+			const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
+			const float* scale = &ps_const[86 * 4];
+			const float* upper = &ps_const[98 * 4];
+			const float* lower = &ps_const[99 * 4];
+			const float* diffuse = &ps_const[100 * 4];
+			for (int c = 0; c < 3; c++)
+			{
+				float probe_mean = 0.0f;
+				if (probed)
+				{
+					for (const auto& f : faces)
+						probe_mean += f[c];
+					probe_mean /= 6.0f;
+				}
+				value[c] = std::max(diffuse[c] * (probe_mean * scale[c] + 0.5f * (upper[c] + lower[c])), 0.0f);
+			}
+			return true;
+		}
+	}
+
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava)
 	{
 		DWORD tag = 0;
@@ -549,6 +585,13 @@ namespace comp::game::atmosphere
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
 				tag |= static_cast<DWORD>(std::lround(std::min(value[c] / kSelfLitRange, 1.0f) * 255.0f)) << (16 - 8 * c);
+		}
+		else if (ambient && ps_const && additive_lit_colour(dev, ps_const, probe, value))
+		{
+			// At least 1 per channel: the runtime tells a tagged additive surface by a non-zero value.
+			tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+				tag |= static_cast<DWORD>(std::clamp(std::lround(value[c] / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 		}
 		if (tag != g_self_lit_tag_set)
 		{
