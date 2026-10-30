@@ -767,6 +767,12 @@ namespace comp::game::atmosphere
 		else if (key == "FFPSteps.OverlaySaveLazy") steps.overlay_save_lazy = b;
 		else if (key == "FFPSteps.SkinUploadUsedBones") steps.skin_upload_used_bones = b;
 		else if (key == "FFPSteps.PoolDepthSurfaces") steps.pool_depth_surfaces = b;
+		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
+		// (appends the drawn light list to rtx_comp\light_rows.txt).
+		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
+		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
+		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
+		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }
 		else if (key == "Lights.GameFalloffFX" || key == "Lights.GameFalloffCharacter")
 		{
 			auto* gl = game_lights::get();

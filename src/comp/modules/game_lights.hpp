@@ -89,11 +89,17 @@ namespace comp
 
 		// F4 > Lights > Game falloff for one kind (also proxy.Lights.GameFalloff<Kind> live).
 		void set_kind_game_falloff(light_kind k, bool on) { kind_game_falloff_[static_cast<int>(k)] = on; }
+		// Appends the light list as drawn (kind, state, position, the game's colour and range, radiance) to
+		// rtx_comp\light_rows.txt (live option proxy.Lights.Dump).
+		void dump_rows() const;
 		// A lightmapped map draw whose shader reads the game's point lights (c112-c119): the lights the game
 		// bound to it, camera-relative positions in c112-c115 (colour c116-c119). A map light the game binds to
 		// lightmapped geometry is a dynamic light there and goes to Remix at the game's strength; one it never
 		// binds is baked into the lightmap, and Remix's light stands in for that glow (sync_lights).
 		void observe_lightmapped_draw(const float* ps_const);
+		// Live diagnostics (atmosphere.cpp set_proxy_option).
+		void set_emitter_radius(float r) { emitter_radius_ = r; }
+		void set_kind_enabled(int k, bool on) { if (k >= 0 && k < static_cast<int>(light_kind::count)) kind_enabled_[k] = on; }
 
 	private:
 		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).

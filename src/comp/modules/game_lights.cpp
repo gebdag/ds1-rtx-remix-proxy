@@ -388,6 +388,19 @@ namespace comp
 			{ return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) + (p[2] - z) * (p[2] - z) < kSame * kSame; });
 	}
 
+	void game_lights::dump_rows() const
+	{
+		FILE* f = nullptr;
+		if (fopen_s(&f, "rtx_comp\\light_rows.txt", "a") || !f)
+			return;
+		fprintf(f, "=== rows %zu\n", rows_.size());
+		for (const auto& r : rows_)
+			fprintf(f, "kind %d state %d slot %d %s | pos %.2f %.2f %.2f dist %.1f | colour %.3f %.3f %.3f range %.2f-%.2f | radiance %.3f %.3f %.3f %s\n",
+				static_cast<int>(r.kind), static_cast<int>(r.state), r.slot, r.name.c_str(), r.pos[0], r.pos[1], r.pos[2], r.distance,
+				r.colour[0], r.colour[1], r.colour[2], r.range_begin, r.range_end, r.radiance[0], r.radiance[1], r.radiance[2], r.origin.c_str());
+		fclose(f);
+	}
+
 	game_lights::light_row game_lights::make_row(const game::point_lights::light& l, const float* player) const
 	{
 		light_row row;
