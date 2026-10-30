@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstring>
 #include <format>
+#include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace comp::game::swamp
@@ -28,6 +30,9 @@ namespace comp::game::swamp
 			float fade = 0.0f;           // PS c163.z
 			float layer_scale[3] = {};   // height pass VS c143.xyz
 			float layer_weight[3] = {};  // height pass PS c171.xyz
+			float height_scale = 0.0f;   // PS c169.x, the height's weight on the slope (g_SnowHeight)
+			float height_in_alpha = 0.0f; // 1: the height texture is not the colour texture (surface_texture)
+			float metres_per_uv = 0.0f;  // the surface mesh's size per texture coordinate
 			float scene_diffuse = 0.0f;  // c100.x of most of the frame's map geometry
 
 			bool operator==(const surface_values& o) const { return std::memcmp(this, &o, sizeof(surface_values)) == 0; }
@@ -51,13 +56,57 @@ namespace comp::game::swamp
 		bool g_have_layers = false;
 		IDirect3DSurface9* g_height_target = nullptr; // compared, never dereferenced
 		std::vector<ring> g_rings;
-		// Map materials' c100.x, weighted by primitives (a few distinct values per frame).
+		// Map materials' c100.x, weighted by primitives (a few distinct values per frame), over the whole
+		// frame and per lightmap texture.
 		std::vector<std::pair<float, unsigned int>> g_map_diffuse;
+		std::unordered_map<IDirect3DBaseTexture9*, std::vector<std::pair<float, unsigned int>>> g_lightmap_diffuse;
+		// The largest surface's lightmap texture (lightmapped FRPG_Snow_Lit*), else null.
+		IDirect3DBaseTexture9* g_current_lightmap = nullptr;
+
+		void tally(std::vector<std::pair<float, unsigned int>>& list, float value, unsigned int prims)
+		{
+			for (auto& [v, n] : list)
+				if (v == value)
+				{
+					n += prims;
+					return;
+				}
+			list.emplace_back(value, prims);
+		}
+
+		float dominant(const std::vector<std::pair<float, unsigned int>>& list)
+		{
+			float best_value = 0.0f;
+			unsigned int best = 0;
+			for (const auto& [value, prims] : list)
+				if (prims > best)
+				{
+					best = prims;
+					best_value = value;
+				}
+			return best_value;
+		}
+		// Each surface colour texture's height texture, from the height passes (pointers compared only).
+		std::unordered_map<IDirect3DBaseTexture9*, IDirect3DBaseTexture9*> g_height_of;
+		// Colour + height textures baked into one (surface_texture), per pair.
+		struct baked
+		{
+			UINT colour_w = 0, height_w = 0;
+			IDirect3DTexture9* texture = nullptr;
+		};
+		std::map<std::pair<IDirect3DBaseTexture9*, IDirect3DBaseTexture9*>, baked> g_baked;
+		// Metres per texture coordinate of each surface mesh range, measured once.
+		std::unordered_map<uint64_t, float> g_mesh_scale;
 
 		// The last complete frame, and what Remix has.
 		surface_values g_ready;
 		bool g_have_ready = false;
 		std::vector<ring> g_rings_ready;
+		// The height layers' scroll (height pass VS c246.xy, c247.xy, c248.xy, wrapped to [0, 1)): it moves
+		// every frame on a flowing surface, so it goes out on its own, like the rings.
+		float g_offsets[6] = {};
+		float g_offsets_ready[6] = {};
+		std::string g_offsets_sent;
 		surface_values g_sent;
 		bool g_sent_once = false;
 		std::string g_rings_sent;
@@ -68,17 +117,16 @@ namespace comp::game::swamp
 			if (g_current_prims > 0 && g_have_layers)
 			{
 				g_ready = g_current;
-				unsigned int best = 0;
-				for (const auto& [value, prims] : g_map_diffuse)
-					if (prims > best)
-					{
-						best = prims;
-						g_ready.scene_diffuse = value;
-					}
+				// The map geometry around a lightmapped surface shares its lightmap texture (Gaping Dragon's
+				// slime and its floor, c100 0.6, where the frame's walls are 0.39); else the frame's.
+				const auto lit = g_current_lightmap ? g_lightmap_diffuse.find(g_current_lightmap) : g_lightmap_diffuse.end();
+				g_ready.scene_diffuse = lit != g_lightmap_diffuse.end() ? dominant(lit->second) : dominant(g_map_diffuse);
 				g_have_ready = true;
 			}
 			g_map_diffuse.clear();
+			g_lightmap_diffuse.clear();
 			g_rings_ready = g_rings;
+			std::memcpy(g_offsets_ready, g_offsets, sizeof(g_offsets));
 			g_current_prims = 0;
 			g_have_layers = false;
 			g_height_target = nullptr;
@@ -125,11 +173,203 @@ namespace comp::game::swamp
 			ok &= set("rtx.ds1Swamp.layerWeight", vec3(v.layer_weight));
 			ok &= set("rtx.ds1Swamp.spanPerDepth", std::format("{}", v.span_per_depth));
 			ok &= set("rtx.ds1Swamp.fadeDistance", std::format("{}", v.fade));
+			ok &= set("rtx.ds1Swamp.heightScale", std::format("{}", v.height_scale));
+			ok &= set("rtx.ds1Swamp.heightInAlpha", v.height_in_alpha != 0.0f ? "True" : "False");
+			if (v.metres_per_uv > 0.0f)
+				ok &= set("rtx.ds1Swamp.meshMetresPerUv", std::format("{}", v.metres_per_uv));
 			if (v.scene_diffuse > 0.0f)
 				ok &= set("rtx.ds1Swamp.sceneDiffuseScale", std::format("{}", v.scene_diffuse));
 			shared::common::log("Swamp", ok
-				? std::format("game swamp sent: deep {}, crust {}, layers {} x {}, scene c100 {}", vec3(v.deep), vec3(v.crust), vec3(v.layer_scale), vec3(v.layer_weight), v.scene_diffuse)
+				? std::format("game swamp sent: deep {}, crust {}, layers {} x {}, scene c100 {}, height in alpha {}, {} m per uv",
+					vec3(v.deep), vec3(v.crust), vec3(v.layer_scale), vec3(v.layer_weight), v.scene_diffuse, v.height_in_alpha, v.metres_per_uv)
 				: std::string("Remix refused the swamp values (SetConfigVariable)"));
+		}
+
+		IDirect3DBaseTexture9* bound_texture(IDirect3DDevice9* dev, DWORD stage)
+		{
+			IDirect3DBaseTexture9* t = nullptr;
+			if (!dev || FAILED(dev->GetTexture(stage, &t)) || !t)
+				return nullptr;
+			t->Release();
+			return t;
+		}
+
+		// A texture's top level as RGBA8 (r, g, b, a per texel): DXT1/3/5 and A8R8G8B8 / X8R8G8B8.
+		bool read_rgba(IDirect3DBaseTexture9* texture, std::vector<uint8_t>& out, UINT& width, UINT& height)
+		{
+			if (!texture || texture->GetType() != D3DRTYPE_TEXTURE)
+				return false;
+			auto* t2d = static_cast<IDirect3DTexture9*>(texture);
+			D3DSURFACE_DESC desc {};
+			if (FAILED(t2d->GetLevelDesc(0, &desc)))
+				return false;
+			const bool dxt = desc.Format == D3DFMT_DXT1 || desc.Format == D3DFMT_DXT3 || desc.Format == D3DFMT_DXT5;
+			if (!dxt && desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8)
+				return false;
+			D3DLOCKED_RECT lr {};
+			if (FAILED(t2d->LockRect(0, &lr, nullptr, D3DLOCK_READONLY)) || !lr.pBits)
+				return false;
+			width = desc.Width;
+			height = desc.Height;
+			out.assign(static_cast<size_t>(width) * height * 4, 0);
+			const auto* p = static_cast<const uint8_t*>(lr.pBits);
+			if (!dxt)
+			{
+				for (UINT y = 0; y < height; y++)
+					for (UINT x = 0; x < width; x++)
+					{
+						const uint8_t* t = p + static_cast<size_t>(y) * lr.Pitch + x * 4;
+						uint8_t* o = &out[(static_cast<size_t>(y) * width + x) * 4];
+						o[0] = t[2]; o[1] = t[1]; o[2] = t[0];
+						o[3] = desc.Format == D3DFMT_A8R8G8B8 ? t[3] : 255;
+					}
+			}
+			else
+			{
+				const size_t block = desc.Format == D3DFMT_DXT1 ? 8 : 16;
+				const size_t colour_at = desc.Format == D3DFMT_DXT1 ? 0 : 8;
+				const UINT bw = std::max(1u, (width + 3) / 4), bh = std::max(1u, (height + 3) / 4);
+				for (UINT by = 0; by < bh; by++)
+					for (UINT bx = 0; bx < bw; bx++)
+					{
+						const uint8_t* b = p + static_cast<size_t>(by) * lr.Pitch + bx * block;
+						const uint8_t* cb = b + colour_at;
+						const uint16_t c0 = static_cast<uint16_t>(cb[0] | cb[1] << 8), c1 = static_cast<uint16_t>(cb[2] | cb[3] << 8);
+						uint8_t pal[4][4];
+						auto expand = [](uint16_t c, uint8_t* o)
+						{
+							o[0] = static_cast<uint8_t>(((c >> 11) & 31) * 255 / 31);
+							o[1] = static_cast<uint8_t>(((c >> 5) & 63) * 255 / 63);
+							o[2] = static_cast<uint8_t>((c & 31) * 255 / 31);
+							o[3] = 255;
+						};
+						expand(c0, pal[0]);
+						expand(c1, pal[1]);
+						const bool four = c0 > c1 || desc.Format != D3DFMT_DXT1;
+						for (int c = 0; c < 3; c++)
+						{
+							pal[2][c] = static_cast<uint8_t>(four ? (2 * pal[0][c] + pal[1][c]) / 3 : (pal[0][c] + pal[1][c]) / 2);
+							pal[3][c] = static_cast<uint8_t>(four ? (pal[0][c] + 2 * pal[1][c]) / 3 : 0);
+						}
+						pal[2][3] = 255;
+						pal[3][3] = four ? 255 : 0;
+						const uint32_t bits = cb[4] | cb[5] << 8 | cb[6] << 16 | static_cast<uint32_t>(cb[7]) << 24;
+						uint8_t alpha_pal[8] = {};
+						uint64_t alpha_bits = 0;
+						if (desc.Format == D3DFMT_DXT5)
+						{
+							alpha_pal[0] = b[0];
+							alpha_pal[1] = b[1];
+							for (int i = 2; i < 8; i++)
+								alpha_pal[i] = static_cast<uint8_t>(b[0] > b[1] ? ((8 - i) * b[0] + (i - 1) * b[1]) / 7
+									: i < 6 ? ((6 - i) * b[0] + (i - 1) * b[1]) / 5 : (i == 6 ? 0 : 255));
+							for (int i = 0; i < 6; i++)
+								alpha_bits |= static_cast<uint64_t>(b[2 + i]) << (8 * i);
+						}
+						for (int ty = 0; ty < 4; ty++)
+							for (int tx = 0; tx < 4; tx++)
+							{
+								const UINT x = bx * 4 + tx, y = by * 4 + ty;
+								if (x >= width || y >= height)
+									continue;
+								const int i = ty * 4 + tx;
+								uint8_t* o = &out[(static_cast<size_t>(y) * width + x) * 4];
+								const uint8_t* c = pal[(bits >> (2 * i)) & 3];
+								o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; o[3] = c[3];
+								if (desc.Format == D3DFMT_DXT5)
+									o[3] = alpha_pal[(alpha_bits >> (3 * i)) & 7];
+								else if (desc.Format == D3DFMT_DXT3)
+									o[3] = static_cast<uint8_t>(((b[i / 2] >> (4 * (i & 1))) & 15) * 17);
+							}
+					}
+			}
+			t2d->UnlockRect(0);
+			return true;
+		}
+
+		// Bilinear, wrapping (the surface samplers wrap), of an RGBA8 image at uv.
+		void sample_rgba(const std::vector<uint8_t>& img, UINT w, UINT h, float u, float v, float out[4])
+		{
+			const float fx = u * w - 0.5f, fy = v * h - 0.5f;
+			const int x0 = static_cast<int>(std::floor(fx)), y0 = static_cast<int>(std::floor(fy));
+			const float ax = fx - x0, ay = fy - y0;
+			auto at = [&](int x, int y, int c)
+			{
+				x = ((x % static_cast<int>(w)) + static_cast<int>(w)) % static_cast<int>(w);
+				y = ((y % static_cast<int>(h)) + static_cast<int>(h)) % static_cast<int>(h);
+				return img[(static_cast<size_t>(y) * w + x) * 4 + c] / 255.0f;
+			};
+			for (int c = 0; c < 4; c++)
+				out[c] = (at(x0, y0, c) * (1 - ax) + at(x0 + 1, y0, c) * ax) * (1 - ay) +
+					(at(x0, y0 + 1, c) * (1 - ax) + at(x0 + 1, y0 + 1, c) * ax) * ay;
+		}
+
+		// The colour texture with the height texture's (r + g + b) / 3 in its alpha, at the larger size of
+		// the two, every mip box-filtered from the one above. Both tile, so each read at its own scale of
+		// the same uv sees what the game's separate textures give there.
+		IDirect3DTexture9* bake(IDirect3DDevice9* dev, IDirect3DBaseTexture9* colour, IDirect3DBaseTexture9* height)
+		{
+			std::vector<uint8_t> a, b;
+			UINT aw = 0, ah = 0, bw = 0, bh = 0;
+			if (!read_rgba(colour, a, aw, ah) || !read_rgba(height, b, bw, bh))
+				return nullptr;
+			const UINT w = std::max(aw, bw), h = std::max(ah, bh);
+			IDirect3DTexture9* out = nullptr;
+			if (FAILED(dev->CreateTexture(w, h, 0, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &out, nullptr)) || !out)
+				return nullptr;
+			std::vector<uint8_t> level(static_cast<size_t>(w) * h * 4);
+			for (UINT y = 0; y < h; y++)
+				for (UINT x = 0; x < w; x++)
+				{
+					float ca[4], cb[4];
+					const float u = (x + 0.5f) / w, v = (y + 0.5f) / h;
+					sample_rgba(a, aw, ah, u, v, ca);
+					sample_rgba(b, bw, bh, u, v, cb);
+					uint8_t* o = &level[(static_cast<size_t>(y) * w + x) * 4];
+					for (int c = 0; c < 3; c++)
+						o[c] = static_cast<uint8_t>(std::lround(std::clamp(ca[c], 0.0f, 1.0f) * 255.0f));
+					o[3] = static_cast<uint8_t>(std::lround(std::clamp((cb[0] + cb[1] + cb[2]) / 3.0f, 0.0f, 1.0f) * 255.0f));
+				}
+			UINT lw = w, lh = h;
+			for (DWORD l = 0; l < out->GetLevelCount(); l++)
+			{
+				D3DLOCKED_RECT lr {};
+				if (SUCCEEDED(out->LockRect(l, &lr, nullptr, 0)) && lr.pBits)
+				{
+					for (UINT y = 0; y < lh; y++)
+						for (UINT x = 0; x < lw; x++)
+						{
+							const uint8_t* s = &level[(static_cast<size_t>(y) * lw + x) * 4];
+							uint8_t* d = static_cast<uint8_t*>(lr.pBits) + static_cast<size_t>(y) * lr.Pitch + x * 4;
+							d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3];
+						}
+					out->UnlockRect(l);
+				}
+				const UINT nw = std::max(1u, lw / 2), nh = std::max(1u, lh / 2);
+				std::vector<uint8_t> next(static_cast<size_t>(nw) * nh * 4);
+				for (UINT y = 0; y < nh; y++)
+					for (UINT x = 0; x < nw; x++)
+						for (int c = 0; c < 4; c++)
+						{
+							unsigned sum = 0;
+							for (UINT dy = 0; dy < 2; dy++)
+								for (UINT dx = 0; dx < 2; dx++)
+									sum += level[(static_cast<size_t>(std::min(lh - 1, y * 2 + dy)) * lw + std::min(lw - 1, x * 2 + dx)) * 4 + c];
+							next[(static_cast<size_t>(y) * nw + x) * 4 + c] = static_cast<uint8_t>(sum / 4);
+						}
+				level.swap(next);
+				lw = nw;
+				lh = nh;
+			}
+			shared::common::log("Swamp", std::format("height texture baked into the colour's alpha: {:#x} + {:#x} -> {}x{}",
+				reinterpret_cast<uintptr_t>(colour), reinterpret_cast<uintptr_t>(height), w, h));
+			return out;
+		}
+
+		UINT top_width(IDirect3DBaseTexture9* t)
+		{
+			D3DSURFACE_DESC desc {};
+			return t && t->GetType() == D3DRTYPE_TEXTURE && SUCCEEDED(static_cast<IDirect3DTexture9*>(t)->GetLevelDesc(0, &desc)) ? desc.Width : 0;
 		}
 
 		std::string rings_text(const std::vector<ring>& rings)
@@ -167,6 +407,14 @@ namespace comp::game::swamp
 			v.uv[2] = c(ps, 172, 0);
 			v.span_per_depth = c(vs, 142, 3) != 0.0f ? c(vs, 142, 0) * 8.0f / c(vs, 142, 3) : 0.0f;
 			v.fade = c(ps, 163, 2);
+			v.height_scale = c(ps, 169, 0);
+			// Blighttown's height pass reads the colour texture itself; Gaping Dragon's slime reads its own
+			// noise texture (m10_water), which surface_texture bakes into the colour texture's alpha.
+			IDirect3DBaseTexture9* colour = bound_texture(dev, 0);
+			const auto it = colour ? g_height_of.find(colour) : g_height_of.end();
+			v.height_in_alpha = it != g_height_of.end() && it->second && it->second != colour ? 1.0f : 0.0f;
+			v.metres_per_uv = 0.0f;
+			g_current_lightmap = (shared::common::ffp_state::get().cur_ps_sampler_mask() & (1u << 6)) ? bound_texture(dev, 6) : nullptr;
 			g_current_prims = prim_count;
 		}
 		else if (kind == pass::HeightMap)
@@ -176,6 +424,15 @@ namespace comp::game::swamp
 				g_current.layer_scale[k] = c(vs, 143, k);
 				g_current.layer_weight[k] = c(ps, 171, k);
 			}
+			// Each layer at mesh uv * c143.i + c246 / c247 / c248.xy: the scroll, wrapped (the texture repeats).
+			for (int k = 0; k < 3; k++)
+			{
+				g_offsets[k] = c(vs, 246 + k, 0) - std::floor(c(vs, 246 + k, 0));
+				g_offsets[3 + k] = c(vs, 246 + k, 1) - std::floor(c(vs, 246 + k, 1));
+			}
+			// The height texture (s2) its surface's colour texture (still on s0) goes with.
+			if (IDirect3DBaseTexture9* colour = bound_texture(dev, 0))
+				g_height_of[colour] = bound_texture(dev, 2);
 			g_have_layers = true;
 			g_height_target = render_target(dev);
 		}
@@ -209,19 +466,91 @@ namespace comp::game::swamp
 		}
 	}
 
-	void observe_map_diffuse(const float* ps_const, unsigned int frame, unsigned int prim_count)
+	void observe_surface_mesh(IDirect3DVertexBuffer9* vb, UINT stride, INT base_vertex, UINT min_vertex, UINT num_vertices,
+		int pos_offset, int uv_offset, int uv_type, unsigned int frame, unsigned int prim_count)
+	{
+		begin(frame);
+		if (!vb || stride == 0 || pos_offset < 0 || uv_offset < 0 || base_vertex < 0 || num_vertices < 2 || prim_count != g_current_prims)
+			return;
+		const uint64_t key = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vb)) ^ (static_cast<uint64_t>(base_vertex + min_vertex) << 32) ^ num_vertices;
+		auto [it, fresh] = g_mesh_scale.try_emplace(key, 0.0f);
+		if (fresh)
+		{
+			// The median of |dP| / |dUV| over neighbouring vertices: the mesh's metres per texture
+			// coordinate (Blighttown's swamp 5, its UV mapping uniform across the surface).
+			const UINT count = std::min(num_vertices, 512u);
+			unsigned char* data = nullptr;
+			if (SUCCEEDED(vb->Lock((base_vertex + min_vertex) * stride, count * stride, reinterpret_cast<void**>(&data), D3DLOCK_READONLY)) && data)
+			{
+				auto uv_of = [&](const unsigned char* v, float out[2])
+				{
+					if (uv_type == D3DDECLTYPE_FLOAT2 || uv_type == D3DDECLTYPE_FLOAT4)
+						std::memcpy(out, v + uv_offset, 2 * sizeof(float));
+					else
+					{
+						const auto* s = reinterpret_cast<const int16_t*>(v + uv_offset);
+						out[0] = s[0] / 1024.0f;
+						out[1] = s[1] / 1024.0f;
+					}
+				};
+				std::vector<float> ratios;
+				for (UINT i = 1; i < count; i++)
+				{
+					const unsigned char* a = data + (i - 1) * stride;
+					const unsigned char* b = data + i * stride;
+					float pa[3], pb[3], ua[2], ub[2];
+					std::memcpy(pa, a + pos_offset, sizeof(pa));
+					std::memcpy(pb, b + pos_offset, sizeof(pb));
+					uv_of(a, ua);
+					uv_of(b, ub);
+					const float dp = std::sqrt((pa[0] - pb[0]) * (pa[0] - pb[0]) + (pa[1] - pb[1]) * (pa[1] - pb[1]) + (pa[2] - pb[2]) * (pa[2] - pb[2]));
+					const float du = std::hypot(ua[0] - ub[0], ua[1] - ub[1]);
+					if (du > 1e-4f && dp > 1e-3f && std::isfinite(dp / du))
+						ratios.push_back(dp / du);
+				}
+				vb->Unlock();
+				if (!ratios.empty())
+				{
+					std::nth_element(ratios.begin(), ratios.begin() + ratios.size() / 2, ratios.end());
+					it->second = ratios[ratios.size() / 2];
+				}
+			}
+		}
+		g_current.metres_per_uv = it->second;
+	}
+
+	IDirect3DBaseTexture9* surface_texture(IDirect3DDevice9* dev, IDirect3DBaseTexture9* colour)
+	{
+		const auto it = colour ? g_height_of.find(colour) : g_height_of.end();
+		if (!dev || it == g_height_of.end() || !it->second || it->second == colour)
+			return nullptr;
+		auto& b = g_baked[{ colour, it->second }];
+		// The game frees and re-creates textures at the same addresses across loads: a pair whose sizes
+		// changed is baked again.
+		const UINT cw = top_width(colour), hw = top_width(it->second);
+		if (b.texture && (b.colour_w != cw || b.height_w != hw))
+		{
+			b.texture->Release();
+			b.texture = nullptr;
+		}
+		if (!b.texture && (b.colour_w != cw || b.height_w != hw || !b.colour_w))
+		{
+			b.colour_w = cw;
+			b.height_w = hw;
+			b.texture = bake(dev, colour, it->second);
+		}
+		return b.texture;
+	}
+
+	void observe_map_diffuse(const float* ps_const, unsigned int frame, unsigned int prim_count, IDirect3DBaseTexture9* lightmap)
 	{
 		if (!ps_const)
 			return;
 		begin(frame);
 		const float value = ps_const[100 * 4];
-		for (auto& [v, prims] : g_map_diffuse)
-			if (v == value)
-			{
-				prims += prim_count;
-				return;
-			}
-		g_map_diffuse.emplace_back(value, prim_count);
+		tally(g_map_diffuse, value, prim_count);
+		if (lightmap)
+			tally(g_lightmap_diffuse[lightmap], value, prim_count);
 	}
 
 	void frame_update(unsigned int frame)
@@ -237,6 +566,13 @@ namespace comp::game::swamp
 			send(g_ready);
 			g_sent = g_ready;
 			g_sent_once = true;
+		}
+		if (std::string text = std::format("{}, {}, {}|{}, {}, {}", g_offsets_ready[0], g_offsets_ready[1], g_offsets_ready[2],
+			g_offsets_ready[3], g_offsets_ready[4], g_offsets_ready[5]); g_have_ready && text != g_offsets_sent)
+		{
+			set("rtx.ds1Swamp.layerOffsetU", text.substr(0, text.find('|')));
+			set("rtx.ds1Swamp.layerOffsetV", text.substr(text.find('|') + 1));
+			g_offsets_sent = std::move(text);
 		}
 		if (std::string text = rings_text(g_rings_ready); text != g_rings_sent)
 		{

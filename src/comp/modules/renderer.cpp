@@ -447,11 +447,15 @@ namespace comp
 
 		// Map materials' c100 (the swamp's colours keep their ratio to them).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && swamp_pass == game::swamp::pass::None)
-			game::swamp::observe_map_diffuse(ffp.ps_const_data(), ffp.frame_count(), primCount);
+			game::swamp::observe_map_diffuse(ffp.ps_const_data(), ffp.frame_count(), primCount,
+				(ffp.cur_ps_sampler_mask() & (1u << 6)) ? ffp.cur_texture(6) : nullptr);
 
 		// The swamp's surface constants, height field layers and wake rings.
 		if (ffp.view_proj_valid() && swamp_pass != game::swamp::pass::None)
 			game::swamp::observe(swamp_pass, ffp.vs_const_data(), ffp.ps_const_data(), dev, ffp.frame_count(), primCount);
+		if (ffp.view_proj_valid() && swamp_pass == game::swamp::pass::Surface)
+			game::swamp::observe_surface_mesh(ffp.stream_vb(0), ffp.stream_stride(0), BaseVertexIndex, MinVertexIndex, NumVertices,
+				ffp.cur_decl_pos_off(), ffp.cur_decl_texcoord_off(), ffp.cur_decl_texcoord_type(), ffp.frame_count(), primCount);
 
 		// Water height passes: how far their mesh's waves have flowed, for its surface draw.
 		if (ffp.cur_ps_is_water_heightmap())
@@ -708,7 +712,14 @@ namespace comp
 					// The swamp's surface carries the swamp marker (see the skinned path).
 					const bool swamp = !base_decal && swamp_pass == game::swamp::pass::Surface;
 					if (swamp)
+					{
 						dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
+						// With its height texture in the alpha when that is a texture of its own (restored below
+						// with the rest of the stages).
+						if (auto* surface = game::swamp::surface_texture(dev,
+							ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))))
+							dev->SetTexture(0, surface);
+					}
 					// The source VB and IB, as bound by the game (the expanded VB replaced stream 0).
 					IDirect3DVertexBuffer9* const mesh_vb = ffp.stream_vb(0);
 					IDirect3DIndexBuffer9* const mesh_ib = ffp.cur_ib();
