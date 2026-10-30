@@ -319,6 +319,9 @@ namespace shared::common
 		if (!shader) return;
 		ps_sampler_masks_[shader] = parse_ps_sampler_mask(bytecode);
 		ps_light_flags_[shader] = parse_ps_light_flags(bytecode);
+		// The *Lit*_Non shaders multiply by their lightmap (s6): lit, by baked light.
+		if (ps_sampler_masks_[shader] & (1u << 6))
+			ps_light_flags_[shader] &= ~PS_UNLIT;
 		ps_draw_tint_[shader] = reads_float_const(bytecode, 139);
 		ps_skin_tone_[shader] = reads_float_const(bytecode, 156);
 
@@ -549,8 +552,10 @@ namespace shared::common
 		bool reads_view_fade = false;
 		bool reads_shaft_origin = false;
 		bool reads_shaft_steps = false;
+		bool reads_diffuse_scale = false;
 		for_each_const_read(code, [&](DWORD reg)
 		{
+			if (reg == 100) reads_diffuse_scale = true;
 			if (reg == 176) reads_view_fade = true;
 			if (reg == 69) reads_shaft_origin = true;
 			if (reg == 70) reads_shaft_steps = true;
@@ -570,7 +575,11 @@ namespace shared::common
 			(reads_grade_scale && reads_grade_matrix ? PS_GRADE : 0u) |
 			(reads_probe_scale && reads_hemisphere ? PS_AMBIENT : 0u) |
 			(reads_view_fade ? PS_VIEW_FADE : 0u) |
-			(reads_shaft_origin && reads_shaft_steps ? PS_LIGHT_SHAFT : 0u);
+			(reads_shaft_origin && reads_shaft_steps ? PS_LIGHT_SHAFT : 0u) |
+			// No light term at all: no probe or hemisphere (c86, c98), no directional light (c92, c95).
+			// A lightmap (s6) is a light term too; on_create_pixel_shader clears the flag for those.
+			(reads_diffuse_scale && reads_extinction && reads_inscatter && !reads_probe_scale && !reads_hemisphere
+				&& !reads_dir && !reads_colour ? PS_UNLIT : 0u);
 	}
 
 	bool ffp_state::world_offset(float& x, float& y, float& z) const
@@ -2299,6 +2308,12 @@ namespace shared::common
 		// fur, a veil) is its own surface. As a decal Remix shaded it onto what is behind it.
 		if (cur_decl_is_skinned())
 			return false;
+		// Nor does an unlit one (PS_UNLIT): every alpha-blended _Non mesh in the game is an SFX model
+		// (analysis_shader_families.md), free-floating glow layers such as Bed of Chaos's glyph rings.
+		// As decals Remix composited them onto the surface behind and they showed as thin bands only
+		// where they came near one.
+		if (cur_ps_light_flags_ & PS_UNLIT)
+			return false;
 
 		dev->SetTextureStageState(0, D3DTSS_CONSTANT, OVERLAY_DECAL_MARKER);
 		return true;
@@ -2308,6 +2323,26 @@ namespace shared::common
 	{
 		if (dev)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+	}
+
+	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev)
+	{
+		// An alpha-blended unlit mesh (PS_UNLIT: texture * c100 * vertex colour * c139, every one an SFX
+		// glow layer such as Bed of Chaos's glyph rings) is drawn like the unlit sprites: the sprites' unlit
+		// marker, so Remix composites it as the game does (alpha-blended in gamma space, lighting nothing),
+		// with its exposure count. Its colour is c100 times the texture, which the self-lit tag carries
+		// (atmosphere.hpp tag_self_lit). Additive ones (the bonfire and torch flames) keep their own path.
+		if (!dev || !(cur_ps_light_flags_ & PS_UNLIT) || cur_decl_is_skinned())
+			return false;
+		DWORD blend_enabled = FALSE, src = 0, dst = 0;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_enabled);
+		dev->GetRenderState(D3DRS_SRCBLEND, &src);
+		dev->GetRenderState(D3DRS_DESTBLEND, &dst);
+		if (!blend_enabled || src != D3DBLEND_SRCALPHA || dst != D3DBLEND_INVSRCALPHA)
+			return false;
+		const int exposure_power = (cur_ps_reads_exposure_ ? 1 : 0) + (cur_vs_exposure_ ? 1 : 0);
+		dev->SetTextureStageState(0, D3DTSS_CONSTANT, exposure_power ? 0xD15D0E20u + exposure_power : 0xD15D0E1Du);
+		return true;
 	}
 
 	// ---- Rigid vertex expansion ----

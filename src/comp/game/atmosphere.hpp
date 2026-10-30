@@ -52,8 +52,12 @@ namespace comp::game::atmosphere
 	// give it ten times a map surface's light (Lost Izalith: c100 2.6 * (c86 3 * probe + c98 (2, 2, 0)),
 	// about 13), so the game draws even its crust saturated yellow; it is tagged with
 	// c100 * (c86 * the probe's upward face + c98), its own region's value.
+	// An unlit draw (`unlit`, ffp_state PS_UNLIT: the FRPG_*_Non shaders) has no light term at all,
+	// texture * c100 * vertex colour * c139: it is tagged with c100 itself (Bed of Chaos's glyph
+	// shells, c100 = 10, which Remix otherwise lit as plain surfaces in the dark). Alpha-blended draws only:
+	// an opaque one is a surface Remix lights, additive ones keep the fixed additive intensity.
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
-		IDirect3DBaseTexture9* probe = nullptr, bool lava = false);
+		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false);
 
 	// A probe-lit draw (PS_AMBIENT) and the cube bound on its stage 11.
 	void observe_ambient(const float* ps_const, IDirect3DBaseTexture9* probe, unsigned int frame, unsigned int prim_count);

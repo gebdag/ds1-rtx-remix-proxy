@@ -577,10 +577,29 @@ namespace comp::game::atmosphere
 		}
 	}
 
-	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava)
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit)
 	{
 		DWORD tag = 0;
-		if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
+		// Only alpha-blended layers (Bed of Chaos's glyph shells). An opaque unlit mesh (m18_ao, c100 7) is an
+		// ordinary surface Remix lights, and the tag would add its c100 glow on top of that light. Additive ones
+		// (bonfire and torch flames, Bed of Chaos's seal shells) keep the fixed additive intensity: the tag
+		// measured below snapshot noise on them (bonfire1, torches1, frame_20261029_191418) and cut the light
+		// the flames cast.
+		DWORD blended = FALSE, dst_blend = 0;
+		if (unlit && dev)
+		{
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
+			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
+		}
+		if (unlit && blended && dst_blend != D3DBLEND_ONE && ps_const)
+		{
+			// The game's light for it is c100 alone. At least 1 per channel, as for additive draws below.
+			const float* diffuse = &ps_const[100 * 4];
+			tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c], 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+		}
+		else if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
 		{
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)

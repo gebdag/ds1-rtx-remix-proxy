@@ -337,6 +337,11 @@ namespace shared::common
 		static constexpr uint32_t PS_VIEW_FADE = 1u << 5;
 		//   PS_LIGHT_SHAFT  c69 and c70, FRPG_Fil_LightShaft's radial blur (see game/atmosphere.hpp).
 		static constexpr uint32_t PS_LIGHT_SHAFT = 1u << 6;
+		//   PS_UNLIT        a map or character shader with no light term (the FRPG_*_Non family
+		//                   without a lightmap): texture * c100 * vertex colour * c139, then the
+		//                   haze tail. c100 is its glow (Bed of Chaos's glyph shells: 10). See
+		//                   game/atmosphere.hpp tag_self_lit.
+		static constexpr uint32_t PS_UNLIT = 1u << 7;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
 
 		// The main camera's camera-relative view-projection as the map shaders get it (VS c0..c3,
@@ -427,6 +432,9 @@ namespace shared::common
 		// Clear the decal marker so subsequent draws are not classified as decals
 		// by the runtime.
 		void clear_decal_marker(IDirect3DDevice9* dev);
+		// Alpha-blended unlit meshes (PS_UNLIT) take the sprites' unlit marker on stage 0's constant;
+		// true when set. Cleared with clear_decal_marker.
+		bool apply_unlit_layer_marker(IDirect3DDevice9* dev);
 
 		// --- Rigid vertex expansion (CPU-side SHORT→FLOAT UV conversion) ---
 
