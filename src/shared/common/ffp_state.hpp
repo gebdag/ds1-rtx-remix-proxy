@@ -657,6 +657,9 @@ namespace shared::common
 		// Decal tag for overlay draws — matched by the custom RTX Remix runtime
 		// (rtx.fixedFunctionDecalMarkerEnabled) in the stage-0 D3DTSS_CONSTANT.
 		static constexpr DWORD OVERLAY_DECAL_MARKER = 0xD15DECA1;
+		// A blend skirt (apply_blended_decal_marker): a decal the runtime lights on its own surface, which
+		// can lie a little above the one it covers (Painted World's rubble skirts over a 0.23 m trench).
+		static constexpr DWORD SKIRT_DECAL_MARKER = 0xD15DECA2;
 		// High byte of the stage-5 skin tone tag (apply_skin_tone).
 		static constexpr DWORD SKIN_TONE_MARKER = 0xD3000000;
 		IDirect3DVertexDeclaration9* rigid_exp_decl_ = nullptr;

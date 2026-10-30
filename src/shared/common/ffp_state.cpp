@@ -2320,7 +2320,9 @@ namespace shared::common
 		if (cur_ps_light_flags_ & PS_UNLIT)
 			return false;
 
-		dev->SetTextureStageState(0, D3DTSS_CONSTANT, OVERLAY_DECAL_MARKER);
+		// Its own marker: unlike the coplanar overlay layer of a two-layer material, a skirt can hang a
+		// little above what it covers, and the runtime lights it there (SKIRT_DECAL_MARKER).
+		dev->SetTextureStageState(0, D3DTSS_CONSTANT, SKIRT_DECAL_MARKER);
 		return true;
 	}
 
