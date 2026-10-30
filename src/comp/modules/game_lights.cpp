@@ -362,6 +362,32 @@ namespace comp
 		return m;
 	}
 
+	void game_lights::observe_lightmapped_draw(const float* ps_const)
+	{
+		float ox = 0.0f, oy = 0.0f, oz = 0.0f;
+		if (!ps_const || !shared::common::ffp_state::get().world_offset(ox, oy, oz))
+			return;
+		for (int i = 0; i < 4; i++)
+		{
+			const float* colour = &ps_const[(116 + i) * 4];
+			if (colour[0] <= 0.0f && colour[1] <= 0.0f && colour[2] <= 0.0f)
+				continue;
+			const float* pos = &ps_const[(112 + i) * 4];
+			const std::array<float, 3> world = { pos[0] + ox, pos[1] + oy, pos[2] + oz };
+			if (!bound_to_lightmap(world[0], world[1], world[2]) && lightmap_bound_.size() < 1024)
+				lightmap_bound_.push_back(world);
+		}
+	}
+
+	bool game_lights::bound_to_lightmap(float x, float y, float z) const
+	{
+		// The game's copy of a light's position and the harvested one agree to float precision; a light
+		// that moves (a map light never does) only has to match where it was seen.
+		constexpr float kSame = 0.1f;
+		return std::any_of(lightmap_bound_.begin(), lightmap_bound_.end(), [&](const std::array<float, 3>& p)
+			{ return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) + (p[2] - z) * (p[2] - z) < kSame * kSame; });
+	}
+
 	game_lights::light_row game_lights::make_row(const game::point_lights::light& l, const float* player) const
 	{
 		light_row row;
@@ -543,10 +569,25 @@ namespace comp
 			remixapi_Float3D radiance;
 			if (const bool game_falloff = game_falloff_ && kind_game_falloff_[static_cast<int>(row.kind)])
 			{
-				// The game's falloff (rtx.ds1Lights.falloffTable): Remix lights the surface with
-				// pi * radiance * att(d)^2.2, so radiance = colour^2.2 / pi gives (colour * att)^2.2,
-				// the game's light in linear space, at every distance.
-				const float scale = intensity_scale * mult / 3.14159265f;
+				// The game's falloff (rtx.ds1Lights.falloffTable): Remix lights the surface with irradiance
+				// pi * radiance * att(d)^2.2, and a diffuse surface returns albedo / pi of that, so
+				// radiance = colour^2.2 gives albedo * (colour * att)^2.2, the game's albedo * light in
+				// linear space, at every distance (as the sun and the ambient sky are matched). Divided by
+				// pi as well, these lights reached a third of the game's (Remix's demodulated direct diffuse
+				// next to a hollow's torch, frame_20261030_092329: 0.19-0.23 of the game's).
+				// A map light the game never binds to a lightmapped draw keeps that third: its glow on the
+				// lightmapped map is baked into the lightmap, and Remix's light stands in for it (at the game's
+				// own strength it lit Painted World's lightmapped ground twice as bright as the game, frame mean
+				// 98 vs 49; torches1's torches likewise reach no lightmapped draw). The game picks a draw's
+				// lights per draw (the first four intersecting ones from the lists its category mask allows), and
+				// some map lights do reach lightmapped draws (Parish nave lights, msg_scene's torches): those
+				// are dynamic there and take the game's strength (observe_lightmapped_draw).
+				// Character lights (the player's head light among them, harvested as a LerpBank entity) keep
+				// the third: the game's strength was only measured for effect lights, and the head light at it
+				// lit Painted World's close-up ground 1.4x the game's (frame_20261030_093046).
+				const bool exact = row.kind == kind::fx_direct || row.kind == kind::effect ||
+					(is_static(row.kind) && bound_to_lightmap(src.x, src.y, src.z));
+				const float scale = intensity_scale * mult / (exact ? 1.0f : 3.14159265f);
 				radiance = {
 					std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
 					std::pow(std::max(colour[1], 0.0f), 2.2f) * scale,
@@ -847,7 +888,7 @@ namespace comp
 		remixapi_Float3D radiance;
 		if (game_falloff)
 		{
-			// The game's falloff, as for the map lights: radiance colour^2.2 / pi, flat to the
+			// The game's falloff, as for the character lights: radiance colour^2.2 / pi, flat to the
 			// game's dwindle begin and linear to zero at its end, both times FalloffRangeScale,
 			// with its own intensity, FalloffIntensity (1 = the game's brightness). Begin and end
 			// come from the same light: the area's player light ranges from 0..2.5 to 6..25, and a

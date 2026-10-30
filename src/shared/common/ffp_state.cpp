@@ -287,10 +287,13 @@ namespace shared::common
 		cur_ps_sfx_colour_scale_ = 1.0f;
 		cur_ps_reads_exposure_ = false;
 		cur_ps_draw_tint_ = false;
+		cur_ps_point_lights_ = false;
 		cur_ps_skin_tone_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		if (shader)
 		{
+			if (auto it = ps_point_lights_.find(shader); it != ps_point_lights_.end())
+				cur_ps_point_lights_ = it->second;
 			if (auto it = ps_swamp_pass_.find(shader); it != ps_swamp_pass_.end())
 				cur_ps_swamp_pass_ = it->second;
 			if (auto it = ps_draw_tint_.find(shader); it != ps_draw_tint_.end())
@@ -323,6 +326,7 @@ namespace shared::common
 		if (ps_sampler_masks_[shader] & (1u << 6))
 			ps_light_flags_[shader] &= ~PS_UNLIT;
 		ps_draw_tint_[shader] = reads_float_const(bytecode, 139);
+		ps_point_lights_[shader] = reads_float_const(bytecode, 116);
 		ps_skin_tone_[shader] = reads_float_const(bytecode, 156);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
@@ -1016,6 +1020,7 @@ namespace shared::common
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		cur_ps_light_flags_ = 0;
 		cur_ps_draw_tint_ = false;
+		cur_ps_point_lights_ = false;
 
 		log("FFP", "State reset");
 	}

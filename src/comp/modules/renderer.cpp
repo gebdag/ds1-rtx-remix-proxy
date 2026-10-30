@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "renderer.hpp"
+#include "game_lights.hpp"
 
 #include "imgui.hpp"
 #include "diagnostics.hpp"
@@ -444,6 +445,11 @@ namespace comp
 		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
 			game::atmosphere::observe_ambient(ffp.ps_const_data(), ffp.probe_texture(), ffp.frame_count(), primCount);
+
+		// The lights the game binds to lightmapped map draws (which map lights it treats as dynamic there).
+		if (ffp.view_proj_valid() && ffp.cur_ps_reads_point_lights() && (ffp.cur_ps_sampler_mask() & (1u << 6)))
+			if (auto* gl = game_lights::get())
+				gl->observe_lightmapped_draw(ffp.ps_const_data());
 
 		// Map materials' c100 (the swamp's colours keep their ratio to them).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && swamp_pass == game::swamp::pass::None)

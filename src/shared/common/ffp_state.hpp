@@ -352,6 +352,11 @@ namespace shared::common
 		// fade every FRPG material shader multiplies its output by.
 		bool cur_ps_reads_draw_tint() const { return cur_ps_draw_tint_; }
 
+		// True when the current pixel shader reads the game's point lights (c112-c119: four lights'
+		// camera-relative positions and colours, the *PntS* variants). Other shaders leave those
+		// registers holding the last draw's lights.
+		bool cur_ps_reads_point_lights() const { return cur_ps_point_lights_; }
+
 		// For a converted draw whose pixel shader reads c139 and whose c139 is not
 		// (1,1,1,1): put c139 in D3DRS_TEXTUREFACTOR and enable stage 1 as
 		// MODULATE(CURRENT, TFACTOR) for colour and alpha. Returns true when it did;
@@ -560,6 +565,9 @@ namespace shared::common
 		// Pixel shaders that read c139 (see cur_ps_reads_draw_tint).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_draw_tint_;
 		bool cur_ps_draw_tint_ = false;
+		// Pixel shaders that read c116 (see cur_ps_reads_point_lights).
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_point_lights_;
+		bool cur_ps_point_lights_ = false;
 		// Pixel shaders that read c156 (see apply_skin_tone).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_skin_tone_;
 		bool cur_ps_skin_tone_ = false;

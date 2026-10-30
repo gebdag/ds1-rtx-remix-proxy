@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shared/common/config.hpp"
+#include <array>
 #include "../game/point_lights.hpp"
 
 namespace comp
@@ -88,8 +89,16 @@ namespace comp
 
 		// F4 > Lights > Game falloff for one kind (also proxy.Lights.GameFalloff<Kind> live).
 		void set_kind_game_falloff(light_kind k, bool on) { kind_game_falloff_[static_cast<int>(k)] = on; }
+		// A lightmapped map draw whose shader reads the game's point lights (c112-c119): the lights the game
+		// bound to it, camera-relative positions in c112-c115 (colour c116-c119). A map light the game binds to
+		// lightmapped geometry is a dynamic light there and goes to Remix at the game's strength; one it never
+		// binds is baked into the lightmap, and Remix's light stands in for that glow (sync_lights).
+		void observe_lightmapped_draw(const float* ps_const);
 
 	private:
+		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).
+		std::vector<std::array<float, 3>> lightmap_bound_;
+		bool bound_to_lightmap(float x, float y, float z) const;
 		static inline game_lights* p_this = nullptr;
 
 		// One Remix light per engine slot. Kept across frames and updated in place so
