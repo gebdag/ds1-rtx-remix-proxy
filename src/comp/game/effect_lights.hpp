@@ -29,6 +29,10 @@ namespace comp::game::effect_lights
 	// Scale on the fire stand-ins ([Lights] FireLightScale, the Lights tab).
 	void set_fire_scale(float scale);
 
+	// Once per frame, from game_lights, before collect: the engine and table lights. A particle stand-in
+	// near one of them is not drawn: the game lights that fire itself (a bonfire, a torch).
+	void set_covers(const std::vector<const point_lights::light*>& lights);
+
 	// Once per frame, from game_lights: the stand-ins for the effects drawn since the last call.
 	const std::vector<point_lights::light>& collect();
 }

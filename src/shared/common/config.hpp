@@ -258,8 +258,10 @@ namespace shared::common
 			// engine never lights (Blighttown's torches and friends).
 			bool synthesized_lights = true;
 			// Scale on the lights stood in for fire effects the game does not light (a fire breath;
-			// game::effect_lights): 1 = torch to bonfire strength; 2, the default, reads as a fire breath lighting its surroundings (frame_20261029_144153).
-			float fire_light_scale = 2.0f;
+			// game::effect_lights): 1, the default, = the game's own torch to bonfire lights. 2 was the default while
+			// every game light reached Remix at a third of its strength (game_lights.cpp); with them corrected it lit a
+			// fireball's surroundings three times as bright as before.
+			float fire_light_scale = 1.0f;
 		} lights;
 
 		// The light the game hangs on the player's head (a LerpBank point light on a

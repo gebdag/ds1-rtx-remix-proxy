@@ -33,7 +33,7 @@ namespace comp
 			enabled = e;
 		}
 
-		float fire_light_scale = 2.0f;
+		float fire_light_scale = 1.0f;
 		float intensity_scale = 1.0f;
 		float radius_scale = 1.0f;
 

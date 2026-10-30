@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 namespace comp::game::effect_lights
 {
@@ -26,33 +27,53 @@ namespace comp::game::effect_lights
 		constexpr float kClusterRadius = 12.0f;
 
 		// Fire particles (ffp_state sprite points, SrcAlpha + One) the game gives no light (a fire
-		// breath): clusters of warm additive particles get a light between the game's own fire
-		// lights, coloured by the particles. A flame the size of a torch's lights like a torch's
-		// engine light (1.2, reaching 5 m); bigger fires grow with the square root of the light they
-		// draw, up to the game's bonfire light (3.04, 7 m). Linear in the drawn light, a fire breath
+		// breath): clusters of fire-coloured additive particles get the game's own light for a fire of
+		// that size, coloured by the particles. The game's fire lights are effect lights
+		// (DirectPointLightEntity): a held torch's (1.97, 1.39, 0.77) to 1.9 m (frame_20261030_092329)
+		// and a bonfire's (0.72, 0.52, 0.21) to 4.8 m (bonfire1, msg_scene), about the same energy
+		// spread wider and dimmer. A flame drawing a torch flame's light gets the torch's light; a fire
+		// drawing kBonfireSize times that gets the bonfire's, between them on the log of the drawn light,
+		// and a smaller flame its square root of the torch's. Linear in the drawn light, a fire breath
 		// came out at 17: that sum swings 10x between frames of one fire and is huge for big soft
 		// sprites. Only fire: white, blue and green particles (item pickups, souls, motes, fog,
 		// magic) are lit by no game light, and none is stood in for them.
 		constexpr float kTorchPower = 0.14f;   // a torch's flame (torches1 0.139, torch_wall 0.168)
-		constexpr float kTorchLight = 1.2f;    // its engine light (item1, torches1: 1.2, 0.99, 0.75)
-		constexpr float kTorchReach = 5.0f;
-		constexpr float kBonfireLight = 3.04f; // bonfire1's engine light (3.04, 3.04, 2.35), to 7 m
-		constexpr float kBonfireReach = 7.0f;
+		constexpr float kTorchLight = 1.97f;   // a held torch's effect light, peak channel
+		constexpr float kTorchReach = 1.9f;
+		constexpr float kBonfireSize = 6.4f;   // drawn light of a bonfire-sized fire, in torch flames
+		constexpr float kBonfireLight = 0.72f; // a bonfire's effect light, peak channel
+		constexpr float kBonfireReach = 4.8f;
 		constexpr float kSpriteClusterRadius = 4.0f;
 		// Warm: red >= green >= blue and blue at most this share of red (fire breath 0.28, the
 		// Burg's fires 0.3-0.36; item sparkles 1.17, motes and fog 0.8-1.2).
 		constexpr float kWarmBlueShare = 0.6f;
+		// Fire is orange: green at least this share of red. The flame textures' own colour is 0.52-0.62
+		// (s00100 / s00103 fire breath, s00009 torch flame; their particles are white), torches and
+		// fireballs 0.67-0.73 as drawn (msg_scene). The red glow of a message on the ground (s00906 at
+		// 0.83 under vertex colour 255, 100, 70) draws 0.31-0.33 and a bloodstain less: the game lights
+		// neither, and stood in as fires they lit the ground around them like a bonfire.
+		constexpr float kFireGreenShare = 0.45f;
 		// A cluster drawing less light than this (summed colour per unit area * area, max channel)
 		// is embers or sparks; a torch's flame draws about 0.14.
 		constexpr float kSpriteMinPower = 0.1f;
 
-		constexpr size_t kMaxLights = 8;
+		constexpr size_t kMaxLights = 16;
+		// A particle stand-in is suppressed where an engine or table light stands within this of it: the
+		// game lights that fire itself (a bonfire, a torch). It comes back past kCoverRelease, so a fire
+		// beside a moving torch-bearer does not blink at the edge, and a game light keeps covering for
+		// kCoverHold seconds after it was last seen (the game's own fire lights flicker off and on).
+		constexpr float kCoverRadius = 3.0f;
+		constexpr float kCoverRelease = 3.6f;
+		constexpr float kCoverHold = 0.5f;
 		// A frame's samples beyond this are ignored (also bounds the list while nothing collects it).
 		constexpr size_t kMaxSamples = 2048;
 		// Samples are re-dealt every frame: each light eases towards its group, per 60 Hz frame.
 		constexpr float kRise = 0.5f;
 		constexpr float kFall = 0.15f;
 		constexpr float kMove = 0.35f;
+		// A particle light's colour and reach follow its particles slowly: their summed light swings
+		// 25% between frames of one steady fire, and followed at kMove the light flickered with it.
+		constexpr float kSteady = 0.05f;
 		constexpr float kOff = 0.01f;
 		constexpr int kFirstSlot = 0x20000;
 
@@ -80,7 +101,12 @@ namespace comp::game::effect_lights
 			float r = 0, g = 0, b = 0;
 			float level = 0;
 			float range = kFlashRange;
+			bool covered = false;
 		};
+
+		// Positions of the engine and table lights, and when each was last seen.
+		struct cover { float x, y, z; std::chrono::steady_clock::time_point seen; };
+		std::vector<cover> s_covers;
 
 		std::vector<sample> s_samples;
 		std::vector<tracked> s_lights;
@@ -155,6 +181,22 @@ namespace comp::game::effect_lights
 		}
 	}
 
+	void set_covers(const std::vector<const point_lights::light*>& lights)
+	{
+		const auto now = std::chrono::steady_clock::now();
+		for (const auto* l : lights)
+		{
+			if (!l)
+				continue;
+			auto it = std::find_if(s_covers.begin(), s_covers.end(), [&](const cover& c)
+				{ return dist2(c.x, c.y, c.z, l->x, l->y, l->z) < 0.25f * 0.25f; });
+			if (it == s_covers.end())
+				s_covers.push_back({ l->x, l->y, l->z, now });
+			else
+				*it = { l->x, l->y, l->z, now };
+		}
+	}
+
 	const std::vector<point_lights::light>& collect()
 	{
 		s_out.clear();
@@ -193,18 +235,19 @@ namespace comp::game::effect_lights
 			}
 			it->samples.push_back(&s);
 		}
-		// Particle groups that are faint (sparks, embers) or not fire get no light.
+		// Particle groups that are not fire get no light. A faint one (sparks, embers) starts none either,
+		// but keeps the light of a fire that dims for a frame or two (weak).
 		std::erase_if(groups, [](const group& g)
 		{
 			if (g.k != kind::sprite)
 				return false;
-			const bool warm = g.r >= g.g && g.g >= g.b && g.b <= kWarmBlueShare * g.r;
-			return !warm || std::max({ g.r, g.g, g.b }) < kSpriteMinPower;
+			return !(g.r >= g.g && g.g >= g.b && g.b <= kWarmBlueShare * g.r && g.g >= kFireGreenShare * g.r);
 		});
+		auto weak = [](const group& g) { return g.k == kind::sprite && std::max({ g.r, g.g, g.b }) < kSpriteMinPower; };
 
 		// Each light follows the nearest group of its kind it can reach; a group no light took starts
 		// a new one; a light without a group fades out.
-		const float rise = rate(kRise, dt), fall = rate(kFall, dt), move = rate(kMove, dt);
+		const float rise = rate(kRise, dt), fall = rate(kFall, dt), move = rate(kMove, dt), steady = rate(kSteady, dt);
 		auto centre = [](const group& g, float& cx, float& cy, float& cz)
 		{
 			cx = static_cast<float>(g.x / g.w); cy = static_cast<float>(g.y / g.w); cz = static_cast<float>(g.z / g.w);
@@ -230,24 +273,27 @@ namespace comp::game::effect_lights
 				}
 				else
 				{
-					// Torch to bonfire strength on the brightest channel, in the particles' colour.
+					// The game's torch to bonfire light on the brightest channel, in the particles' colour.
 					const double peak = std::max({ g->r, g->g, g->b });
 					const float size = static_cast<float>(peak) / kTorchPower;
-					const float strength = s_fire_scale * std::min(kBonfireLight, kTorchLight * std::sqrt(size));
+					const float growth = std::clamp(std::log(std::max(size, 1.0f)) / std::log(kBonfireSize), 0.0f, 1.0f);
+					const float flame = std::min(1.0f, std::sqrt(size));
+					const float strength = s_fire_scale * flame * (kTorchLight + (kBonfireLight - kTorchLight) * growth);
 					r = strength * static_cast<float>(g->r / peak);
 					gg = strength * static_cast<float>(g->g / peak);
 					b = strength * static_cast<float>(g->b / peak);
-					range = std::min(kBonfireReach, spread + kTorchReach * std::min(1.0f, std::sqrt(size)));
+					range = std::min(kMaxRange, spread + flame * (kTorchReach + (kBonfireReach - kTorchReach) * growth));
 					target = 1.0f;
 				}
 				const float k = fresh ? 1.0f : move;
+				const float kc = fresh ? 1.0f : (g->k == kind::sprite ? steady : move);
 				t.x += (cx - t.x) * k;
 				t.y += (cy - t.y) * k;
 				t.z += (cz - t.z) * k;
-				t.r += (r - t.r) * k;
-				t.g += (gg - t.g) * k;
-				t.b += (b - t.b) * k;
-				t.range += (range - t.range) * k;
+				t.r += (r - t.r) * kc;
+				t.g += (gg - t.g) * kc;
+				t.b += (b - t.b) * kc;
+				t.range += (range - t.range) * kc;
 			}
 			t.level += (target - t.level) * (target > t.level ? rise : fall);
 		};
@@ -275,7 +321,7 @@ namespace comp::game::effect_lights
 		}
 		for (auto& g : groups)
 		{
-			if (g.taken || s_lights.size() >= kMaxLights)
+			if (g.taken || weak(g) || s_lights.size() >= kMaxLights)
 				continue;
 			tracked t;
 			t.k = g.k;
@@ -292,8 +338,23 @@ namespace comp::game::effect_lights
 		s_samples.clear();
 		std::erase_if(s_lights, [](const tracked& t) { return !(t.level >= kOff) || !std::isfinite(t.x + t.y + t.z + t.r + t.g + t.b); });
 
+		// Particle lights an engine or table light stands for (covers, kCoverRadius and its release).
+		std::erase_if(s_covers, [&](const cover& c) { return std::chrono::duration<float>(now - c.seen).count() > kCoverHold; });
+		for (auto& t : s_lights)
+		{
+			if (t.k != kind::sprite)
+				continue;
+			float nearest = std::numeric_limits<float>::max();
+			for (const auto& c : s_covers)
+				nearest = std::min(nearest, dist2(t.x, t.y, t.z, c.x, c.y, c.z));
+			const float edge = t.covered ? kCoverRelease : kCoverRadius;
+			t.covered = nearest <= edge * edge;
+		}
+
 		for (const auto& t : s_lights)
 		{
+			if (t.covered)
+				continue;
 			point_lights::light l {};
 			l.slot = t.slot;
 			l.x = t.x; l.y = t.y; l.z = t.z;

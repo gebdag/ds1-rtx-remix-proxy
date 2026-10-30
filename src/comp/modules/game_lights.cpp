@@ -439,9 +439,14 @@ namespace comp
 			break;
 		}
 		case kind::effect:
-			row.name = "Lightning bolts";
-			row.origin = "synthesized from the breath's bolt draws (s00502 / s00504): the game lights only its first flash";
+		{
+			const bool particles = l.entity_vtable == game::effect_lights::kParticleMarker;
+			row.name = particles ? "Fire particles" : "Lightning bolts";
+			row.origin = particles
+				? "synthesized from a cluster of fire-coloured additive particles the game lights with no light of its own"
+				: "synthesized from the breath's bolt draws (s00502 / s00504): the game lights only its first flash";
 			break;
+		}
 		default:
 			row.name = std::format("Engine slot {}", l.slot);
 			row.origin = l.entity
@@ -477,16 +482,17 @@ namespace comp
 		synthetic_count_ = static_cast<int>(synthetic.size());
 		game::map_lights::update_effect_gate();
 		game::effect_lights::set_fire_scale(fire_light_scale);
-		const auto& effects = game::effect_lights::collect();
 
 		std::vector<const game::point_lights::light*> sources;
-		sources.reserve(harvested.size() + synthetic.size() + effects.size());
+		sources.reserve(harvested.size() + synthetic.size() + 32);
 		for (const auto& l : harvested)
 			if (&l != player) sources.push_back(&l);
 		for (const auto& l : synthetic) sources.push_back(&l);
-		// A particle stand-in is dropped where an engine or table light already stands within
-		// kParticleCover of it: the game lights that fire itself (a bonfire, a torch).
-		constexpr float kParticleCover = 3.0f;
+		// The particle stand-ins these lights already stand for are dropped inside effect_lights, before
+		// its light cap (they took slots there and pushed visible stand-ins out and back in), and with
+		// hysteresis on the distance and on the game light's presence (its own fire lights flicker).
+		game::effect_lights::set_covers(sources);
+		const auto& effects = game::effect_lights::collect();
 		static unsigned particle_log_frame = 0;
 		const bool particle_log = frame - particle_log_frame >= 300;
 		if (particle_log)
@@ -518,8 +524,6 @@ namespace comp
 					: std::format("particles at ({:.1f}, {:.1f}, {:.1f}): light ({:.3f}, {:.3f}, {:.3f}) range {:.1f}; no game light",
 						l.x, l.y, l.z, l.r, l.g, l.b, l.dwindle_end));
 			}
-			if (nearest && nearest_d2 <= kParticleCover * kParticleCover)
-				continue;
 			sources.push_back(&l);
 		}
 
@@ -1142,7 +1146,7 @@ namespace comp
 		auto& cfg = shared::common::config::get();
 		enabled = cfg.get_bool("Lights", "Enabled", true);
 		intensity_scale = cfg.get_float("Lights", "IntensityScale", 1.0f);
-		fire_light_scale = std::max(0.0f, cfg.get_float("Lights", "FireLightScale", 2.0f));
+		fire_light_scale = std::max(0.0f, cfg.get_float("Lights", "FireLightScale", 1.0f));
 		radius_scale = cfg.get_float("Lights", "RadiusScale", 1.0f);
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
