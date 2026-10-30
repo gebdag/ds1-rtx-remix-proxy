@@ -17,6 +17,8 @@ namespace comp::game::texture_scroll
 	//   layer 1   stage 0's texture transform: uv * c141.x / TILES + c246.xy / TILES
 	//   layer 2   stage 1's texture transform, relative to layer 1's uv (the runtime's
 	//             Surface::ds1WaterLayer2): uv1 * c141.y / c141.x + offset
+	//   smear     the same transform's unused _41: the refraction smear c125 as a view angle per unit
+	//             of Remix's normal tilt (Surface::ds1WaterSmear)
 	//   strength  stage 1's D3DTSS_CONSTANT, two halfs: each layer's slope, c126 * c134.i * c141.i
 	//             (layer 3 folded into layer 2), over the slope the normal map was authored with.
 	//   reflection D3DRS_TEXTUREFACTOR: alpha = the reflection weight seen face-on, c130 * c131

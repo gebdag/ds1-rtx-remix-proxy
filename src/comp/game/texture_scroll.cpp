@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "texture_scroll.hpp"
+#include "env_reflection.hpp"
 
 #include "shared/common/ffp_state.hpp"
 
@@ -15,11 +16,15 @@ namespace comp::game::texture_scroll
 
 		// Wave tiles per texture coordinate in the ds1_water normal map (scripts/gen_water_material.py).
 		constexpr double kTiles = 8.0;
+		// The game's horizontal field of view.
+		constexpr double kFovX = 1.2218;
+		// Remix's water normal tilts by this much per unit of the game's wave normal slope: the
+		// reflection match c124 * fov_x / 2 (c124 = 0.4, the game's reflection shift).
+		constexpr double kSlopeMatch = 0.4 * kFovX / 2.0;
 		// The slope the normal map was authored with, in the units of c126 * c134.i * c141.i:
 		// gen_water_material.py baked capture water1's river (c126 0.7) with the RMS share of its
-		// height pass weights (0.18, 0.18, 0.1) per layer, kTiles tiles, and the reflection match
-		// c124 * fov_x / 2 = 0.4 * 1.2218 / 2.
-		constexpr double kAuthoredSlope = 0.7 * 0.193391 * kTiles * 0.2443669;
+		// height pass weights (0.18, 0.18, 0.1) per layer, kTiles tiles, and kSlopeMatch.
+		constexpr double kAuthoredSlope = 0.7 * 0.193391 * kTiles * kSlopeMatch;
 
 		struct mesh_key
 		{
@@ -61,7 +66,8 @@ namespace comp::game::texture_scroll
 		}
 
 		// D3D's 2D texture transform: (u, v, 1) times the matrix, uniform scale and translation in _31 / _32.
-		void set_transform(IDirect3DDevice9* dev, DWORD stage, float scale, float u, float v)
+		// The transform never reads _41, which carries payload for the runtime.
+		void set_transform(IDirect3DDevice9* dev, DWORD stage, float scale, float u, float v, float payload = 0.0f)
 		{
 			D3DMATRIX m = {};
 			m._11 = scale;
@@ -69,6 +75,7 @@ namespace comp::game::texture_scroll
 			m._31 = u;
 			m._32 = v;
 			m._33 = 1.0f;
+			m._41 = payload;
 			m._44 = 1.0f;
 			dev->SetTransform(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_TEXTURE0 + stage), &m);
 			dev->SetTextureStageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2);
@@ -96,10 +103,16 @@ namespace comp::game::texture_scroll
 			const double t1[2] = { wrap(w.offset1[0] / kTiles), wrap(w.offset1[1] / kTiles) };
 			set_transform(dev, 0, static_cast<float>(s1), static_cast<float>(t1[0]), static_cast<float>(t1[1]));
 
+			// The game's refraction smear: it reads the scene behind the water at the screen uv shifted by
+			// its wave normal's xz * c125 (* vertex alpha), a view angle of 2 tan(fov_x / 2) per unit of uv.
+			// Per unit of Remix's water normal tilt that is c125 * 2 tan(fov_x / 2) / kSlopeMatch.
+			const double smear = ps[125 * 4] * 2.0 * std::tan(kFovX / 2.0) / kSlopeMatch;
+
 			// Layer 2 from layer 1's uv: uv2 = uv * s2 + t2 = (uv1 - t1) * s2 / s1 + t2.
 			const double ratio = s2 / s1;
 			const double o[2] = { wrap(w.offset2[0] / kTiles - t1[0] * ratio), wrap(w.offset2[1] / kTiles - t1[1] * ratio) };
-			set_transform(dev, 1, static_cast<float>(ratio), static_cast<float>(o[0]), static_cast<float>(o[1]));
+			set_transform(dev, 1, static_cast<float>(ratio), static_cast<float>(o[0]), static_cast<float>(o[1]),
+				static_cast<float>(smear));
 
 			const float strength[2] = {
 				static_cast<float>(wave_height * w.weight[0] * w.scale[0] / kAuthoredSlope),
@@ -176,6 +189,7 @@ namespace comp::game::texture_scroll
 		{
 			dev->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 			dev->SetTextureStageState(1, D3DTSS_CONSTANT, 0);
+			env_reflection::forget();
 			// The game's own texture factor back (and stage 1 as the FFP setup leaves it).
 			ffp_state::get().clear_draw_tint(dev);
 			g_layer2_set = false;
