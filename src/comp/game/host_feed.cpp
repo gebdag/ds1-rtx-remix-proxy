@@ -43,12 +43,15 @@ extern "C" void __cdecl lookdev_host_feed(uint32_t type, const void* payload, ui
 		lookdev::game_lights h;
 		std::memcpy(&h, payload, sizeof(h));
 		// The light struct is the proxy's own; both ends are this proxy, but a
-		// capture from another build could differ.
-		if (h.element_size != sizeof(point_lights::light) || sizeof(h) + size_t(h.count) * h.element_size > size)
+		// capture from another build could differ. Fields are only ever appended, so an
+		// older, shorter record loads with its missing fields zero.
+		if (h.element_size == 0 || h.element_size > sizeof(point_lights::light) ||
+			sizeof(h) + size_t(h.count) * h.element_size > size)
 			return;
-		host_feed::s_lights.resize(h.count);
-		if (h.count)
-			std::memcpy(host_feed::s_lights.data(), static_cast<const uint8_t*>(payload) + sizeof(h), size_t(h.count) * h.element_size);
+		host_feed::s_lights.assign(h.count, point_lights::light {});
+		const auto* src = static_cast<const uint8_t*>(payload) + sizeof(h);
+		for (uint32_t i = 0; i < h.count; ++i)
+			std::memcpy(&host_feed::s_lights[i], src + size_t(i) * h.element_size, h.element_size);
 	}
 }
 

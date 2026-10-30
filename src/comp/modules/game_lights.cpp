@@ -3,6 +3,7 @@
 #include "../game/point_lights.hpp"
 #include "../game/map_lights.hpp"
 #include "../game/effect_lights.hpp"
+#include "../game/ffx_names.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
@@ -432,9 +433,20 @@ namespace comp
 			row.origin = std::format("engine slot {}, LerpBankPointLightEntity (blends two rows)", l.slot);
 			break;
 		case kind::fx_direct:
-			row.name = std::format("Effect light {}", l.slot);
+		{
+			// The effect that made the light (fx_owner), named from the effect catalogue.
+			const char* effect = l.ffx_id ? game::ffx_names::name(l.ffx_id) : nullptr;
+			const char* caller = l.ffx_top_id && l.ffx_top_id != l.ffx_id ? game::ffx_names::name(l.ffx_top_id) : nullptr;
+			if (!l.ffx_id)
+				row.name = std::format("Effect light {}", l.slot);
+			else
+				row.name = std::format("{} (FFX {})", caller ? caller : effect ? effect : "Effect light", l.ffx_id);
 			row.origin = std::format("engine slot {}, DirectPointLightEntity (colour set by the effect)", l.slot);
+			if (l.ffx_id)
+				row.origin += std::format("; light node of FFX {}{}", l.ffx_id,
+					l.ffx_top_id && l.ffx_top_id != l.ffx_id ? std::format(", called by FFX {}", l.ffx_top_id) : std::string());
 			break;
+		}
 		case kind::synthetic:
 		{
 			std::string name, category;

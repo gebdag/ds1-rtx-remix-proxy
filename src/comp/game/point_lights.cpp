@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "point_lights.hpp"
+#include "fx_owner.hpp"
 #include "host_feed.hpp"
 
 #include <algorithm>
@@ -438,6 +439,7 @@ namespace comp::game::point_lights
 			}
 		}
 
+		fx_owner::resolve(s_lights);
 		return s_lights;
 	}
 

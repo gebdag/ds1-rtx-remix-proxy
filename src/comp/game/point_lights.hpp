@@ -32,6 +32,10 @@ namespace comp::game::point_lights
 		unsigned entity;         // entity address once the handle is resolved, else 0
 		unsigned entity_vtable;  // its vftable, to tell Bank / Direct / LerpBank apart
 		unsigned param_row;      // resolved LIGHT_BANK row address, 0 when the slot has none
+		// The FFX effect that owns an effect (Direct) light, and the outermost effect that called it;
+		// 0 when unknown (fx_owner). Last, so captures from before these fields still load.
+		int ffx_id;
+		int ffx_top_id;
 	};
 
 	// Human-readable class of a resolved entity ("Bank", "Direct", "LerpBank", "?").
