@@ -1,0 +1,3135 @@
+# FFX id <TAB> name. Generated from Vibe-Reverse-Engineering/patches/DarkSouls/analysis/ffx_catalogue.csv
+26	Unidentified effect (smoke; ships in CommonEffects)
+80	Unidentified effect (smoke/dust/debris; ships in CommonEffects)
+90	Variant of Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (same sprite set as 100)
+91	Variant of Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (same sprite set as 100)
+92	Unidentified effect (no sprites; ships in CommonEffects)
+93	Unidentified effect (plain quad (tinted)/fire; ships in CommonEffects)
+95	Unidentified effect (blood/liquid/sparkle; ships in CommonEffects)
+96	Unidentified effect (blood/liquid/sparkle; ships in CommonEffects)
+97	Unidentified effect (sparkle; ships in CommonEffects)
+98	Unidentified effect (sparkle; ships in CommonEffects)
+99	Unidentified effect (blood/liquid/sparkle; ships in CommonEffects)
+100	Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC))
+101	Variant of Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (same sprite set as 100)
+102	Probably related to: Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (sibling id 100)
+103	Probably related to: Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (sibling id 100)
+104	Probably related to: Egg Parasite Head status visual (init) (sibling id 107)
+105	Probably related to: Egg Parasite Head status visual (init) (sibling id 107)
+106	Probably related to: Egg Parasite Head status visual (init) (sibling id 107)
+107	Egg Parasite Head status visual (init)
+108	Egg Parasite Head status visual (finish)
+109	Player animation effect
+110	Probably related to: Phantom/character vanish (white light) (sibling id 119)
+111	Probably related to: Phantom/character vanish (white light) (sibling id 119)
+113	Probably related to: Phantom/character vanish (white light) (sibling id 119)
+117	Variant of Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (same sprite set as 100)
+118	Variant of Fallen Kingdom Princess Summon Sign (Darkroot Garden/Basin, Oolacile (DLC)) (same sprite set as 100)
+119	Phantom/character vanish (white light)
+120	Phantom/character vanish (white light)
+130	Phantom/character vanish (white light)
+151	Spell cast hand/catalyst effect (chr-type variant)
+153	Spell cast hand/catalyst effect (chr-type variant)
+154	Spell cast hand/catalyst effect (chr-type variant)
+156	Humanity Restore status visual (init)
+160	Spell cast hand/catalyst effect (chr-type variant)
+165	Spell cast hand/catalyst effect (chr-type variant)
+166	Spell cast hand/catalyst effect (chr-type variant)
+167	Spell cast hand/catalyst effect (chr-type variant)
+168	Spell cast hand/catalyst effect (chr-type variant)
+171	Arena 10+ Wins status visual (midst)
+172	Arena 30+ Wins status visual (midst)
+173	Arena 50+ Wins status visual (midst)
+174	Arena 100+ Wins status visual (midst)
+175	Arena Death status visual (midst)
+176	Arena Provisional 1st status visual (midst)
+177	Arena Tied 1st status visual (midst)
+181	Player item/event animation effect
+182	Player item/event animation effect
+187	Probably related to: Player item/event animation effect (sibling id 182)
+188	Probably related to: Player item/event animation effect (sibling id 182)
+189	Probably related to: Player item/event animation effect (sibling id 182)
+190	Probably related to: Shared character effect (TAE event 96; 4 characters incl. Player Character, Painting Guardian, Hollow Soldier, Balder Knight) (sibling id 192)
+191	Probably related to: Shared character effect (TAE event 96; 4 characters incl. Player Character, Painting Guardian, Hollow Soldier, Balder Knight) (sibling id 192)
+192	Shared character effect (TAE event 96; 4 characters incl. Player Character, Painting Guardian, Hollow Soldier, Balder Knight)
+193	Probably related to: Shared character effect (TAE event 96; 4 characters incl. Player Character, Painting Guardian, Hollow Soldier, Balder Knight) (sibling id 192)
+194	Probably related to: Shared character effect (TAE event 96; 4 characters incl. Player Character, Painting Guardian, Hollow Soldier, Balder Knight) (sibling id 192)
+201	Unidentified effect (smoke/fire; ships in CommonEffects)
+209	Probably related to: Co-op Send status visual (midst) (sibling id 212)
+211	Probably related to: Co-op Send status visual (midst) (sibling id 212)
+212	Co-op Send status visual (midst)
+213	Co-op status visual (midst)
+214	Variant of Cutscene effect (scn170000, Duke's Archives) (same sprite set as 170004)
+215	Player cast/gesture effect
+220	Probably related to: Player cast/gesture effect (sibling id 215)
+221	Probably related to: Player cast/gesture effect (sibling id 215)
+250	Shared character effect (TAE event 118; 20 characters incl. Player Character, Painting Guardian, Silver Knight, Undead Merchant)
+251	Probably related to: Shared character effect (TAE event 118; 20 characters incl. Player Character, Painting Guardian, Silver Knight, Undead Merchant) (sibling id 250)
+456	Unidentified effect (no sprites; ships in CommonEffects)
+459	Unidentified effect (fire; ships in CommonEffects)
+471	Unidentified effect (smoke; ships in m15_01)
+472	Unidentified effect (dust/debris/sparkle; ships in m12, m13)
+474	Unidentified effect (no sprites; ships in CommonEffects)
+478	Unidentified effect (no sprites; ships in m12)
+480	Unidentified effect (dust/debris; ships in CommonEffects)
+481	Unidentified effect (dust/debris; ships in CommonEffects)
+482	Unidentified effect (no sprites; ships in CommonEffects)
+483	Unidentified effect (no sprites; ships in CommonEffects)
+489	Unidentified effect (smoke/blood/liquid; ships in CommonEffects)
+510	Probably related to: Candlestick flame (sibling id 511)
+511	Candlestick flame
+512	Candlestick / candle flame (variant)
+513	Wall torch flame
+530	Wall torch flame (small)
+540	Tomb of the Giants resonance lantern (Skull Lantern response)
+556	Unidentified effect (no sprites; ships in CommonEffects)
+559	Unidentified effect (fire; ships in CommonEffects)
+571	Unidentified effect (smoke; ships in m15_01)
+572	Unidentified effect (dust/debris/sparkle; ships in m12, m13)
+574	Unidentified effect (no sprites; ships in CommonEffects)
+578	Unidentified effect (no sprites; ships in m12)
+580	Unidentified effect (dust/debris; ships in CommonEffects)
+581	Unidentified effect (dust/debris; ships in CommonEffects)
+582	Unidentified effect (no sprites; ships in CommonEffects)
+583	Unidentified effect (no sprites; ships in CommonEffects)
+589	Unidentified effect (smoke/blood/liquid; ships in CommonEffects)
+700	Unidentified effect (glow; ships in CommonEffects)
+710	Unidentified effect (smoke/glow; ships in CommonEffects)
+800	Probably related to: Poison Aura status visual (midst) (sibling id 810)
+801	Probably related to: Poison Aura status visual (midst) (sibling id 810)
+810	Poison Aura status visual (midst)
+815	Durability Damage status visual (midst)
+820	Channeler Buff status visual (midst)
+825	Dragon Roar status visual (midst)
+830	Toxic Aura status visual (midst)
+835	Estus Unusable status visual (midst)
+840	Bleed Aura status visual (midst)
+845	[DLC] Dark Enhancement status visual (midst)
+850	Magic Use Prohibited status visual (midst)
+860	HP Recovery State status visual (midst)
+870	Tranquil Walk Of Peace status visual (midst)
+880	Probably related to: Tranquil Walk Of Peace status visual (midst) (sibling id 870)
+881	Probably related to: Slime Covered status visual (midst) (sibling id 890)
+890	Slime Covered status visual (midst)
+900	Petrification status visual (midst)
+901	Undead Rapport status visual (midst)
+902	Probably related to: Undead Rapport status visual (midst) (sibling id 901)
+910	Probably related to: Undead Rapport status visual (midst) (sibling id 901)
+1001	Per-map common effect slot 1 (m10_00)
+1002	Per-map common effect slot 2 (m10_00)
+1011	Per-map common effect slot 1 (m10_01)
+1012	Per-map common effect slot 2 (m10_01)
+1021	Per-map common effect slot 1 (m10_02)
+1022	Per-map common effect slot 2 (m10_02)
+1101	Per-map common effect slot 1 (m11)
+1102	Per-map common effect slot 2 (m11)
+1201	Per-map common effect slot 1 (m12)
+1202	Per-map common effect slot 2 (m12)
+1211	Per-map common effect slot 1 (m12_01)
+1212	Per-map common effect slot 2 (m12_01)
+1301	Per-map common effect slot 1 (m13_00)
+1302	Per-map common effect slot 2 (m13_00)
+1311	Per-map common effect slot 1 (m13_01)
+1312	Per-map common effect slot 2 (m13_01)
+1321	Per-map common effect slot 1 (m13_02)
+1322	Per-map common effect slot 2 (m13_02)
+1401	Per-map common effect slot 1 (m14_00)
+1402	Per-map common effect slot 2 (m14_00)
+1411	Per-map common effect slot 1 (m14_01)
+1412	Per-map common effect slot 2 (m14_01)
+1501	Per-map common effect slot 1 (m15_00)
+1502	Per-map common effect slot 2 (m15_00)
+1511	Per-map common effect slot 1 (m15_01)
+1512	Per-map common effect slot 2 (m15_01)
+1601	Per-map common effect slot 1 (m16)
+1602	Per-map common effect slot 2 (m16)
+1701	Per-map common effect slot 1 (m17)
+1702	Per-map common effect slot 2 (m17)
+1801	Per-map common effect slot 1 (m18_00)
+1802	Per-map common effect slot 2 (m18_00)
+1811	Per-map common effect slot 1 (m18_01)
+1812	Per-map common effect slot 2 (m18_01)
+2001	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2005	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2006	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2007	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2020	Library building block: no sprite (emitter/behaviour module); called by 191 effects
+2022	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2023	Library building block: no sprite (emitter/behaviour module); called by 1694 effects
+2024	Library building block: no sprite (emitter/behaviour module); called by 48 effects
+2031	Library building block: no sprite (emitter/behaviour module); called by 148 effects
+2032	Library building block: no sprite (emitter/behaviour module); called by 475 effects
+2033	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2101	Library building block: no sprite (emitter/behaviour module); called by 1078 effects
+2102	Library building block: no sprite (emitter/behaviour module); called by 5 effects
+2105	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2113	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2115	Library building block: no sprite (emitter/behaviour module); called by 1 effects
+2116	Library building block: no sprite (emitter/behaviour module); called by 20 effects
+2117	Library building block: no sprite (emitter/behaviour module); called by 180 effects
+2118	Library building block: no sprite (emitter/behaviour module); called by 40 effects
+2120	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2121	Library building block: no sprite (emitter/behaviour module); called by 923 effects
+2122	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2123	Library building block: no sprite (emitter/behaviour module); called by 89 effects
+2124	Library building block: no sprite (emitter/behaviour module); called by 0 effects
+2125	Library building block: no sprite (emitter/behaviour module); called by 3 effects
+3000	Footstep dust: walk on dummy
+3001	Footstep dust: walk on stone (outdoor)
+3002	Footstep dust: walk on stone (indoor)
+3003	Footstep dust: walk on soil
+3004	Footstep dust: walk on wood
+3005	Footstep dust: walk on grass
+3006	Footstep dust: walk on gravel
+3007	Footstep dust: walk on snow
+3008	Footstep dust: walk on ice
+3009	Footstep dust: walk on iron
+3010	Footstep dust: walk on sand
+3011	Footstep dust: walk on bone
+3012	Footstep dust: walk on ash
+3014	Footstep dust: walk on rotten wood
+3015	Footstep dust: walk on giant tree
+3017	Footstep dust: walk on snow (no footprints)
+3019	Footstep dust: walk on water (slide)
+3020	Footstep dust: walk on water (puddle)
+3021	Footstep dust: walk on water (ankle)
+3022	Footstep dust: walk on slime
+3023	Footstep dust: walk on poison swamp
+3025	Footstep dust: walk on coal tar
+3026	Footstep dust: walk on chimera swamp
+3027	Footstep dust: walk on lava
+3028	Footstep dust: walk on carpet
+3029	Footstep dust: walk on none
+3100	Footstep dust: run on dummy
+3101	Footstep dust: run on stone (outdoor)
+3102	Footstep dust: run on stone (indoor)
+3103	Footstep dust: run on soil
+3104	Footstep dust: run on wood
+3105	Footstep dust: run on grass
+3106	Footstep dust: run on gravel
+3107	Footstep dust: run on snow
+3108	Footstep dust: run on ice
+3109	Footstep dust: run on iron
+3110	Footstep dust: run on sand
+3111	Footstep dust: run on bone
+3112	Footstep dust: run on ash
+3114	Footstep dust: run on rotten wood
+3115	Footstep dust: run on giant tree
+3120	Footstep dust: run on water (puddle)
+3121	Footstep dust: run on water (ankle)
+3122	Footstep dust: run on slime
+3123	Footstep dust: run on poison swamp
+3125	Footstep dust: run on coal tar
+3127	Footstep dust: run on lava
+3128	Footstep dust: run on carpet
+3129	Footstep dust: run on none
+3200	Footstep dust: dash on dummy
+3201	Footstep dust: dash on stone (outdoor)
+3202	Footstep dust: dash on stone (indoor)
+3203	Footstep dust: dash on soil
+3204	Footstep dust: dash on wood
+3205	Footstep dust: dash on grass
+3206	Footstep dust: dash on gravel
+3207	Footstep dust: dash on snow
+3208	Footstep dust: dash on ice
+3209	Footstep dust: dash on iron
+3210	Footstep dust: dash on sand
+3211	Footstep dust: dash on bone
+3212	Footstep dust: dash on ash
+3214	Footstep dust: dash on rotten wood
+3215	Footstep dust: dash on giant tree
+3219	Footstep dust: dash on water (slide)
+3220	Footstep dust: dash on water (puddle)
+3221	Footstep dust: dash on water (ankle)
+3222	Footstep dust: dash on slime
+3223	Footstep dust: dash on poison swamp
+3225	Footstep dust: dash on coal tar
+3227	Footstep dust: dash on lava
+3228	Footstep dust: dash on carpet
+3229	Footstep dust: dash on none
+3300	Footstep dust: landing on dummy
+3301	Footstep dust: landing on stone (outdoor)
+3302	Footstep dust: landing on stone (indoor)
+3303	Footstep dust: landing on soil
+3304	Footstep dust: landing on wood
+3305	Footstep dust: landing on grass
+3306	Footstep dust: landing on gravel
+3307	Footstep dust: landing on snow
+3308	Footstep dust: landing on ice
+3309	Footstep dust: landing on iron
+3310	Footstep dust: landing on sand
+3312	Footstep dust: landing on ash
+3314	Footstep dust: landing on rotten wood
+3315	Footstep dust: landing on giant tree
+3317	Footstep dust: landing on snow (no footprints)
+3320	Footstep dust: landing on water (puddle)
+3321	Footstep dust: landing on water (ankle)
+3322	Footstep dust: landing on slime
+3323	Footstep dust: landing on poison swamp
+3325	Footstep dust: landing on coal tar
+3327	Footstep dust: landing on lava
+3328	Footstep dust: landing on carpet
+3400	Footstep dust: roll/heavy landing on dummy
+3401	Footstep dust: roll/heavy landing on stone (outdoor)
+3402	Footstep dust: roll/heavy landing on stone (indoor)
+3403	Footstep dust: roll/heavy landing on soil
+3404	Footstep dust: roll/heavy landing on wood
+3405	Footstep dust: roll/heavy landing on grass
+3406	Footstep dust: roll/heavy landing on gravel
+3407	Footstep dust: roll/heavy landing on snow
+3408	Footstep dust: roll/heavy landing on ice
+3409	Footstep dust: roll/heavy landing on iron
+3410	Footstep dust: roll/heavy landing on sand
+3411	Footstep dust: roll/heavy landing on bone
+3412	Footstep dust: roll/heavy landing on ash
+3414	Footstep dust: roll/heavy landing on rotten wood
+3415	Footstep dust: roll/heavy landing on giant tree
+3417	Footstep dust: roll/heavy landing on snow (no footprints)
+3420	Footstep dust: roll/heavy landing on water (puddle)
+3421	Footstep dust: roll/heavy landing on water (ankle)
+3422	Footstep dust: roll/heavy landing on slime
+3423	Footstep dust: roll/heavy landing on poison swamp
+3425	Footstep dust: roll/heavy landing on coal tar
+3427	Footstep dust: roll/heavy landing on lava
+3428	Footstep dust: roll/heavy landing on carpet
+3429	Footstep dust: roll/heavy landing on none
+3601	Player animation effect
+3602	Probably related to: Player animation effect (sibling id 3601)
+4200	Slime: attack effect (anim 0,200,201,202...)
+4201	Probably related to: Slime: attack effect (anim 0,200,201,202...) (sibling id 4200)
+4211	Unidentified effect (no sprites; ships in CommonEffects)
+4220	Unidentified effect (blood/liquid; ships in m10_00)
+4221	Unidentified effect (blood/liquid; ships in m10_00)
+4320	Unidentified effect (blood/liquid; ships in m10_00)
+4321	Unidentified effect (blood/liquid; ships in m10_00)
+4420	Unidentified effect (no sprites; ships in m10_00)
+4421	Unidentified effect (blood/liquid/smoke; ships in m10_00)
+4521	Unidentified effect (blood/liquid/smoke; ships in m10_00)
+4600	Skeleton: attack effect (anim 200,201,202,203...)
+4601	Probably related to: Skeleton: attack effect (anim 200,201,202,203...) (sibling id 4600)
+4602	Probably related to: Skeleton: attack effect (anim 200,201,202,203...) (sibling id 4600)
+4603	Probably related to: Skeleton: attack effect (anim 200,201,202,203...) (sibling id 4600)
+4606	Probably related to: Skeleton: attack effect (anim 200,201,202,203...) (sibling id 4600)
+4620	Unidentified effect (no sprites; ships in m10_02, m13)
+4621	Unidentified effect (no sprites; ships in m10_02, m13)
+5000	Player animation effect
+5001	Standard Arrow weapon art (projectile)
+5002	Standard Arrow weapon art (impact)
+5003	Standard Arrow weapon art (deflect)
+5010	Probably related to: Large Arrow weapon art (projectile) (sibling id 5011)
+5011	Large Arrow weapon art (projectile)
+5012	Large Arrow weapon art (impact)
+5013	Large Arrow weapon art (deflect)
+5020	Probably related to: Feather Arrow weapon art (projectile) (sibling id 5021)
+5021	Feather Arrow weapon art (projectile)
+5022	Feather Arrow weapon art (impact)
+5023	Feather Arrow weapon art (deflect)
+5030	Probably related to: Fire Arrow weapon art (projectile) (sibling id 5031)
+5031	Fire Arrow weapon art (projectile)
+5032	Fire Arrow weapon art (impact)
+5033	Fire Arrow weapon art (deflect)
+5040	Probably related to: Poison Arrow weapon art (projectile) (sibling id 5041)
+5041	Poison Arrow weapon art (projectile)
+5042	Poison Arrow weapon art (impact)
+5043	Poison Arrow weapon art (deflect)
+5050	Probably related to: Moonlight Arrow weapon art (projectile) (sibling id 5051)
+5051	Moonlight Arrow weapon art (projectile)
+5052	Moonlight Arrow weapon art (impact)
+5053	Moonlight Arrow weapon art (deflect)
+5060	Probably related to: Wooden Arrow weapon art (projectile) (sibling id 5061)
+5061	Wooden Arrow weapon art (projectile)
+5062	Wooden Arrow weapon art (impact)
+5063	Wooden Arrow weapon art (deflect)
+5070	Probably related to: Dragonslayer Arrow weapon art (projectile) (sibling id 5071)
+5071	Dragonslayer Arrow weapon art (projectile)
+5072	Dragonslayer Arrow weapon art (impact)
+5073	Dragonslayer Arrow weapon art (deflect)
+5080	Probably related to: Gough's Great Arrow weapon art (projectile) (sibling id 5081)
+5081	Gough's Great Arrow weapon art (projectile)
+5082	Gough's Great Arrow weapon art (impact)
+5083	Gough's Great Arrow weapon art (deflect)
+5990	Unidentified effect (no sprites; ships in CommonEffects)
+6000	Player animation effect
+6001	Standard Bolt weapon art (projectile)
+6002	Standard Bolt weapon art (impact)
+6003	Standard Bolt weapon art (deflect)
+6010	Probably related to: Heavy Bolt weapon art (projectile) (sibling id 6011)
+6011	Heavy Bolt weapon art (projectile)
+6012	Heavy Bolt weapon art (impact)
+6013	Heavy Bolt weapon art (deflect)
+6020	Probably related to: Sniper Bolt weapon art (projectile) (sibling id 6021)
+6021	Sniper Bolt weapon art (projectile)
+6022	Sniper Bolt weapon art (impact)
+6023	Sniper Bolt weapon art (deflect)
+6030	Probably related to: Wood Bolt weapon art (projectile) (sibling id 6031)
+6031	Wood Bolt weapon art (projectile)
+6032	Wood Bolt weapon art (impact)
+6033	Wood Bolt weapon art (deflect)
+6040	Probably related to: Lightning Bolt weapon art (projectile) (sibling id 6041)
+6041	Lightning Bolt weapon art (projectile)
+6042	Lightning Bolt weapon art (impact)
+6043	Lightning Bolt weapon art (deflect)
+6990	Unidentified effect (no sprites; ships in CommonEffects)
+10000	Shared character effect (TAE event 96; 5 characters incl. Painting Guardian, Hollow Assassin, Hollow Soldier, Balder Knight)
+10800	Large-character variant of effect 800
+10801	Large-character variant of effect 801
+10810	Poison Aura status visual (midst) (large-character variant)
+10815	Durability Damage status visual (midst) (large-character variant)
+10820	Channeler Buff status visual (midst) (large-character variant)
+10830	Toxic Aura status visual (midst) (large-character variant)
+10835	Estus Unusable status visual (midst) (large-character variant)
+10840	Bleed Aura status visual (midst) (large-character variant)
+10850	Magic Use Prohibited status visual (midst) (large-character variant)
+10860	HP Recovery State status visual (midst) (large-character variant)
+10870	Tranquil Walk Of Peace status visual (midst) (large-character variant)
+10880	Large-character variant of effect 880 / Part of Large-character variant of effect 881
+10881	Large-character variant of effect 881
+10900	Petrification status visual (midst) (large-character variant)
+10901	Undead Rapport status visual (midst) (large-character variant)
+10910	Large-character variant of effect 910
+10915	Large-character variant of effect 915
+10920	Large-character variant of effect 920
+10930	Large-character variant of effect 930
+10935	Large-character variant of effect 935
+10940	Large-character variant of effect 940
+10945	Large-character variant of effect 945
+10950	Large-character variant of effect 950
+10960	Large-character variant of effect 960
+10970	Large-character variant of effect 970
+10980	Large-character variant of effect 980 / Part of Large-character variant of effect 981
+10981	Large-character variant of effect 981
+11030	Demon Firesage: event/idle effect (anim 0)
+11031	Demon Firesage: event/idle effect (anim 0)
+11032	Demon Firesage: event/idle effect (anim 0)
+11033	Probably related to: Demon Firesage: event/idle effect (anim 0) (sibling id 11032)
+11034	Probably related to: Demon Firesage: event/idle effect (anim 0) (sibling id 11035)
+11035	Demon Firesage: event/idle effect (anim 0)
+11036	Demon Firesage: attack effect (anim 3000,3001,3002,3003...)
+12061	Infested Ghoul: attack effect (anim 3300)
+12230	Stray Demon: forward magic (impact) (projectile)
+12231	Stray Demon: self-centred magic (impact) (projectile)
+12232	Asylum Demon: attack effect (anim 1750,3008,9060)
+12234	Stray Demon: attack effect (anim 3000,3001,3002,3003...)
+12235	Stray Demon: attack effect (anim 3002,3003,3004)
+12236	Stray Demon effect
+12237	Asylum Demon: attack effect (anim 3000,3001,3002,3003...)
+12238	Stray Demon: attack effect (anim 3006)
+12239	Asylum Demon: attack effect (anim 200,201,202,203...)
+12240	Capra Demon: attack effect (anim 3001,3004)
+12241	Capra Demon: attack effect (anim 3000,3001,3002,3003...)
+12242	Capra Demon: event/idle effect (anim 0)
+12250	Taurus Demon: attack effect (anim 3000,3001,3002,3003...)
+12258	Taurus Demon: event/idle effect (anim 0)
+12260	Batwing Demon: spear throw 1 (projectile)
+12261	Batwing Demon: spear throw 1 (impact)
+12262	Batwing Demon: attack effect (anim 3006)
+12303	Titanite Demon: lightning magic (projectile)
+12304	Titanite Demon: lightning magic (impact)
+12305	Titanite Demon: attack effect (anim 3009)
+12306	Titanite Demon: attack effect (anim 3009)
+12320	Iron Golem: attack effect (anim 3000,3001,3002,3003...)
+12321	Iron Golem: event/idle effect (anim 7002)
+12322	Iron Golem: attack effect (anim 3000,3001,3002,3003...)
+12324	Iron Golem: shockwave from axe (projectile)
+12325	Iron Golem: shockwave from axe (impact)
+12326	Iron Golem effect
+12330	Demonic Foliage: event/idle effect (anim 9060)
+12360	Executioner Smough: event/idle effect (anim 10000)
+12362	Executioner Smough: event/idle effect (anim 13008)
+12363	Executioner Smough: event/idle effect (anim 13008)
+12364	Executioner Smough: attack effect (anim 1750,3000,3001,3002...)
+12365	Executioner Smough: attack effect (anim 3007,3008,13007,13008)
+12370	Channeler: magic shot 1 (projectile)
+12371	Channeler: magic shot 1 (impact)
+12372	Channeler: magic shot 2 (long) (projectile)
+12373	Channeler: attack effect (anim 3005)
+12374	Channeler: attack effect (anim 3006)
+12375	Channeler: attack effect (anim 3007)
+12376	Channeler: attack effect (anim 3008)
+12380	Stone Knight: attack effect (anim 3007)
+12381	Stone Knight effect
+12382	Stone Knight: attack effect (anim 3007)
+12383	Stone Knight: attack effect (anim 3000,3001,3002,3003...)
+12384	Stone Guardian: attack effect (anim 3004)
+12385	Stone Guardian: attack effect (anim 3003,3005)
+12390	Darkwraith: attack effect (anim 3008)
+12391	Darkwraith: attack effect (anim 3300)
+12392	Darkwraith: event/idle effect (anim 9100,9101,9102,9103...)
+12393	Darkwraith effect
+12410	Silver Knight: greatbow shot (projectile)
+12411	Silver Knight: greatbow shot (impact)
+12430	Demonic Statue: breath (front, long) (projectile)
+12431	Demonic Statue effect
+12500	Hollow: event/idle effect (anim 10000,10200,10201,10202...)
+12501	Shared character effect (TAE event 96/109; 14 characters incl. Hollow, Undead Merchant, Hollow Assassin, Blowdart Sniper)
+12520	Painting Guardian: knife throw (projectile)
+12521	Painting Guardian: knife throw (impact)
+12522	Painting Guardian: knife throw (deflect)
+12523	Hollow Assassin: attack effect (anim 3101,3300)
+12530	Blowdart Sniper: blowdart (projectile)
+12531	Blowdart Sniper: blowdart (impact)
+12532	Blowdart Sniper: blowdart (deflect)
+12540	Hollow Warrior: bottle throw (projectile)
+12541	Hollow Warrior effect
+12650	Necromancer: magic shot from skeleton (projectile)
+12651	Necromancer: magic shot from skeleton (impact)
+12652	Necromancer: attack effect (anim 3001)
+12653	Necromancer: event/idle effect (anim 0)
+12654	Necromancer: attack effect (anim 3000)
+12660	Butcher: attack effect (anim 3003)
+12661	Butcher: attack effect (anim 3300)
+12670	Ghost (Male): magic shot (projectile)
+12671	Ghost (Male): magic shot (impact)
+12672	Ghost (Male): reaction effect (anim 1610,1620,2200,2202...)
+12673	Ghost (Male): reaction effect (anim 1610,1620,2200,2202...)
+12674	Ghost (Male): attack effect (anim 3300)
+12680	Ghost (Female): thrusts out baby (projectile)
+12681	Ghost (Female): thrusts out baby (impact)
+12682	Ghost (Female): attack effect (anim 3300,3301)
+12700	Serpent Mage: spits venom (projectile)
+12701	Serpent Mage: spits venom (impact)
+12702	Serpent Mage: magic shot (projectile)
+12703	Serpent Mage: magic shot (impact)
+12704	Serpent Mage: attack effect (anim 3300,3301)
+12710	Golden Crystal Golem: attack effect (anim 3006)
+12711	Golden Crystal Golem: ground slam (child) (impact)
+12712	Golden Crystal Golem: attack effect (anim 3007,3008)
+12713	Crystal Golem: attack effect (anim 3006)
+12714	Crystal Golem: ground slam (variant 1) (impact)
+12730	Crossbreed Priscilla: breath (at feet) (projectile)
+12731	Crossbreed Priscilla effect
+12732	Crossbreed Priscilla: event/idle effect (anim 8000)
+12733	Crossbreed Priscilla: attack effect (anim 3007)
+12750	Anastacia: event/idle effect (anim 7003)
+12780	Mimic: attack effect (anim 3300,3301,3302,3310...)
+12790	Black Knight (Ghost): event/idle effect (anim 200,201,202,203)
+12800	Undead Crystal Soldier effect
+12801	Undead Crystal Soldier effect
+12810	Infested Barbarian (boulder): Rock throw (projectile)
+12811	Infested Barbarian (boulder): Rock throw (impact)
+12812	Infested Barbarian (boulder): attack effect (anim 2014,2020,2200,2202...)
+12830	Phalanx: spear throw (projectile)
+12831	Phalanx: spear throw (impact)
+12832	Phalanx: spear throw (deflect)
+12840	Engorged Hollow: spits blood poison mist (projectile)
+12841	Engorged Hollow: spits blood poison mist (impact)
+12842	Engorged Hollow: pyromancy 1 (projectile)
+12843	Engorged Hollow: pyromancy 1 (impact)
+12844	Engorged Hollow: pyromancy 2 (projectile)
+12845	Engorged Hollow effect
+12846	Engorged Hollow: reaction effect (anim 2200,2204,2205,2207...)
+12847	Engorged Hollow: event/idle effect (anim 13004)
+12848	Engorged Hollow effect
+12849	Engorged Hollow: reaction effect (anim 1610,1620,1621,1760...)
+12859	Giant: attack effect (anim 3000,3001,3002,3003...)
+12860	Giant: throw 1 (projectile)
+12861	Giant: throw 1 (impact)
+12862	Giant: fire jar (link) (projectile)
+12863	Giant: fire jar (impact) (projectile)
+12864	Giant: event/idle effect (anim 9002)
+12865	Vamos: event/idle effect (anim 7000,9003)
+12870	Sentinel: attack effect (anim 3008,3009,3010,4008...)
+12871	Sentinel effect
+12872	Sentinel: attack effect (anim 3011)
+12873	Sentinel: attack effect (anim 3011)
+12874	Sentinel: attack effect (anim 3012)
+12875	Sentinel: miracle, Wrath of the Gods (projectile)
+12876	Sentinel: attack effect (anim 3011)
+12900	Skeleton: death effect (anim 0,6120,7000)
+12901	Skeleton: death effect (anim 2504,2514,6100,6200...)
+12910	c2901: greatbow arrow (projectile)
+12911	c2901: greatbow arrow (impact)
+12914	Giant Skeleton: death effect (anim 0,6120)
+12960	Bone Tower: event/idle effect (anim 9060,9070)
+13090	Giant Mosquito: poison blood spray (projectile)
+13110	Crystal Lizard (unused): event/idle effect (anim 0)
+13200	Slime: attack effect (anim 3000,3001)
+13201	Slime: dripping drops (projectile)
+13202	Slime: dripping drops (impact)
+13211	Egg Carrier: reaction effect (anim 2200,2202,2203,2204...)
+13220	Vile Maggot effect
+13221	Vile Maggot effect
+13225	Vile Maggot effect
+13226	Moonlight Butterfly: event/idle effect (anim 7000)
+13227	Moonlight Butterfly: event/idle effect (anim 13001)
+13228	Moonlight Butterfly: attack effect (anim 3015)
+13229	Moonlight Butterfly: area explosion (projectile)
+13230	Moonlight Butterfly effect
+13232	Moonlight Butterfly: attack effect (anim 3000,3001,3004,3007...)
+13233	Moonlight Butterfly: attack effect (anim 3000)
+13234	Moonlight Butterfly: attack effect (anim 3000,7000)
+13235	Moonlight Butterfly: magic spear (projectile)
+13236	Moonlight Butterfly: magic spear (large) (projectile)
+13237	Moonlight Butterfly: magic spear (impact)
+13238	Moonlight Butterfly: magic spear (extra large) (projectile)
+13239	Moonlight Butterfly: magic spear (extra large) (impact) (projectile)
+13240	Chaos Eater: digestive fluid (projectile)
+13241	Chaos Eater effect
+13242	Chaos Eater: attack effect (anim 3300)
+13243	Chaos Eater: attack effect (anim 3300)
+13250	Man-Eater Shell: attack effect (anim 3300)
+13270	Basilisk: petrifying breath (projectile)
+13271	Basilisk: jump and breath (projectile)
+13272	Basilisk: jump and breath impact, for SFX (projectile)
+13290	Brain Bug (unused): reaction effect (anim 1750,2200,2202)
+13291	Brain Bug (unused): attack effect (anim 2205,3003)
+13292	Brain Bug (unused): attack effect (anim 2203,3004)
+13314	Pinwheel: attack effect (anim 3004,3008)
+13315	Pinwheel: attack effect (anim 3004)
+13316	Pinwheel: attack effect (anim 3009)
+13317	Pinwheel: attack effect (anim 3009)
+13318	Pinwheel: attack effect (anim 3000,3006)
+13319	Pinwheel: attack effect (anim 3001,3003,3005,3007)
+13320	Pinwheel: attack effect (anim 3000,3001,3003,3004...)
+13321	Pinwheel: attack effect (anim 3000,3001,3003,3005...)
+13322	Pinwheel: magic circle A (projectile)
+13323	Pinwheel: magic circle A (inverted) (projectile)
+13324	Pinwheel effect
+13325	Pinwheel: magic circle A (impact)
+13326	Pinwheel: magic circle A (inverted) (impact)
+13327	Pinwheel: attack effect (anim 3003,3005)
+13328	Pinwheel: attack effect (anim 3008)
+13329	Pinwheel: event/idle effect (anim 7000)
+13330	Pisaca: spits ink (projectile)
+13331	Pisaca: spits ink (impact)
+13332	Pisaca: attack effect (anim 3002)
+13340	Flaming Attack Dog: breathes fire (projectile)
+13341	Flaming Attack Dog: attack effect (anim 3003)
+13380	Giant Leech: slime (projectile)
+13390	Burrowing Rockworm: spits liquid at short range (projectile)
+13391	Burrowing Rockworm: spits liquid at short range (impact)
+13392	Burrowing Rockworm: event/idle effect (anim 13300,13301,13302,23300...)
+13395	Burrowing Rockworm: event/idle effect (anim 19060)
+13396	Burrowing Rockworm: event/idle effect (anim 13005,13300,13301)
+13397	Burrowing Rockworm: event/idle effect (anim 13000,13001,13005,23000...)
+13398	Burrowing Rockworm: event/idle effect (anim 29060)
+13399	Burrowing Rockworm: event/idle effect (anim 39060)
+13400	Cragspider: magma from umbilical cord (impact) (projectile)
+13401	Cragspider: attack effect (anim 3002,3003,3004,3005)
+13402	Cragspider: attack effect (anim 3006)
+13410	Frog-Ray: slime (projectile)
+13411	Frog-Ray: event/idle effect (anim 7000)
+13420	Undead Dragon: acid breath (for right) (projectile)
+13421	Undead Dragon: attack effect (anim 3000,3001,3002)
+13422	Undead Dragon: attack effect (anim 200,3003,3004,3005...)
+13423	Undead Dragon: event/idle effect (anim 200,9060)
+13424	Undead Dragon: event/idle effect (anim 9060)
+13425	Undead Dragon effect
+13426	Undead Dragon: attack effect (anim 3000)
+13427	Undead Dragon: attack effect (anim 3001)
+13428	Undead Dragon: attack effect (anim 3002)
+13429	Undead Dragon: attack effect (anim 3008,3009,3012)
+13450	Everlasting Dragon: attack effect (anim 3001)
+13451	Everlasting Dragon: attack effect (anim 3002)
+13452	Everlasting Dragon: attack effect (anim 3000)
+13453	Everlasting Dragon: attack effect (anim 3000)
+13460	Armored Tusk: attack effect (anim 3000,3009)
+13461	Armored Tusk: event/idle effect (anim 0)
+13462	Armored Tusk: attack effect (anim 500,502,503,2100...)
+13463	Armored Tusk: attack effect (anim 701,1750,2014,2020...)
+13464	Armored Tusk: attack effect (anim 3002,3005)
+13465	Armored Tusk: attack effect (anim 3004)
+13466	Armored Tusk (rear guard): attack effect (anim 200,201,202,203...)
+13467	Armored Tusk: attack effect (anim 3001,3002,3008)
+13468	Armored Tusk: attack effect (anim 3006)
+13469	Sanctuary Guardian: event/idle effect (anim 0)
+13470	Sanctuary Guardian: breath 1 dummy (projectile)
+13471	Sanctuary Guardian (unused): wing wind (impact/projectile)
+13472	Sanctuary Guardian: breath 2 dummy (projectile)
+13473	Sanctuary Guardian: breath 2 dummy (impact)
+13474	Sanctuary Guardian: wing wind (projectile)
+13475	Sanctuary Guardian: wing wind (impact)
+13476	Sanctuary Guardian: attack effect (anim 3007,3008,3018,3019...)
+13477	Sanctuary Guardian: attack effect (anim 3007,3008,3018,3019...)
+13478	Sanctuary Guardian: attack effect (anim 3007,3008,3018,3019...)
+13479	Sanctuary Guardian: attack effect (anim 3007,3008,3018,3019...)
+13480	Chaos Bug: event/idle effect (anim 0)
+13481	Chaos Bug: event/idle effect (anim 90000)
+13485	Sanctuary Guardian: attack effect (anim 3017)
+13490	Evil Vagrant: thorn launch, with damage level (projectile)
+13491	Evil Vagrant: thorn launch, with damage level (impact)
+13492	Evil Vagrant: event/idle effect (anim 0)
+13500	Mass of Souls: slime shot (near) (projectile)
+13501	Mass of Souls: attack effect (anim 3000,3001,3002)
+13503	Mass of Souls: slime shot (near) (impact)
+13506	Wisp: attack effect (anim 3000)
+13507	Wisp: event/idle effect (anim 0,200,500,8300)
+13508	Mass of Souls effect
+13509	Wisp: self-destruct (impact) (projectile)
+13510	Giant Crow effect
+13520	Drake: up-down breath (projectile)
+13521	Drake: breath impact (projectile)
+13522	Drake: attack effect (anim 3000,3001,3002,3003...)
+13523	Drake: attack effect (anim 3000,3001,3002,3003...)
+13530	Hydra: breath moving from point A to point B (projectile)
+13531	Hydra effect
+13532	Hydra effect
+13533	Hydra: breath (impact, child) (projectile)
+13534	Hydra (head): event/idle effect (anim 8100)
+13535	Hydra effect
+13536	Hydra: attack effect (anim 3010,3011,3014,9060)
+13537	Hydra: sand cloud SFX spawner (impact) (projectile)
+13538	Hydra effect
+13539	Hydra: attack effect (anim 3010,3011,3014,9060)
+13540	Hydra: attack effect (anim 0,200,201,202...)
+13541	Hydra (head): event/idle effect (anim 8100)
+13570	Sanctuary Guardian: aerial breath (child) (impact)
+13571	Sanctuary Guardian: aerial breath (grandchild) (impact)
+13572	Sanctuary Guardian: aerial breath (great-grandchild) (impact)
+13573	Sanctuary Guardian: aerial breath (great-great-grandchild) (impact)
+13574	Sanctuary Guardian: aerial breath (great-great-great-grandchild) (impact)
+13575	Sanctuary Guardian: event/idle effect (anim 8000)
+13901	Artorias: attack effect (anim 200,201,202,203...)
+13902	Artorias: attack effect (anim 500,3000,3001,3004...)
+13904	Artorias: attack effect (anim 3000,3001,3002,3003...)
+13906	Artorias: attack effect (anim 3013)
+13907	Artorias: attack effect (anim 3001,3007,3008)
+13908	Artorias: self-buff (projectile)
+13909	Artorias: self-buff (impact)
+13910	Artorias: event/idle effect (anim 0)
+13911	Artorias: event/idle effect (anim 0)
+13912	Artorias: attack effect (anim 3002,3003,3009,3014...)
+13913	Artorias: attack effect (anim 3002,3004,3005,3007...)
+13914	Artorias: attack effect (anim 3004,3007)
+13915	Artorias: left-hand tackle (main body) (projectile)
+13916	Artorias: left-hand tackle (main body) (impact)
+13917	Artorias: left-hand tackle (impact) (projectile)
+13920	Artorias: attack effect (anim 3005)
+14010	Hellkite bridge fire (breath on Undead Burg bridge)
+14011	Hellkite bridge fire (breath on Undead Burg bridge)
+14015	Hellkite bridge fire (breath on Undead Burg bridge)
+14025	Hellkite bridge fire (breath on Undead Burg bridge)
+14035	Hellkite bridge fire (breath on Undead Burg bridge)
+14040	Hellkite bridge fire (breath on Undead Burg bridge)
+14045	Hellkite bridge fire (breath on Undead Burg bridge)
+14110	Hawkeye Gough: attack effect (anim 200,201,202,203...)
+14111	Hawkeye Gough: attack effect (anim 3000,3001,3004,3005...)
+14112	Hawkeye Gough: attack effect (anim 3002,3003,3012,3013)
+14113	Hawkeye Gough: attack effect (anim 3006)
+14114	Hawkeye Gough: attack effect (anim 3007)
+14115	Hawkeye Gough: event/idle effect (anim 7000,9000)
+14120	Hellkite bridge fire (breath on Undead Burg bridge)
+14130	Hellkite bridge fire (breath on Undead Burg bridge)
+14150	Bloathead: event/idle effect (anim 10000)
+14151	Hellkite bridge fire (breath on Undead Burg bridge)
+14152	Hellkite bridge fire (breath on Undead Burg bridge)
+14153	Hellkite bridge fire (breath on Undead Burg bridge)
+14154	Hellkite bridge fire (breath on Undead Burg bridge)
+14162	Hellkite bridge fire (breath on Undead Burg bridge)
+14181	Chained Prisoner: attack effect (anim 200,201,202,203...)
+14190	Abyss Attack Dog: event/idle effect (anim 0)
+14230	Scarecrow: attack effect (anim 3003)
+14231	Scarecrow: attack effect (anim 3005)
+14232	Scarecrow: event/idle effect (anim 19000,19001)
+14250	Bloathead Sorcerer: magic 1 (projectile)
+14251	Bloathead Sorcerer: magic 1 (impact)
+14252	Bloathead Sorcerer: magic 3 (projectile)
+14253	Probably related to: Bloathead Sorcerer: magic 3 (projectile) (sibling id 14252)
+14254	Bloathead Sorcerer: magic 2 (impact, poison) (projectile)
+14255	Bloathead Sorcerer: attack effect (anim 3003)
+14256	Bloathead Sorcerer: attack effect (anim 3004,3005,4005,4105)
+14257	Probably related to: Bloathead Sorcerer: attack effect (anim 3004,3005,4005,4105) (sibling id 14256)
+14260	Humanity Phantom (large): event/idle effect (anim 0)
+14261	Humanity Phantom (large): event/idle effect (anim 0)
+14267	Humanity Phantom (large): Humanity (large) (impact)
+14268	Humanity Phantom (medium): Humanity (medium) (impact)
+14269	Humanity Phantom (small): Humanity (small) (impact)
+14270	Humanity Phantom (medium): event/idle effect (anim 0)
+14271	Humanity Phantom (medium): event/idle effect (anim 0)
+14277	Humanity Phantom (medium): reaction effect (anim 2000,2006)
+14278	Humanity Phantom (large): reaction effect (anim 2000,2006)
+14280	Humanity Phantom (small): event/idle effect (anim 0)
+14281	Humanity Phantom (small): event/idle effect (anim 0)
+14290	Marvelous Chester: rose (projectile)
+14291	Marvelous Chester: rose (impact)
+14292	Marvelous Chester: rose (deflect)
+14410	Black Dragon Kalameet: event/idle effect (anim 7000)
+14411	Black Dragon Kalameet: attack effect (anim 3004,3005,3006,3007...)
+14412	Black Dragon Kalameet: attack effect (anim 3002,3012,3013,3018...)
+14420	Black Dragon Kalameet: attack effect (anim 3000,3001,3003,3010...)
+14421	Black Dragon Kalameet: attack effect (anim 3000,3001,3003,3010...)
+14422	Black Dragon Kalameet: rising-up breath impact (impact)
+14423	Black Dragon Kalameet: straight-line breath (projectile)
+14424	Black Dragon Kalameet: straight-line breath (impact)
+14426	Black Dragon Kalameet: fan-shaped breath (projectile)
+14428	Black Dragon Kalameet: attack effect (anim 3018,3022,7002,7003...)
+14429	Black Dragon Kalameet: event attack (far) breath impact (projectile)
+14430	Black Dragon Kalameet: event/idle effect (anim 0,7000,7002,7003...)
+14431	Black Dragon Kalameet: attack effect (anim 3002)
+14432	Black Dragon Kalameet (tail): event/idle effect (anim 8100)
+14433	Black Dragon Kalameet: attack effect (anim 3300)
+14434	Black Dragon Kalameet: attack effect (anim 3002)
+14435	Black Dragon Kalameet: attack effect (anim 3007,3008,3009,3011...)
+14436	Variant of Black Dragon Kalameet: attack effect (anim 3007,3008,3009,3011...) (same sprite set as 14435)
+14437	Black Dragon Kalameet: straight-down breath (projectile)
+14438	Black Dragon Kalameet: straight-down breath impact (projectile)
+14489	Manus: attack effect (anim 3007,3021)
+14490	Manus: event/idle effect (anim 0)
+14491	Manus: event/idle effect (anim 0)
+14492	Manus: event/idle effect (anim 0)
+14493	Manus: event/idle effect (anim 0)
+14494	Manus: event/idle effect (anim 0)
+14496	Manus: attack effect (anim 3007,3009,3021,3023)
+14497	Manus: attack effect (anim 3007,3009,3021,3023)
+14500	Manus: attack effect (anim 3012,3013,3014)
+14501	Manus: attack effect (anim 3012)
+14502	Manus: magic 1 (main body) (projectile)
+14503	Manus: magic 1 (main body) (impact)
+14505	Manus: attack effect (anim 3013)
+14506	Manus: magic 2 (projectile)
+14507	Manus: magic 2 (impact)
+14509	Manus: attack effect (anim 3014)
+14510	Manus: magic 3 (main body) (projectile)
+14511	Manus: magic 3 (main body) (impact)
+14512	Manus: attack effect (anim 200,500,602,603...)
+14513	Manus: attack effect (anim 1750,2012,3004,3005...)
+14514	Manus: attack effect (anim 3000,3002,3003,3017...)
+14515	Manus: attack effect (anim 3001,3015,3016,3018...)
+14516	Manus: event/idle effect (anim 0)
+14517	Manus: attack effect (anim 3012,3013,3014)
+14518	Manus: attack effect (anim 3020)
+14519	Manus: attack effect (anim 3023)
+14520	Young Sif: event/idle effect (anim 7004)
+14521	Young Sif: event/idle effect (anim 0)
+14522	Young Sif: attack effect (anim 3000,3001,3002,3003...)
+14523	Sif's Magic Circle (Oolacile (DLC))
+15014	Shared character effect (TAE event 96/108; 42 characters incl. Giant Rat, Iron Golem, Mimic, Giant)
+15015	Shared character effect (TAE event 96/108/109; 42 characters incl. Giant Rat, Iron Golem, Mimic, Giant)
+15016	Shared character effect (TAE event 96/108; 42 characters incl. Giant Rat, Iron Golem, Mimic, Giant)
+15024	Shared character effect (TAE event 96; 31 characters incl. Taurus Demon, Silver Knight, Crystal Golem, Golden Crystal Golem)
+15025	Shared character effect (TAE event 96/109; 34 characters incl. Taurus Demon, Silver Knight, Berenike Knight, Crystal Golem)
+15026	Shared character effect (TAE event 96; 33 characters incl. Taurus Demon, Silver Knight, Berenike Knight, Crystal Golem)
+15027	Shared character effect (TAE event 96/109; 4 characters incl. Demonic Statue, Infested Barbarian (club), Infested Barbarian (boulder), Ornstein)
+15028	Infested Barbarian (boulder): reaction effect (anim 1610,1620,2200,2202...)
+15130	Hellkite Dragon: attack effect (anim 3000)
+15131	Hellkite Dragon: attack effect (anim 3000,3002)
+15135	Hellkite Dragon: attack effect (anim 3001)
+15136	Hellkite Dragon: attack effect (anim 3001,3009,3010,7004...)
+15138	Hellkite Dragon: attack effect (anim 3002)
+15139	Wyvern Breath Test (projectile)
+15140	Hellkite Dragon: attack effect (anim 3002,3003,3004,3009...)
+15141	Hellkite Dragon: attack effect (anim 3005,7012)
+15142	Hellkite Dragon: attack effect (anim 3007)
+15143	Hellkite Dragon: attack effect (anim 3002,3008,3009,3010...)
+15144	Variant of Hellkite Dragon: event/idle effect (anim 7011) (same sprite set as 15148)
+15145	Probably related to: Hellkite Dragon: attack effect (anim 3002,3008,3009,3010...) (sibling id 15143)
+15146	Variant of Hellkite Dragon: event/idle effect (anim 7011) (same sprite set as 15148)
+15147	Hellkite Dragon: event/idle effect (anim 7011)
+15148	Hellkite Dragon: event/idle effect (anim 7011)
+15149	Hellkite Dragon: event/idle effect (anim 7011)
+15150	Probably related to: Hellkite Dragon: attack effect (anim 3009) (sibling id 15151)
+15151	Hellkite Dragon: attack effect (anim 3009)
+15152	Probably related to: Hellkite Dragon: attack effect (anim 3009) (sibling id 15151)
+15155	Hellkite Dragon: attack effect (anim 3010)
+15156	Probably related to: Hellkite Dragon: attack effect (anim 3010) (sibling id 15155)
+15160	Variant of Hellkite Dragon: event/idle effect (anim 7004) (same sprite set as 15163)
+15163	Hellkite Dragon: event/idle effect (anim 7004)
+15164	Hellkite Dragon: event/idle effect (anim 7004)
+15166	Hellkite Dragon: event/idle effect (anim 7005)
+15167	Hellkite Dragon: event/idle effect (anim 7005)
+15170	Hellkite Dragon: event/idle effect (anim 7008)
+15171	Hellkite Dragon: event/idle effect (anim 7008)
+15174	Hellkite Dragon: event/idle effect (anim 7009)
+15175	Hellkite Dragon: event/idle effect (anim 7009)
+15176	Hellkite Dragon: event/idle effect (anim 8000,8010)
+15177	Hellkite Dragon: event/idle effect (anim 7013)
+15200	Centipede Demon: fireball first (projectile)
+15201	Centipede Demon: fireball first (impact)
+15202	Centipede Demon: attack effect (anim 3005)
+15203	Centipede Demon: attack effect (anim 3002,3003,3004,3005...)
+15204	Centipede Demon: attack effect (anim 0,3006)
+15205	Centipede Demon: attack effect (anim 3001,3002,3003,3004...)
+15207	Centipede Demon: event/idle effect (anim 0)
+15208	Centipede Demon: event/idle effect (anim 0)
+15209	Centipede Demon: attack effect (anim 3002,3005,3006,3007...)
+15210	Sif: attack effect (anim 3000,3001,3002,3003...)
+15211	Sif: event/idle effect (anim 0)
+15219	Sif effect
+15220	Gravelord Nito: event/idle effect (anim 0)
+15221	Gravelord Nito: event/idle effect (anim 0)
+15222	Gravelord Nito effect
+15223	Gravelord Nito: event/idle effect (anim 0)
+15224	Scripted effect on entity 1311250 (Tomb of the Giants)
+15225	Gravelord Nito: event/idle effect (anim 0)
+15226	Gravelord Nito: event/idle effect (anim 8000,8010,8020)
+15227	Gravelord Nito: attack effect (anim 3004)
+15228	Gravelord Nito: attack effect (anim 3000,3001,3002,3003...)
+15229	Gravelord Nito: attack effect (anim 3002)
+15232	Bed of Chaos: event/idle effect (anim 9060)
+15233	Bed of Chaos: event/idle effect (anim 0)
+15234	Bed of Chaos: attack effect (anim 3000,3001,3002,3003...)
+15235	Bed of Chaos effect
+15236	Bed of Chaos: reaction effect (anim 2200)
+15242	Ceaseless Discharge: attack effect (anim 3024,3025,13022,13023)
+15243	Ornstein: summons and throws lightning bolt (projectile)
+15244	Ornstein: summons and throws lightning bolt (impact)
+15245	Giant Ornstein: attack effect (anim 3300)
+15246	Ceaseless Discharge: event/idle effect (anim 13010,13012,13013,13025...)
+15247	Ceaseless Discharge: attack effect (anim 3024,3025,13010,13012...)
+15248	Ceaseless Discharge: event/idle effect (anim 0)
+15249	Ceaseless Discharge: attack effect (anim 3009,13010,13012,13013...)
+15250	Ceaseless Discharge: attack effect (anim 3001,3005,3016,3020...)
+15251	Flame Fiend: Stage 1 status visual (midst)
+15252	Ceaseless Discharge: event/idle effect (anim 0)
+15253	Ceaseless Discharge effect
+15254	Ceaseless Discharge: attack effect (anim 3009)
+15255	Flame Fiend: Stage 2 status visual (midst)
+15256	Ceaseless Discharge: event/idle effect (anim 13010,13012,13013,13025...)
+15257	Ceaseless Discharge: attack effect (anim 3001,3005,3016,3020)
+15258	Ceaseless Discharge: attack effect (anim 3000,3002,3003,3004...)
+15259	Ceaseless Discharge: event/idle effect (anim 13010,13012,13013,13025...)
+15260	Gaping Dragon: vomit (throw) (projectile)
+15261	Gaping Dragon: vomit (impact) (projectile)
+15262	Gaping Dragon: attack effect (anim 3001,3002,3003,3004...)
+15263	Gaping Dragon: attack effect (anim 3003,3007,3009,3310)
+15264	Gaping Dragon: attack effect (anim 3003,3006)
+15265	Gaping Dragon effect
+15266	Gaping Dragon effect
+15267	Giant Ornstein: one-handed lightning shot (impact)
+15268	Giant Ornstein: one-handed lightning shot (projectile)
+15269	Giant Ornstein: attack effect (anim 3015)
+15270	Ornstein: attack effect (anim 3012)
+15271	Giant Ornstein: summons and throws lightning bolt (projectile)
+15272	Giant Ornstein: summons and throws lightning bolt (impact)
+15273	Ornstein: attack effect (anim 3011,3016)
+15274	Giant Ornstein: reaction effect (anim 2204)
+15275	Giant Ornstein: reaction effect (anim 2204)
+15276	Ornstein: attack effect (anim 3000,3001,3002,3003...)
+15277	Giant Ornstein: attack effect (anim 3012,3300)
+15278	Giant Ornstein: attack effect (anim 3011,3016)
+15279	Giant Ornstein: attack effect (anim 3000,3002,3003,3004...)
+15280	Quelaag: event/idle effect (anim 0)
+15281	Quelaag: magma breath (projectile)
+15282	Quelaag: magma (impact) (projectile)
+15283	Quelaag: strong breath, for magma impact spawn (projectile)
+15284	Quelaag: rear flame (projectile)
+15285	Quelaag: self-centred explosion (impact) (projectile)
+15286	Quelaag: event/idle effect (anim 0)
+15287	Quelaag: event/idle effect (anim 0)
+15288	Quelaag: attack effect (anim 3007,3008,3009)
+15289	Quelaag: attack effect (anim 3003,3004,3005,3012)
+15290	Seath the Scaleless: attack effect (anim 3000,3002,3010,13000...)
+15291	Seath the Scaleless: breath (close-range sweep) (impact) (impact/projectile)
+15292	Seath the Scaleless effect
+15293	Seath the Scaleless: self-centred explosion (continuous damage) (projectile)
+15294	Seath the Scaleless: attack effect (anim 3001,13001)
+15295	Seath the Scaleless effect
+15296	Seath the Scaleless effect
+15297	Seath the Scaleless: attack effect (anim 3003,3004,3008,3009...)
+15298	Seath the Scaleless: attack effect (anim 3006,3007)
+15299	Seath the Scaleless: event/idle effect (anim 500)
+15300	Centipede Demon: attack effect (anim 3003,3006,3009,3012)
+15301	Centipede Demon: throws giant fireball (throw) (projectile)
+15302	Centipede Demon: throws giant fireball (impact) (projectile)
+15303	Centipede Demon: throws giant fireball (impact) (impact)
+15304	Centipede Demon: attack effect (anim 3009)
+15305	Undead King Jareel effect
+15306	Centipede Demon: event/idle effect (anim 8000,8010)
+15307	Centipede Demon: event/idle effect (anim 8200,8210)
+15308	Undead King Jareel: attack effect (anim 3006,3012,3013,3300...)
+15309	Undead King Jareel: attack effect (anim 3300,3301)
+15310	Gwynevere: reaction effect (anim 2200)
+15311	Gwynevere: reaction effect (anim 2200)
+15320	Gwyndolin: bow (projectile)
+15321	Gwyndolin: bow (impact)
+15322	Gwyndolin: attack effect (anim 3002)
+15324	Gwyndolin: attack effect (anim 3003)
+15325	Gwyndolin: homing (projectile)
+15326	Gwyndolin: homing (impact)
+15327	Gwyndolin: attack effect (anim 3006)
+15328	Gwyndolin: extra thick (projectile)
+15329	Gwyndolin: extra thick (impact)
+15347	Lightning Gargoyle: attack effect (anim 3011,3026,4126)
+15348	Lightning Gargoyle: head-sweep breath (projectile)
+15349	Fair Lady effect
+15350	Bell Gargoyle: head-sweep breath (projectile)
+15351	Breakable object destroyed: Church Roof Statue
+15352	Bell Gargoyle effect
+15353	Bell Gargoyle: attack effect (anim 3026,4126)
+15354	Bell Gargoyle: attack effect (anim 3011,3026,4126)
+15355	Bell Gargoyle: attack effect (anim 3016,3017,3022,3029...)
+15356	Bell Gargoyle effect
+15357	Bell Gargoyle effect
+15358	Bell Gargoyle: attack effect (anim 3011,3026,4126)
+15359	Bell Gargoyle: attack effect (anim 3011)
+15360	Great Feline: attack effect (anim 3004,3005)
+15361	Great Feline: attack effect (anim 3300,3301)
+15362	Great Feline effect
+15363	Alvina: event/idle effect (anim 7003,9030)
+15364	Young Alvina: event/idle effect (anim 9000,9001)
+15365	Young Alvina: event/idle effect (anim 7003)
+15368	Shared character effect (TAE event 96; 4 characters incl. Bell Gargoyle, Lightning Gargoyle, Bell Gargoyle (tail), Lightning Gargoyle (tail))
+15369	Bell Gargoyle: attack effect (anim 500,700,701,702...)
+15371	Gwyn: event/idle effect (anim 0)
+15373	Gwyn: event/idle effect (anim 0)
+15374	Gwyn: attack effect (anim 3300,3310)
+15375	Gwyn: attack effect (anim 3000,3001,3002,3003...)
+15388	Four Kings: attack effect (anim 3003)
+15389	Four Kings: attack effect (anim 3007)
+15390	Four Kings: dark bullet (projectile)
+15391	Four Kings: dark bullet (impact)
+15395	Four Kings: attack effect (anim 3008)
+15398	Four Kings: attack effect (anim 3008)
+15400	Four Kings: fires giant dark aura (projectile)
+15401	Four Kings: fires giant dark aura (impact)
+15402	Four Kings: attack effect (anim 3300,3301)
+15403	Four Kings: attack effect (anim 3000,3001,3002,3004...)
+15404	Four Kings: attack effect (anim 3300,3301)
+15410	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15411	Bed of Chaos (spirit): throws fire with right hand (rightward) (projectile)
+15412	Bed of Chaos (spirit): throws fire with right hand (rightward) (impact)
+15413	Bed of Chaos (spirit): lingering magma (projectile)
+15414	Bed of Chaos (spirit): self-centred fire (projectile)
+15415	c5402: fire storm (child) (projectile)
+15416	Bed of Chaos (bug): fire storm (parent) (projectile)
+15417	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15418	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15419	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15420	Probably related to: Bed of Chaos (spirit): event/idle effect (anim 0,10000) (sibling id 15421)
+15421	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15422	Bed of Chaos (spirit): event/idle effect (anim 0,10000)
+15423	Bed of Chaos (spirit): attack effect (anim 3006,3007,3008,3009...)
+15424	Bed of Chaos (bug): reaction effect (anim 2200)
+15425	Bed of Chaos (bug): event/idle effect (anim 0)
+15510	Gaping Dragon: event/idle effect (anim 8000)
+15900	Seath Invincible 1 status visual (midst)
+15901	Seath Invincible 2 status visual (midst)
+15902	Seath Invincible 3 status visual (midst)
+15903	Seath the Scaleless: event/idle effect (anim 8000)
+15904	Seath the Scaleless: attack effect (anim 3005,13005)
+15905	Seath the Scaleless: self-centred explosion, first fight (projectile)
+16000	Quelaag: attack effect (anim 3000,3001,3002,3013)
+16001	Quelaag: event/idle effect (anim 0)
+16002	Probably related to: Quelaag: event/idle effect (anim 0) (sibling id 16001)
+16003	Quelaag: attack effect (anim 3006)
+16005	Undead Dragon: acid breath (projectile)
+16006	Undead Dragon: front breath (projectile)
+16007	Undead Dragon: hover and breathe straight down (child projectile) (projectile)
+16008	Variant of Undead Dragon: acid breath (for right) (projectile) (same sprite set as 13420)
+16009	Undead Dragon: event/idle effect (anim 23000,23002,29060)
+16010	Undead Dragon: breath to the right (projectile)
+16011	Undead Dragon: breath to the front (projectile)
+16012	Undead Dragon: breath to the left (projectile)
+16013	Undead Dragon: event/idle effect (anim 23003,23005)
+16014	Probably related to: Undead Dragon: event/idle effect (anim 23003,23005) (sibling id 16013)
+17000	Shared character effect (TAE event 96; 5 characters incl. Stray Demon, Demon Firesage, Asylum Demon, Taurus Demon)
+17001	Shared character effect (TAE event 96; 5 characters incl. Stray Demon, Demon Firesage, Asylum Demon, Taurus Demon)
+17002	Shared character effect (TAE event 96; 5 characters incl. Stray Demon, Demon Firesage, Asylum Demon, Taurus Demon)
+17010	Shared character effect (TAE event 96; 4 characters incl. Capra Demon, Batwing Demon, Titanite Demon, Executioner Smough)
+17011	Shared character effect (TAE event 96; 4 characters incl. Capra Demon, Batwing Demon, Titanite Demon, Executioner Smough)
+17220	Gravelord Nito: self-centred explosion (impact) (projectile)
+17221	Gravelord Nito: attack effect (anim 3007)
+17222	Gravelord Nito: attack effect (anim 3007)
+17223	Gravelord Nito: attack effect (anim 3007)
+17224	Gravelord Nito: attack effect (anim 3007)
+17225	Gravelord Nito: attack effect (anim 3007)
+17226	Gravelord Nito: attack effect (anim 3310)
+20002	Probably related to: Dark Orb (cast/charge) (sibling id 20005)
+20003	Probably related to: Dark Orb (cast/charge) (sibling id 20005)
+20004	Probably related to: Dark Orb (cast/charge) (sibling id 20005)
+20005	Dark Orb (cast/charge)
+20006	Dark Bead (cast/charge)
+20007	Dark Fog (cast/charge)
+20008	Hush (cast/charge)
+20009	Hidden Weapon (cast/charge)
+20010	Hidden Body (cast/charge)
+20011	Flash Sweat (cast/charge)
+20012	Pursuers (cast/charge)
+20013	Black Flame (cast/charge)
+20017	Poison Mist (cast/charge)
+20018	Toxic Mist (cast/charge)
+20019	Acid Surge (cast/charge)
+20021	Power Within (cast/charge)
+20022	Variant of Four Kings: attack effect (anim 3300,3301) (same sprite set as 15402)
+20023	Variant of Four Kings: attack effect (anim 3300,3301) (same sprite set as 15402)
+20025	Chameleon (cast/charge)
+20026	Transformation status visual (finish/init)
+20027	Probably related to: Transformation status visual (finish/init) (sibling id 20026)
+20028	Tranquil Walk of Peace (cast/charge)
+20031	Lightning Spear (cast/charge)
+20032	Great Lightning Spear (cast/charge)
+20033	Sunlight Spear (cast/charge)
+20036	Undead Rapport (cast/charge)
+20037	Iron Flesh (cast/charge)
+20038	Seek Guidance (cast/charge)
+20039	Cast Light (cast/charge)
+20040	Aural Decoy (cast/charge)
+20041	Magic Shield (cast/charge)
+20042	Strong Magic Shield (cast/charge)
+20043	Repair (cast/charge)
+20044	Fall Control (cast/charge)
+20045	Gravelord Sword Dance (cast/charge)
+20046	Gravelord Greatsword Dance (cast/charge)
+20047	Replenishment (cast/charge)
+20048	Probably related to: Replenishment (cast/charge) (sibling id 20047)
+20049	Resist Curse (cast/charge)
+20050	Escape Death (cast/charge)
+20051	Homeward (cast/charge)
+20052	Magic Barrier (cast/charge)
+20053	Great Magic Barrier (cast/charge)
+20054	Karmic Justice (cast/charge)
+20055	Sunlight Blade (cast/charge)
+20056	Vow of Silence (cast/charge)
+20057	Darkmoon Blade (cast/charge)
+20058	Full-Body Transformation status visual (finish/init)
+20059	Chaos Fire Whip (cast/charge)
+20060	Chaos Storm (cast/charge)
+20061	Probably related to: Chaos Storm (cast/charge) (sibling id 20060)
+20062	Probably related to: Chaos Storm (cast/charge) (sibling id 20060)
+20063	Probably related to: Chaos Storm (cast/charge) (sibling id 20060)
+20066	Great Chaos Fireball (cast/charge)
+20067	Remedy (cast/charge)
+20068	Bountiful Sunlight (cast/charge)
+20069	White Dragon Breath (cast/charge)
+20070	Heal (cast/charge)
+20071	Great Heal (cast/charge)
+20072	Great Heal Excerpt (cast/charge)
+20073	Soothing Sunlight (cast/charge)
+20075	Force / Wrath of the Gods (cast/charge)
+20077	Emit Force (cast/charge)
+20078	Magic Weapon (cast/charge)
+20079	Great Magic Weapon (cast/charge)
+20080	Combustion / Great Combustion (cast/charge)
+20082	Fire Surge (cast/charge)
+20083	Fire Whip (cast/charge)
+20084	Crystal Magic Weapon (cast/charge)
+20085	Fireball (cast/charge)
+20086	Fire Orb (cast/charge)
+20087	Great Fireball (cast/charge)
+20088	Firestorm (cast/charge)
+20089	Fire Tempest (cast/charge)
+20090	Soul Arrow / Heavy Soul Arrow (cast/charge)
+20091	Great Soul Arrow / Great Heavy Soul Arrow (cast/charge)
+20092	Homing Soulmass / Homing Crystal Soulmass (cast/charge)
+20093	Soul Spear / Crystal Soul Spear (cast/charge)
+20097	Probably related to: Soul Spear / Crystal Soul Spear (cast/charge) (sibling id 20093)
+20099	Probably related to: Soul Spear / Crystal Soul Spear (cast/charge) (sibling id 20093)
+20105	Dark Orb (projectile)
+20106	Dark Bead (projectile)
+20107	Dark Fog (main/projectile)
+20108	Hush (main/projectile)
+20109	Hidden Weapon (main/projectile)
+20110	Hidden Body (main/projectile)
+20111	Flash Sweat (main/projectile)
+20112	Pursuers (projectile)
+20113	Black Flame (projectile)
+20117	Poison Mist (projectile)
+20118	Toxic Mist (projectile)
+20119	Acid Surge (projectile)
+20121	Power Within (main/projectile)
+20125	Chameleon (main/projectile)
+20126	Dragon Head Stone (projectile)
+20128	Tranquil Walk of Peace (main/projectile)
+20131	Lightning Spear (projectile)
+20132	Great Lightning Spear (projectile)
+20133	Sunlight Spear (projectile)
+20136	Undead Rapport (main/projectile)
+20137	Parry Change status visual (init)
+20138	Seek Guidance (main/projectile)
+20139	Cast Light (main/projectile)
+20140	Aural Decoy (projectile)
+20141	Magic Shield (main/projectile)
+20142	Strong Magic Shield (main/projectile)
+20143	Repair (main/projectile)
+20144	Fall Control (main/projectile)
+20147	Replenishment (main/projectile)
+20148	Variant of Parry Change status visual (init) (same sprite set as 20137)
+20149	Resist Curse (main/projectile)
+20150	Escape Death (main/projectile)
+20151	Homeward (main/projectile)
+20152	Magic Barrier (main/projectile)
+20153	Great Magic Barrier (main/projectile)
+20154	Karmic Justice (main/projectile)
+20156	Vow of Silence (main/projectile)
+20159	Chaos Fire Whip (projectile)
+20160	Chaos Storm (projectile)
+20161	Probably related to: Chaos Storm (projectile) (sibling id 20160)
+20162	Probably related to: Chaos Storm (projectile) (sibling id 20160)
+20163	Probably related to: Karmic Justice (impact) (projectile) (sibling id 20164)
+20164	Karmic Justice (impact) (projectile)
+20166	Great Chaos Fireball (projectile)
+20167	Remedy (main/projectile)
+20168	Bountiful Sunlight (main/projectile)
+20169	White Dragon Breath (projectile)
+20170	Heal (main/projectile)
+20171	Great Heal (main/projectile)
+20172	Great Heal Excerpt (main/projectile)
+20173	Soothing Sunlight (main/projectile)
+20175	Force (projectile)
+20176	Wrath of the Gods (projectile)
+20177	Emit Force (projectile)
+20180	Combustion (projectile)
+20181	Great Combustion (projectile)
+20182	Fire Surge (projectile)
+20183	Fire Whip (projectile)
+20185	Fireball (projectile)
+20186	Fire Orb (projectile)
+20187	Great Fireball (projectile)
+20188	Firestorm (projectile)
+20189	Fire Tempest (main/projectile)
+20190	Soul Arrow (projectile)
+20191	Heavy Soul Arrow (projectile)
+20192	Homing Soulmass (projectile)
+20193	Soul Spear (projectile)
+20194	Great Soul Arrow (projectile)
+20195	Great Heavy Soul Arrow (projectile)
+20197	Homing Crystal Soulmass (projectile)
+20199	Crystal Soul Spear (projectile)
+20202	Probably related to: Dark Orb (impact) (sibling id 20205)
+20203	Probably related to: Dark Orb (impact) (sibling id 20205)
+20205	Dark Orb (impact)
+20206	Dark Bead (impact)
+20207	Dark Fog (projectile)
+20208	Silent Movement [Hush] status visual (midst)
+20209	Hidden Weapon [Hidden Weapon] status visual (finish/midst)
+20210	Hidden Body (impact/secondary)
+20211	Flash Sweat: 火耐性シールド status visual (midst)
+20212	Pursuers (impact)
+20213	Black Flame (projectile)
+20217	Poison Mist (projectile)
+20218	Toxic Mist (projectile)
+20219	Acid Surge (projectile)
+20221	Power Within: 狂気の力 status visual (midst)
+20222	Soul Drain 1 (impact)
+20223	Soul Drain 2 (impact)
+20226	Dragon Head Stone (impact)
+20228	Gravity User status visual (midst)
+20230	Dragonslayer Spear weapon art (impact)
+20231	Dragonslayer Spear weapon art (impact)
+20232	Dragonslayer Spear weapon art (impact)
+20233	Dragonslayer Spear weapon art (impact)
+20234	Dragonslayer Spear weapon art (impact)
+20235	Dragonslayer Spear weapon art (impact)
+20236	Sunlight Spear (impact)
+20237	Parry Change status visual (finish)
+20238	Seek Guidance: 血文字取得 status visual (midst)
+20239	Cast Light (impact/secondary)
+20240	Aural Decoy (projectile)
+20241	Magic Shield [Magic Shield] status visual (midst)
+20242	Strong Magic Shield: 炎強化【大】 status visual (midst)
+20244	Fall Control [Fall Control] status visual (midst)
+20245	Gravelord Sword Dance (projectile)
+20246	Gravelord Greatsword Dance (projectile)
+20247	Elizabeth Mushroom [Replenishment] status visual (midst)
+20248	Probably related to: Elizabeth Mushroom [Replenishment] status visual (midst) (sibling id 20247)
+20250	Escape Death: 死んだとき復活 status visual (midst)
+20252	Magic Barrier: 防御シールド status visual (midst)
+20253	Great Magic Barrier: 強防御シールド status visual (midst)
+20254	Karmic Justice [Karmic Justice] status visual (midst)
+20255	Sunlight Blade [Sunlight Blade] status visual (midst)
+20256	For Magic Prohibited Effect status visual (midst)
+20257	Darkmoon Blade [Darkmoon Blade] status visual (midst)
+20259	Chaos Fire Whip (projectile)
+20264	Karmic Justice (impact) (impact)
+20266	Great Chaos Fireball (projectile)
+20269	White Dragon Breath (impact)
+20275	Force (impact)
+20276	Sentinel: miracle, Wrath of the Gods (impact)
+20277	Emit Force (projectile)
+20278	Magic Weapon [Magic Weapon] status visual (midst)
+20279	Strong Magic Weapon [Great Magic Weapon] status visual (midst)
+20280	Combustion (projectile)
+20281	Great Combustion (projectile)
+20282	Fire Surge (impact/projectile)
+20283	Fire Whip (impact/secondary)
+20284	Crystal Magic Weapon [Crystal Magic Weapon] status visual (midst)
+20285	Fireball (impact/projectile)
+20286	Fire Orb (projectile)
+20287	Great Fireball (projectile)
+20288	Firestorm (impact/secondary)
+20289	Fire Tempest (impact/secondary)
+20290	Soul Arrow (impact)
+20291	Heavy Soul Arrow (impact)
+20292	Homing Soulmass (impact)
+20293	Soul Spear (impact)
+20294	Great Soul Arrow (impact)
+20295	Great Heavy Soul Arrow (impact)
+20297	Homing Crystal Soulmass (impact)
+20299	Crystal Soul Spear (impact)
+20312	Pursuers (projectile)
+20326	Probably related to: Tranquil Walk of Peace (extra) (sibling id 20328)
+20328	Tranquil Walk of Peace (extra)
+20338	Seek Guidance (extra)
+20343	Repair: 全身砥石 status visual (init)
+20344	Fall Control (extra)
+20347	Replenishment (extra)
+20350	Escape Death (extra)
+20351	Homeward (extra)
+20352	Magic Barrier (extra)
+20353	Great Magic Barrier (extra)
+20354	Karmic Justice (extra)
+20366	Great Chaos Fireball (projectile)
+20368	Bountiful Sunlight (extra)
+20370	Heal (extra)
+20371	Great Heal (extra)
+20372	Great Heal Excerpt (extra)
+20373	Soothing Sunlight (extra)
+20377	Emit Force (extra)
+20392	Homing Soulmass (projectile)
+20397	Homing Crystal Soulmass (projectile)
+20405	Dark Orb (extra 2)
+20426	Unidentified effect (smoke/dust/debris; ships in CommonEffects)
+20491	Great Soul Arrow / Great Heavy Soul Arrow (extra 2)
+20493	Soul Spear / Crystal Soul Spear (extra 2)
+20494	Probably related to: Soul Spear / Crystal Soul Spear (extra 2) (sibling id 20493)
+20526	Unidentified effect (no sprites; ships in CommonEffects)
+20626	Variant of Sentinel: attack effect (anim 3011) (same sprite set as 12873)
+20726	Dragon Torso Stone (projectile)
+21025	Part of Per-map common effect slot 2 (m10_00) (+16 other parents)
+21026	Probably related to: Part of Per-map common effect slot 2 (m10_00) (+16 other parents) (sibling id 21025)
+22000	Player item use effect
+22001	Player item use effect
+22002	Player item use effect
+22617	Throwing Knife (use/throw)
+22618	Poison Throwing Knife (use/throw)
+22619	Firebomb (use/throw)
+22620	Dung Pie (use/throw)
+22621	Alluring Skull (use/throw)
+22631	Lloyd's Talisman (use/throw)
+22633	Darksign / Homeward Bone (use/throw)
+22642	Probably related to: Darksign / Homeward Bone (use/throw) (sibling id 22633)
+22659	Black Firebomb (use/throw)
+22679	Player item use effect
+22680	White Sign Soapstone (use/throw)
+22681	Red Sign Soapstone (use/throw)
+22682	Red Eye Orb / Cracked Red Eye Orb (use/throw)
+22683	Marvelous Chester: event/idle effect (anim 7001)
+22686	Blue Eye Orb / Black Eye Orb (use/throw)
+22687	Eye of Death / Dried Finger (use/throw)
+22688	Dragon Eye (use/throw)
+22692	Purple Coward's Crystal (use/throw)
+22698	Silver Pendant (use/throw)
+22701	Elizabeth's Mushroom / Divine Blessing (aura on use)
+22706	Variant of Fall Control [Fall Control] status visual (midst) (same sprite set as 20244)
+22710	Green Blossom (aura on use)
+22711	Bloodred Moss Clump (aura on use)
+22712	Painting Guardian: attack effect (anim 3010)
+22713	Blooming Purple Moss Clump (aura on use)
+22714	Probably related to: Scripted effect on player (common) (sibling id 22715)
+22715	Scripted effect on player (common)
+22716	Repair Powder (aura on use)
+22717	Throwing Knife (projectile)
+22718	Poison Throwing Knife (projectile)
+22719	Firebomb (projectile)
+22720	Dung Pie (projectile)
+22721	Alluring Skull (projectile)
+22722	Egg Vermifuge (aura on use)
+22723	Fire Weapon [Charcoal Pine Resin] status visual (midst)
+22724	Lightning Weapon [Gold Pine Resin] status visual (midst)
+22725	Transient Curse (aura on use)
+22726	Poisoned Weapon [Rotten Pine Resin] status visual (midst)
+22727	Variant of Poisoned Weapon [Rotten Pine Resin] status visual (midst) (same sprite set as 22726)
+22730	Probably related to: Lloyd's Talisman (projectile) (sibling id 22731)
+22731	Lloyd's Talisman (projectile)
+22732	Prism Stone (projectile)
+22733	Darksign / Homeward Bone (aura on use)
+22740	Fire Keeper Soul (aura on use)
+22741	Binoculars (aura on use)
+22742	Probably related to: Binoculars (aura on use) (sibling id 22741)
+22750	Estus Flask / Estus Flask+1 / Estus Flask+2 (aura on use)
+22759	Black Firebomb (projectile)
+22760	Soul of a Lost Undead / Large Soul of a Lost Undead (aura on use)
+22761	Soul of a Nameless Soldier / Large Soul of a Nameless Soldier (aura on use)
+22762	Soul of a Proud Knight / Large Soul of a Proud Knight (aura on use)
+22763	Soul of a Brave Warrior / Large Soul of a Brave Warrior (aura on use)
+22764	Soul of a Hero (aura on use)
+22765	Soul of a Great Hero (aura on use)
+22766	Soul of Quelaag / Soul of Sif / Core of an Iron Golem (aura on use)
+22767	Soul of Gwyn, Lord of Cinder (aura on use)
+22770	Variant of Pinwheel: attack effect (anim 3001,3003,3005,3007) (same sprite set as 13319)
+22779	Player item use effect
+22780	White Sign Soapstone (aura on use)
+22781	Red Sign Soapstone (aura on use)
+22782	Red Eye Orb / Cracked Red Eye Orb (aura on use)
+22783	Black Separation Crystal (aura on use)
+22784	Orange Guidance Soapstone (aura on use)
+22785	Probably related to: Orange Guidance Soapstone (aura on use) (sibling id 22784)
+22786	Blue Eye Orb / Black Eye Orb (aura on use)
+22787	Eye of Death / Dried Finger (aura on use)
+22788	Dragon Eye (aura on use)
+22789	Humanity (aura on use)
+22790	Twin Humanities (aura on use)
+22792	Purple Coward's Crystal (aura on use)
+22793	Hello Carving (projectile)
+22798	Silver Pendant (projectile)
+22817	Throwing Knife (impact)
+22818	Poison Throwing Knife (impact)
+22819	Firebomb (projectile)
+22820	Dung Pie (projectile)
+22821	Alluring Skull (projectile)
+22822	Catnip B (child) (projectile)
+22825	Transient Curse [Transient Curse] status visual (midst)
+22830	Probably related to: Lloyd's Talisman (projectile) (sibling id 22831)
+22831	Lloyd's Talisman (projectile)
+22832	Prism Stone (impact)
+22843	Sleep Orb (child) (projectile)
+22850	Shared character effect (TAE event 96; 5 characters incl. Painting Guardian, Hollow Assassin, Hollow Soldier, Balder Knight)
+22859	Black Firebomb (projectile)
+22860	Soul of a Lost Undead / Large Soul of a Lost Undead (hit)
+22861	Soul of a Nameless Soldier / Large Soul of a Nameless Soldier (hit)
+22862	Soul of a Proud Knight / Large Soul of a Proud Knight (hit)
+22863	Soul of a Brave Warrior / Large Soul of a Brave Warrior (hit)
+22864	Soul of a Hero (hit)
+22865	Soul of a Great Hero (hit)
+22866	Soul of Quelaag / Soul of Sif / Core of an Iron Golem (hit)
+22867	Soul of Gwyn, Lord of Cinder (hit)
+22887	Eye of Death: ニト効果 status visual (midst)
+22889	Humanity (hit)
+22890	Twin Humanities (hit)
+22893	Hello Carving (projectile)
+22894	Thank you Carving (projectile)
+22895	Very good! Carving (projectile)
+22896	I'm sorry Carving (projectile)
+22897	Help me! Carving (projectile)
+22917	Throwing Knife (deflect)
+22918	Poison Throwing Knife (deflect)
+22932	Prism Stone (projectile)
+22950	Estus Flask / Estus Flask+1 / Estus Flask+2 (deflect)
+23020	Drake Sword weapon effect
+23021	Grant / Stone Greatsword weapon effect
+23022	Moonlight Greatsword weapon effect
+23023	Moonlight Greatsword weapon effect
+23024	Dragon Greatsword weapon effect
+23025	Golem Axe weapon effect
+23026	Dragon King Greataxe weapon effect
+23030	Probably related to: Dragon King Greataxe weapon effect (sibling id 23026)
+23041	Dragonslayer Spear weapon effect
+23042	Crystal Ring Shield weapon effect
+23043	Quelaag's Furysword weapon effect
+23044	Quelaag's Furysword weapon effect
+23045	Obsidian Greatsword weapon effect
+23046	Dark Silver Tracer weapon effect
+23047	Gold Tracer weapon effect
+23049	Gold Tracer weapon effect
+23050	Shared character effect (TAE event 96; 6 characters incl. Player Character, Painting Guardian, Hollow Assassin, Hollow Soldier)
+23060	Dark Hand weapon effect
+23061	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23062	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23063	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23064	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23065	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23066	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23067	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23068	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23069	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23070	Variant of Dark Hand weapon effect (same sprite set as 23060)
+23119	Variant of Player animation effect (same sprite set as 109)
+23120	Drake Sword weapon art (projectile)
+23121	Stone Greatsword weapon effect
+23122	Moonlight Greatsword weapon art (projectile)
+23123	Moonlight Greatsword weapon art (projectile)
+23124	Dragon Greatsword weapon art (projectile)
+23125	Golem Axe weapon art (projectile)
+23126	Dragon King Greataxe weapon art (projectile)
+23130	Grant weapon art (projectile)
+23140	Channeler's Trident weapon effect
+23141	Dragonslayer Spear weapon art (projectile)
+23142	Crystal Ring Shield weapon art (projectile)
+23145	Obsidian Greatsword weapon art (projectile)
+23146	Stone Greataxe weapon effect
+23147	Stone Greataxe weapon effect
+23160	Unidentified effect (glow; ships in CommonEffects)
+23220	Drake Sword weapon art (impact)
+23221	Probably related to: Drake Sword weapon art (impact) (sibling id 23220)
+23222	Moonlight Greatsword weapon art (impact)
+23223	Moonlight Greatsword weapon art (projectile)
+23224	Probably related to: Moonlight Greatsword weapon art (projectile) (sibling id 23223)
+23225	Golem Axe weapon art (impact)
+23228	Weak MP Regenerate status visual (midst)
+23230	Grant weapon art (impact)
+23242	Crystal Ring Shield weapon art (impact)
+23260	Player weapon effect
+23261	Probably related to: Player weapon effect (sibling id 23260)
+23262	Probably related to: Player weapon effect (sibling id 23260)
+23263	Probably related to: Player weapon effect (sibling id 23260)
+23264	Probably related to: Player weapon effect (sibling id 23260)
+23265	Probably related to: Player weapon effect (sibling id 23260)
+23266	Probably related to: Player weapon effect (sibling id 23260)
+23267	Probably related to: Player weapon effect (sibling id 23260)
+23268	Probably related to: Player weapon effect (sibling id 23260)
+23269	Probably related to: Player weapon effect (sibling id 23260)
+23270	Probably related to: Player weapon effect (sibling id 23260)
+23328	Weak MP Regenerate status visual (finish)
+23334	Dragon Greatsword weapon effect
+24003	Tearstone Ring Aura [Red Tearstone Ring] status visual (midst)
+24004	Defense Up When in Danger status visual (midst)
+24005	Green Blossom [Cloranthy Ring] status visual (midst)
+24007	Variant of Green Blossom [Cloranthy Ring] status visual (midst) (same sprite set as 24005)
+24012	Weak Regenerate status visual (midst)
+24019	Probably related to: Weak Regenerate status visual (midst) (sibling id 24012)
+24023	Wolf Ring [Wolf Ring] status visual (midst)
+24027	Transparent [Hidden Body] status visual (midst)
+24028	Probably related to: Transparent [Hidden Body] status visual (midst) (sibling id 24027)
+24029	Probably related to: Transparent [Hidden Body] status visual (midst) (sibling id 24027)
+24030	Probably related to: Calamity Ring [Calamity Ring] status visual (midst) (sibling id 24032)
+24031	Probably related to: Calamity Ring [Calamity Ring] status visual (midst) (sibling id 24032)
+24032	Calamity Ring [Calamity Ring] status visual (midst)
+40000	Unidentified effect (smoke; ships in m10_02, m12)
+41005	Variant of Cutscene effect (scn160000, New Londo Ruins) (same sprite set as 160000)
+41006	Variant of Cutscene effect (scn100000, Depths) (same sprite set as 1526020)
+41010	Probably related to: Cutscene effect (scn100250, Firelink Shrine) (sibling id 41011)
+41011	Cutscene effect (scn100250, Firelink Shrine)
+41100	Bell Gargoyle: event/idle effect (anim 7001)
+41101	Cutscene effect (scn100110, Undead Burg / Parish)
+41102	Cutscene effect (scn100110, Undead Burg / Parish)
+41103	Probably related to: Cutscene effect (scn100110, Undead Burg / Parish) (sibling id 41102)
+41104	Cutscene effect (scn100110, Undead Burg / Parish)
+41105	Cutscene effect (scn100110, Undead Burg / Parish)
+41190	Cutscene effect (scn120100, Oolacile (DLC))
+41191	Cutscene effect (scn120100, Oolacile (DLC))
+41192	Cutscene effect (scn120100, Oolacile (DLC))
+41193	Cutscene effect (scn120100, Oolacile (DLC))
+41200	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41201	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41202	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41203	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41204	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41206	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41207	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41208	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41209	Cutscene effect (scn120002, Darkroot Garden/Basin)
+41210	Cutscene effect (scn100225, Firelink Shrine)
+41211	Cutscene effect (scn100225, Firelink Shrine)
+41212	Cutscene effect (scn100230, Firelink Shrine)
+41220	Cutscene effect (scn120000, Darkroot Garden/Basin)
+41230	Cutscene effect (scn130110, Tomb of the Giants)
+41231	Cutscene effect (scn120003, Darkroot Garden/Basin)
+41232	Variant of Black Dragon Kalameet: straight-down breath impact (projectile) (same sprite set as 14438)
+41233	Probably related to: Cutscene effect (scn120003, Darkroot Garden/Basin) (sibling id 41231)
+41234	Probably related to: Cutscene effect (scn120003, Darkroot Garden/Basin) (sibling id 41235)
+41235	Cutscene effect (scn120003, Darkroot Garden/Basin)
+41236	Cutscene effect (scn120003, Darkroot Garden/Basin)
+41237	Cutscene effect (scn120003, Darkroot Garden/Basin)
+41240	Cutscene effect (scn150130, Anor Londo)
+41245	Cutscene effect (scn120110, Oolacile (DLC))
+41246	Cutscene effect (scn120110, Oolacile (DLC))
+41247	Cutscene effect (scn120110, Oolacile (DLC))
+41248	Cutscene effect (scn120110, Oolacile (DLC))
+41249	Cutscene effect (scn120110, Oolacile (DLC))
+41250	Cutscene effect (scn120110, Oolacile (DLC))
+41251	Cutscene effect (scn120110, Oolacile (DLC))
+41252	Cutscene effect (scn120110, Oolacile (DLC))
+41253	Cutscene effect (scn120110, Oolacile (DLC))
+41254	Cutscene effect (scn120110, Oolacile (DLC))
+41260	Cutscene effect (scn120140, Oolacile (DLC))
+41261	Cutscene effect (scn120140, Oolacile (DLC))
+41262	Cutscene effect (scn120140, Oolacile (DLC))
+41263	Cutscene effect (scn120140, Oolacile (DLC))
+41264	Cutscene effect (scn120140, Oolacile (DLC))
+41265	Cutscene effect (scn120140, Oolacile (DLC))
+41266	Cutscene effect (scn120140, Oolacile (DLC))
+41267	Cutscene effect (scn120140, Oolacile (DLC))
+41268	Cutscene effect (scn120140, Oolacile (DLC))
+41300	Cutscene effect (scn130100, Tomb of the Giants)
+41301	Cutscene effect (scn130100, Tomb of the Giants)
+41302	Cutscene effect (scn130100, Tomb of the Giants)
+41303	Cutscene effect (scn130100, Tomb of the Giants)
+41304	Cutscene effect (scn130100, Tomb of the Giants)
+41305	Cutscene effect (scn130100, Tomb of the Giants)
+41310	Cutscene effect (scn130010, Catacombs)
+41311	Cutscene effect (scn130010, Catacombs)
+41400	Probably related to: Cutscene effect (scn140000, Blighttown / Quelaag's Domain) (sibling id 41402)
+41401	Probably related to: Cutscene effect (scn140000, Blighttown / Quelaag's Domain) (sibling id 41402)
+41402	Cutscene effect (scn140000, Blighttown / Quelaag's Domain)
+41403	Cutscene effect (scn140100, Demon Ruins / Lost Izalith)
+41404	Cutscene effect (scn140100, Demon Ruins / Lost Izalith)
+41405	Cutscene effect (scn140100, Demon Ruins / Lost Izalith)
+41410	Cutscene effect (scn140120, Demon Ruins / Lost Izalith)
+41411	Cutscene effect (scn140120, Demon Ruins / Lost Izalith)
+41412	Cutscene effect (scn140120, Demon Ruins / Lost Izalith)
+41420	Cutscene effect (scn140110, Demon Ruins / Lost Izalith)
+41421	Cutscene effect (scn140110, Demon Ruins / Lost Izalith)
+41422	Variant of Cutscene effect (scn140110, Demon Ruins / Lost Izalith) (same sprite set as 41421)
+41500	Cutscene effect (scn150135, Anor Londo)
+41510	Cutscene effect (scn150120, Anor Londo)
+41511	Cutscene effect (scn150120, Anor Londo)
+41512	Cutscene effect (scn150120, Anor Londo)
+41513	Cutscene effect (scn150120, Anor Londo)
+41520	Cutscene effect (scn150121, Anor Londo)
+41521	Cutscene effect (scn150121, Anor Londo)
+41522	Cutscene effect (scn150121, Anor Londo)
+41523	Cutscene effect (scn150121, Anor Londo)
+41530	Cutscene effect (scn150150, Anor Londo)
+41531	Cutscene effect (scn150150, Anor Londo)
+41532	Cutscene effect (scn150150, Anor Londo)
+41535	Cutscene effect (scn150152, Anor Londo)
+41536	Cutscene effect (scn150152, Anor Londo)
+41537	Probably related to: Cutscene effect (scn150152, Anor Londo) (sibling id 41536)
+41538	Cutscene effect (scn150152, Anor Londo)
+41539	Cutscene effect (scn150152, Anor Londo)
+41700	Cutscene effect (scn170000, Duke's Archives)
+41701	Cutscene effect (scn170000, Duke's Archives)
+41702	Part of Seath the Scaleless: event/idle effect (anim 500)
+41703	Cutscene effect (scn170000, Duke's Archives)
+41800	Cutscene effect (scn100203, Firelink Shrine)
+41801	Cutscene effect (scn180000, Kiln of the First Flame)
+41802	Cutscene effect (scn180000, Kiln of the First Flame)
+41803	Cutscene effect (scn180000, Kiln of the First Flame)
+41810	Cutscene effect (scn180101, Undead Asylum)
+41811	Cutscene effect (scn180010, Kiln of the First Flame)
+41812	Cutscene effect (scn180010, Kiln of the First Flame)
+41813	Cutscene effect (scn180010, Kiln of the First Flame)
+41820	Cutscene effect (scn180015, Kiln of the First Flame)
+41821	Cutscene effect (scn180015, Kiln of the First Flame)
+41822	Cutscene effect (scn180015, Kiln of the First Flame)
+41823	Cutscene effect (scn180015, Kiln of the First Flame)
+41824	Cutscene effect (scn180015, Kiln of the First Flame)
+41825	Cutscene effect (scn180060, Kiln of the First Flame)
+41830	Cutscene effect (scn180040, Kiln of the First Flame)
+41831	Cutscene effect (scn180041, Kiln of the First Flame)
+41832	Cutscene effect (scn180101, Undead Asylum)
+41840	Cutscene effect (scn180125, Undead Asylum)
+80000	Variant of Fog Wall Before Boss (Depths) (same sprite set as 81000)
+80002	Variant of Fog Wall Before Boss (Depths) (same sprite set as 81000)
+81000	Fog Wall Before Boss (Depths)
+81001	Fog Wall Multiplayer (Depths)
+81002	Fog Wall Multiplayer (Depths)
+81003	Fog Wall Before Boss (Undead Burg / Parish)
+81004	Fog Wall After Boss (Undead Burg / Parish)
+81005	Fog Wall Mid-Boss 1 Front (Undead Burg / Parish)
+81006	Fog Wall Mid-Boss 1 Back (Undead Burg / Parish)
+81007	Fog Wall Multiplayer (Undead Burg / Parish)
+81008	Fog Wall Multiplayer (Undead Burg / Parish)
+81009	Fog Wall Multiplayer (Undead Burg / Parish)
+81010	Fog Wall Multiplayer (Undead Burg / Parish)
+81011	Fog Wall Multiplayer (Undead Burg / Parish)
+81012	Fog Wall Multiplayer (Undead Burg / Parish)
+81013	Fog Wall Mid-Boss 2 Front (Undead Burg / Parish)
+81014	Fog Wall Multiplayer (Undead Burg / Parish)
+81015	Fog Wall Multiplayer (Undead Burg / Parish)
+81016	Fog Wall CP (Undead Burg / Parish)
+81017	Fog Wall Multiplayer (Undead Burg / Parish)
+81018	Fog Wall Multiplayer (Undead Burg / Parish)
+81019	Fog Wall CP (Undead Burg / Parish)
+81020	Fog Wall CP (Depths)
+81021	Fog Wall Multiplayer (Undead Burg / Parish)
+81100	Fog Wall Before Boss (Painted World)
+81101	Fog Wall After Boss (Painted World)
+81102	Fog wall (light wall) variant
+81103	Fog Wall CP (Painted World)
+81104	Fog Wall NPC Multiplayer (Painted World)
+81200	Fog Wall Boss (front) (Darkroot Garden/Basin)
+81201	Fog Wall Multiplayer (Darkroot Garden/Basin)
+81202	Fog Wall Multiplayer (Darkroot Garden/Basin)
+81203	Fog Wall Multiplayer (Darkroot Garden/Basin)
+81204	Fog Wall Mid-Boss (front) (Darkroot Garden/Basin)
+81205	Fog Wall Mid-Boss (back) (Darkroot Garden/Basin)
+81206	Fog Wall CP (Darkroot Garden/Basin)
+81207	Fog Wall Multiplayer (Darkroot Garden/Basin)
+81208	Fog wall (light wall) variant
+81209	Fog Wall Multiplayer (Darkroot Garden/Basin)
+81210	Fog Wall Before Lord of the Abyss (Oolacile (DLC))
+81211	Fog Wall Before Artorias (Oolacile (DLC))
+81212	Fog Wall After Artorias (Oolacile (DLC))
+81213	Fog Wall Before Golden Chimera (Oolacile (DLC))
+81214	Fog Wall After Golden Chimera (Oolacile (DLC))
+81215	Fog Wall Multiplayer 1 After Mausoleum (Oolacile (DLC))
+81216	Fog Wall Multiplayer 2 Forest <-> Hollow (Oolacile (DLC))
+81217	Fog Wall Multiplayer 3 Tower <-> Settlement (Oolacile (DLC))
+81218	Fog Wall Multiplayer 4 Late Forest <-> Hollow (Oolacile (DLC))
+81219	Fog wall (light wall) variant
+81220	Fog Wall Before Black Dragon (Oolacile (DLC))
+81221	Fog Wall Multiplayer 5 Black Dragon Only (Oolacile (DLC))
+81300	[SFX] Fog Wall Before Boss (Catacombs)
+81301	[SFX] Fog Wall Multiplayer (Catacombs)
+81302	[SFX] Fog Wall CP (Catacombs)
+81303	Fog wall (light wall) variant
+81310	Fog Wall Multiplayer (Tomb of the Giants)
+81311	Fog Wall CP (Tomb of the Giants)
+81312	King's Seal (Tomb of the Giants)
+81315	Fog Wall Before Boss (Tomb of the Giants)
+81320	Fog Wall Before Multiplayer (Great Hollow / Ash Lake)
+81321	Fog Wall CP (Great Hollow / Ash Lake)
+81400	Fog Wall Before Boss (Blighttown / Quelaag's Domain)
+81401	Fog Wall After Boss (Blighttown / Quelaag's Domain)
+81402	Fog Wall Multiplayer (Blighttown / Quelaag's Domain)
+81403	Fog Wall Multiplayer (Blighttown / Quelaag's Domain)
+81404	Fog Wall Multiplayer (Blighttown / Quelaag's Domain)
+81405	Fog wall (light wall) variant
+81406	Fog Wall CP (Blighttown / Quelaag's Domain)
+81409	Fog wall (light wall) variant
+81410	King's Seal (Demon Ruins / Lost Izalith)
+81411	Fog Wall Before the Festering One (Demon Ruins / Lost Izalith)
+81412	Fog Wall Before Temple (Demon Ruins / Lost Izalith)
+81413	Fog Wall After Temple (Demon Ruins / Lost Izalith)
+81414	Fog Wall Mid-Boss 2 Front (Demon Ruins / Lost Izalith)
+81415	Fog Wall Mid-Boss 2 Back (Demon Ruins / Lost Izalith)
+81416	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81417	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81418	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81419	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81420	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81421	Fog Wall Before Boss (Demon Ruins / Lost Izalith)
+81422	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81423	Fog Wall Multiplayer (Demon Ruins / Lost Izalith)
+81500	Fog Wall Before Boss (Sen's Fortress)
+81501	Fog Wall Multiplayer (Sen's Fortress)
+81502	Fog Wall CP (Sen's Fortress)
+81503	Fog Wall CP (Sen's Fortress)
+81510	Fog Wall Before Boss (Anor Londo)
+81511	Fog Wall After Boss (Anor Londo)
+81512	Fog Wall After Boss (Anor Londo)
+81513	Fog Wall Multiplayer (Anor Londo)
+81514	Fog Wall CP (Anor Londo)
+81515	Fog Wall CP (Anor Londo)
+81516	Fog wall (light wall) variant
+81517	Fog Wall Before Mid-Boss (Anor Londo)
+81518	Fog Wall Before Mid-Boss (Anor Londo)
+81519	Fog Wall NPC Multiplayer (Anor Londo)
+81520	Fog Wall NPC Multiplayer (Anor Londo)
+81521	Fog Wall NPC Multiplayer (Anor Londo)
+81600	Fog wall (light wall) variant
+81601	Fog Wall Multiplayer (New Londo Ruins)
+81602	Fog Wall Multiplayer (New Londo Ruins)
+81603	Fog Wall Multiplayer (New Londo Ruins)
+81604	Fog Wall CP (New Londo Ruins)
+81605	Fog Wall CP (New Londo Ruins)
+81608	Fog Wall Before Boss (New Londo Ruins)
+81700	Boss Fog Wall (front) (Duke's Archives)
+81701	Boss (event) Fog Wall (front) (Duke's Archives)
+81702	Multiplayer Fog Wall (Duke's Archives)
+81703	Fog wall (light wall) variant
+81704	Fog wall (light wall) variant
+81705	Fog wall (light wall) variant
+81706	Fog Wall CP (Duke's Archives)
+81707	King's Seal (Duke's Archives)
+81708	Multiplayer Fog Wall (Duke's Archives)
+81800	Fog Wall Before Boss (Kiln of the First Flame)
+81801	Fog Wall Multiplayer (Kiln of the First Flame)
+81802	Fog Wall Before Boss (Undead Asylum)
+81804	Fog wall (light wall) variant
+81805	Fog Wall CP (Undead Asylum)
+81806	Fog Wall Underground Fat Demon (Undead Asylum)
+88900	Player item/event animation effect
+90000	Bonfire flame (kindle level 0)
+90001	Bonfire flame (kindle level 1)
+90002	Bonfire flame (kindle level 2)
+90003	Bonfire flame (kindle level 3)
+90004	Bonfire flame (kindle level 4)
+90005	Bonfire visual (flame/embers/level)
+90006	Bonfire light (light-only effect)
+90007	Bonfire visual (flame/embers/level)
+90008	Bonfire visual (flame/embers/level)
+90009	Bonfire visual (flame/embers/level)
+90010	Bonfire visual (flame/embers/level)
+90011	Bonfire visual (flame/embers/level)
+90012	Bonfire interaction (rest/kindle) effect
+90014	Scripted effect on entity 1211950 (Oolacile (DLC), Tomb of the Giants)
+90015	Bonfire interaction (rest/kindle) effect
+90016	Bonfire interaction (rest/kindle) effect
+90020	Ranking Board Transfer Bonfire (Oolacile (DLC))
+90021	Scripted effect on player (Oolacile (DLC))
+92102	Unidentified effect (smoke/fire; ships in m15)
+99000	Item glow on corpse/treasure object, intensity variant 0
+99001	Item glow on corpse/treasure object, intensity variant 1
+99002	Item glow on corpse/treasure object, intensity variant 2
+99003	Item glow on corpse/treasure object, intensity variant 3
+99004	Item glow on corpse/treasure object, intensity variant 4
+99005	Item glow on corpse/treasure object, intensity variant 5
+99006	Item glow on corpse/treasure object, intensity variant 6
+99007	Item glow on corpse/treasure object, intensity variant 7
+99008	Item glow on corpse/treasure object, intensity variant 8
+99009	Item glow on corpse/treasure object, intensity variant 9
+99010	Item glow on corpse/treasure object, intensity variant 10
+99040	Item pickup glow on dropped item: ring
+99041	Item pickup glow on dropped item: armor
+99042	Item pickup glow on dropped item: weapon
+99043	Item pickup glow on dropped item: goods (goodsType 2)
+99044	Item pickup glow on dropped item: goods (other) / other category
+99045	Item pickup glow on dropped item: goods (goodsType 3)
+99046	Item pickup glow on dropped item: attached to corpse character (mode 1)
+99047	Item pickup glow on dropped item: goods (goodsType 4)
+99050	Probably related to: Item pickup glow on dropped item: goods (goodsType 4) (sibling id 99047)
+99100	Unidentified effect (glow; ships in CommonEffects)
+100000	Probably related to: m2200 Fog (Depths) (sibling id 100001)
+100001	m2200 Fog (Depths)
+100002	Probably related to: m2200 Fog (Depths) (sibling id 100001)
+100003	Probably related to: m2200 Fog (Depths) (sibling id 100001)
+100007	Breakable object destroyed: Castle Town 2: Boss Room Pillar
+100008	Breakable object destroyed: Raised Sludge
+100009	Smoke Filling Boss Room (lower right) (Depths)
+100010	Smoke From Slime (Depths)
+100011	o1055 (Depths)
+100012	m2130 Kitchen Fire (Depths)
+100013	Scripted effect on entity 1001400 (Depths)
+100040	Embers Falling Over Map (Undead Burg / Parish)
+100096	m2210 Pitfall Waterfall (Depths)
+100097	m2390 Pitfall Water Splash (Depths)
+100098	m2100 Sewer Water Splash (Depths)
+100099	m2200 Sewer Waterfall (Depths)
+100100	Scripted effect on entity 1011102 (Undead Burg / Parish)
+100101	Burning Corpses (many) (Undead Burg / Parish)
+100102	Burning Corpses (few) (Undead Burg / Parish)
+100103	Breakable object destroyed: Sandbag
+100150	Unidentified effect (glow; ships in m10_02)
+100151	Unidentified effect (smoke; ships in m10_02)
+100201	Haze (Firelink Shrine)
+110000	Lingering Fog (Painted World)
+110001	Lingering Fog (Painted World)
+110002	Probably related to: Lingering Fog (Painted World) (sibling id 110001)
+110003	Bonfire SFX (Painted World)
+110004	Probably related to: Bonfire SFX (Painted World) (sibling id 110003)
+110005	Variant of Weak MP Regenerate status visual (finish) (same sprite set as 23328)
+120001	Fog m1570 (Darkroot Garden/Basin)
+120002	Fog m (Darkroot Garden/Basin)
+120003	Fog m1620 (Darkroot Garden/Basin)
+120004	Fog m1640 (Darkroot Garden/Basin)
+120008	h0060 Fireflies (Darkroot Garden/Basin)
+120009	Glowing Flower m1570 (Darkroot Garden/Basin)
+120010	h0015 Waterfall (Darkroot Garden/Basin)
+120011	h0015 Waterfall Mist (Darkroot Garden/Basin)
+120012	m1640 Small Waterfall (Darkroot Garden/Basin)
+120013	m1640 Small Waterfall (Darkroot Garden/Basin)
+120014	m1640 Small Waterfall (Darkroot Garden/Basin)
+120020	Scripted effect on entity 0 (Darkroot Garden/Basin)
+120021	Scripted effect on entity 0 (Darkroot Garden/Basin)
+120022	Dark Hole (Oolacile (DLC))
+120023	Dark Hole (Oolacile (DLC))
+120024	Settlement Darkness (Oolacile (DLC))
+120025	Dark Hole (Oolacile (DLC))
+120027	[DLC] Past Forest Warp SFX (Darkroot Garden/Basin)
+120028	Boss Room Wall (Oolacile (DLC))
+120029	Scripted effect on entity 1211000 (Oolacile (DLC))
+120030	Scripted effect on entity 1211001 (Oolacile (DLC))
+120031	Ranking Board (Oolacile (DLC))
+120032	Breakable object destroyed: Dark Tree
+120033	Breakable object destroyed: Dark Tree (low)
+120034	Waterfall 1 Thick Upper (Oolacile (DLC))
+120035	Waterfall 1 Thick Middle (Oolacile (DLC))
+120036	Waterfall 1 Thick Lower (Oolacile (DLC))
+120037	Waterfall 1 Thin Upper (Oolacile (DLC))
+120038	Waterfall 1 Ground Part (Oolacile (DLC))
+120040	Waterfall 2 Left Upper (Oolacile (DLC))
+120041	Waterfall 2 Left Middle Fork (Oolacile (DLC))
+120042	Waterfall 2 Left Lower Fork (Oolacile (DLC))
+120043	Waterfall 2 Center Upper (Oolacile (DLC))
+120044	Waterfall 2 Center Splash Spot (Oolacile (DLC))
+120045	Waterfall 2 Center Lower (Oolacile (DLC))
+120046	Waterfall 2 Right Upper (Oolacile (DLC))
+120047	Waterfall 2 Right Lower (Oolacile (DLC))
+120049	Waterfall 3 Right Upper (Oolacile (DLC))
+120050	Waterfall 3 Center Fork (Oolacile (DLC))
+120051	Waterfall 3 Right Lower (Oolacile (DLC))
+120052	Waterfall 3 Left Right-Lower (Oolacile (DLC))
+120053	Waterfall 3 Left Left-Lower (Oolacile (DLC))
+120054	Arena Recruiting 1vs1 b B (Oolacile (DLC))
+120055	Waterfall 4 Right (Oolacile (DLC))
+120056	Fireplace (Oolacile (DLC))
+120057	Glowing Flower m1630 (Oolacile (DLC))
+120058	Dark Embers (Oolacile (DLC))
+120059	Lantern Light (Oolacile (DLC))
+120060	Fog m1640 (Oolacile (DLC))
+120061	Fog m1790 (Oolacile (DLC))
+120062	Arena Recruiting 1vs1 b A (Oolacile (DLC))
+120065	Sniper's Candlestick (Oolacile (DLC))
+120066	Landing Protection (Oolacile (DLC))
+120071	Breakable object destroyed: Breakable Stone Pillar 1
+120072	Breakable object destroyed: Breakable Stone Pillar 2
+120073	Breakable object destroyed: Breakable Stone Pillar 3
+120074	Breakable object destroyed: Breakable Stone Pillar 4
+130000	Scripted effect on entity 0 (Catacombs)
+130001	[SFX] Waterfall Spray (Catacombs)
+130002	[SFX] Waterfall Spray (Catacombs)
+130003	[SFX] Waterfall Mist (Catacombs)
+140000	Scripted effect on entity 1411340 (Demon Ruins / Lost Izalith)
+140001	Scripted effect on entity 1411351 (Demon Ruins / Lost Izalith)
+140002	Scripted effect on entity 1411400 (Demon Ruins / Lost Izalith)
+140003	Lava Smoke: Around Central Building (Demon Ruins / Lost Izalith)
+140004	Lava Smoke: Front (Demon Ruins / Lost Izalith)
+140005	Embers (Demon Ruins / Lost Izalith)
+140006	Izalith Seal Right (Demon Ruins / Lost Izalith)
+140007	Object o4610 animation effect (anim 0)
+140008	Scripted effect on entity 0 (Demon Ruins / Lost Izalith)
+140009	Scripted effect on entity 1411202 (Demon Ruins / Lost Izalith)
+140012	Izalith Seal Right (base) (Demon Ruins / Lost Izalith)
+150001	Scripted effect on entity 1501790 (Sen's Fortress)
+150002	Royal Castle 1: Arrows Popping Out (projectile)
+150003	Royal Castle 1: Arrows Popping Out (impact)
+150004	Arrow Launch A Switch (Sen's Fortress)
+150005	Scripted effect on entity 0 (Sen's Fortress)
+150008	Sign to Warp to Royal Castle 2 (Sen's Fortress)
+150030	Unidentified effect (smoke; ships in m15_01)
+160000	Cutscene effect (scn160000, New Londo Ruins)
+160001	Cutscene effect (scn160000, New Londo Ruins)
+160002	Cutscene effect (scn160000, New Londo Ruins)
+160003	Cutscene effect (scn160001, New Londo Ruins)
+160004	Cutscene effect (scn160001, New Londo Ruins)
+160005	Player cast/gesture effect
+170000	Probably related to: Drifting Crystal Shards, Seath Elevator (Duke's Archives) (sibling id 170001)
+170001	Drifting Crystal Shards, Seath Elevator (Duke's Archives)
+170002	Drifting Crystal Shards, Inside Crystal Cave (Duke's Archives)
+170003	m2530 Fog (Duke's Archives)
+170004	Cutscene effect (scn170000, Duke's Archives)
+170005	m2491 Bursting (Duke's Archives)
+170006	m2491 Bursting (Duke's Archives)
+170007	m2491 Bursting (Duke's Archives)
+170008	m2491 Bursting (Duke's Archives)
+170009	m2491 Bursting (Duke's Archives)
+170010	m2491 Bursting (Duke's Archives)
+170011	m2491 Bursting (Duke's Archives)
+170012	m2491 Bursting (Duke's Archives)
+170020	m2491 Non-hitting (Duke's Archives)
+180000	Boss Room Embers (Kiln of the First Flame)
+180001	Probably related to: Boss Room Embers (Kiln of the First Flame) (sibling id 180000)
+180005	Scripted effect on entity 0 (Kiln of the First Flame)
+180006	Scripted effect on entity 0 (Kiln of the First Flame)
+180007	Scripted effect on entity 0 (Kiln of the First Flame)
+180008	Scripted effect on entity 0 (Kiln of the First Flame)
+180010	Stairs Soul Flow (Kiln of the First Flame)
+180100	Scripted effect on entity 1811200 (Undead Asylum)
+1120300	Snow Rat: attack effect (anim 502,503,602,603...)
+1120301	Snow Rat (c1203) map-specific effect
+1120302	Snow Rat (c1203) map-specific effect
+1120303	Snow Rat (c1203) map-specific effect
+1120304	Snow Rat (c1203) map-specific effect
+1120307	Snow Rat (c1203) map-specific effect
+1120320	Snow Rat (c1203) map-specific effect
+1120321	Snow Rat (c1203) map-specific effect
+1120400	Snow Rat: attack effect (anim 200,201,202,203...)
+1120401	Snow Rat: reaction effect (anim 2207)
+1120402	Probably related to: Snow Rat: reaction effect (anim 2207) (sibling id 1120401)
+1120403	Probably related to: Snow Rat: reaction effect (anim 2207) (sibling id 1120401)
+1120404	Probably related to: Snow Rat: reaction effect (anim 2207) (sibling id 1120401)
+1120407	Probably related to: Snow Rat: reaction effect (anim 2207) (sibling id 1120401)
+1120420	Unidentified effect (no sprites; ships in m11)
+1120421	Unidentified effect (dust/debris/smoke; ships in m11)
+1120500	Snow Rat: attack effect (anim 1750,1751,2040,2209...)
+1120501	Probably related to: Snow Rat: attack effect (anim 1750,1751,2040,2209...) (sibling id 1120500)
+1120502	Probably related to: Snow Rat: attack effect (anim 1750,1751,2040,2209...) (sibling id 1120500)
+1120503	Probably related to: Snow Rat: attack effect (anim 1750,1751,2040,2209...) (sibling id 1120500)
+1120504	Probably related to: Snow Rat: attack effect (anim 1750,1751,2040,2209...) (sibling id 1120500)
+1120507	Probably related to: Snow Rat: attack effect (anim 1750,1751,2040,2209...) (sibling id 1120500)
+1120520	Unidentified effect (no sprites; ships in m11)
+1120521	Unidentified effect (smoke/dust/debris; ships in m11)
+1200000	Manus: attack effect (anim 200,201,202,203...)
+1200001	Variant of Weak MP Regenerate status visual (finish) (same sprite set as 23328)
+1200002	Probably related to: Manus: attack effect (anim 200,201,202,203...) (sibling id 1200000)
+1200003	Probably related to: Manus: attack effect (anim 200,201,202,203...) (sibling id 1200000)
+1200120	Variant of Cutscene effect (scn120002, Darkroot Garden/Basin) (same sprite set as 41201)
+1200121	Unidentified effect (no sprites; ships in CommonEffects)
+1212000	Giant Rat: attack effect (anim 200,201,202,203...)
+1212001	Probably related to: Giant Rat: attack effect (anim 200,201,202,203...) (sibling id 1212000)
+1212002	Probably related to: Giant Rat: attack effect (anim 200,201,202,203...) (sibling id 1212000)
+1212020	Variant of Cutscene effect (scn100000, Depths) (same sprite set as 1526020)
+1222000	Iron Golem: attack effect (anim 500,701,3000,3001...)
+1222001	Unused Knight (c2220) map-specific effect
+1223000	Titanite Demon: attack effect (anim 200,201,202,203...)
+1223001	Stray Demon (c2230) map-specific effect
+1223002	Stray Demon (c2230) map-specific effect
+1223025	Stray Demon (c2230) map-specific effect
+1223100	Titanite Demon: attack effect (anim 701,1750,2004,2005...)
+1223101	Demon Firesage (c2231) map-specific effect
+1223102	Demon Firesage (c2231) map-specific effect
+1223125	Demon Firesage (c2231) map-specific effect
+1223200	Crow Demon: attack effect (anim 200,201,202,203...)
+1223201	Asylum Demon (c2232) map-specific effect
+1223202	Asylum Demon (c2232) map-specific effect
+1223204	Asylum Demon (c2232) map-specific effect
+1223207	Asylum Demon (c2232) map-specific effect
+1223217	Asylum Demon (c2232) map-specific effect
+1223300	Crow Demon: attack effect (anim 500,2040,2207,2209...)
+1223301	Probably related to: Crow Demon: attack effect (anim 500,2040,2207,2209...) (sibling id 1223300)
+1223302	Probably related to: Crow Demon: attack effect (anim 500,2040,2207,2209...) (sibling id 1223300)
+1223304	Probably related to: Crow Demon: attack effect (anim 500,2040,2207,2209...) (sibling id 1223300)
+1223307	Probably related to: Crow Demon: attack effect (anim 500,2040,2207,2209...) (sibling id 1223300)
+1223317	Unidentified effect (no sprites; ships in m11)
+1223500	Titanite Demon: attack effect (anim 200,201,202,203...)
+1223501	Probably related to: Titanite Demon: attack effect (anim 200,201,202,203...) (sibling id 1223500)
+1223502	Probably related to: Titanite Demon: attack effect (anim 200,201,202,203...) (sibling id 1223500)
+1223525	Unidentified effect (blood/liquid/mesh/other; ships in m10_01, m15_00)
+1223600	Titanite Demon: attack effect (anim 701,1750,2004,2005...)
+1223601	Variant of Scripted effect on entity 1811200 (Undead Asylum) (same sprite set as 180100)
+1223602	Variant of Scripted effect on entity 1811200 (Undead Asylum) (same sprite set as 180100)
+1223625	Unidentified effect (blood/liquid/mesh/other; ships in m10_01, m15_00)
+1225000	Taurus Demon: attack effect (anim 200,201,202,203...)
+1225001	Taurus Demon (c2250) map-specific effect
+1225002	Taurus Demon (c2250) map-specific effect
+1225003	Taurus Demon (c2250) map-specific effect
+1225027	Taurus Demon (c2250) map-specific effect
+1227000	Mushroom Parent (c2270) map-specific effect
+1227001	Mushroom Parent (c2270) map-specific effect
+1227002	Mushroom Parent (c2270) map-specific effect
+1227020	Mushroom Parent (c2270) map-specific effect
+1227021	Mushroom Parent (c2270) map-specific effect
+1273000	Crossbreed Priscilla: attack effect (anim 200,201,202,203...)
+1273001	Crossbreed Priscilla (c2730) map-specific effect
+1273002	Crossbreed Priscilla (c2730) map-specific effect
+1273003	Crossbreed Priscilla (c2730) map-specific effect
+1273005	Crossbreed Priscilla (c2730) map-specific effect
+1273007	Crossbreed Priscilla (c2730) map-specific effect
+1273017	Crossbreed Priscilla (c2730) map-specific effect
+1273020	Crossbreed Priscilla (c2730) map-specific effect
+1273021	Crossbreed Priscilla (c2730) map-specific effect
+1273100	Crossbreed Priscilla: attack effect (anim 500,1750,3000,3001...)
+1273101	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273102	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273103	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273105	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273107	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273117	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273120	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1273121	Crossbreed Priscilla (tail) (c2731) map-specific effect
+1290000	Skeleton (c2900) map-specific effect
+1290001	Skeleton (c2900) map-specific effect
+1290002	Skeleton (c2900) map-specific effect
+1290007	Skeleton (c2900) map-specific effect
+1290017	Skeleton (c2900) map-specific effect
+1291001	Giant Skeleton (c2910) map-specific effect
+1291002	Giant Skeleton (c2910) map-specific effect
+1291003	Giant Skeleton (c2910) map-specific effect
+1291006	Giant Skeleton (c2910) map-specific effect
+1291020	Giant Skeleton (c2910) map-specific effect
+1329000	Brain Bug (unused): attack effect (anim 200,201,500,602...)
+1329020	Brain Bug (unused) (c3290) map-specific effect
+1329023	Brain Bug (unused) (c3290) map-specific effect
+1329024	Brain Bug (unused) (c3290) map-specific effect
+1329123	Unidentified effect (mesh/other; ships in m14_00)
+1341001	Frog-Ray (c3410) map-specific effect
+1341003	Frog-Ray (c3410) map-specific effect
+1341020	Frog-Ray (c3410) map-specific effect
+1341021	Frog-Ray (c3410) map-specific effect
+1341100	Frog-Ray: event/idle effect (anim 10200,10500,10602,10603...)
+1341120	Variant of Cutscene effect (scn120002, Darkroot Garden/Basin) (same sprite set as 41201)
+1341121	Unidentified effect (no sprites; ships in m12)
+1341200	Frog-Ray: event/idle effect (anim 10700,11610,11620,11750...)
+1341220	Unidentified effect (dust/debris/blood/liquid; ships in m12)
+1341221	Unidentified effect (no sprites; ships in m12)
+1342000	Bounding Demon: attack effect (anim 200,201,202,203...)
+1342001	Undead Dragon (c3420) map-specific effect
+1342003	Undead Dragon (c3420) map-specific effect
+1342023	Undead Dragon (c3420) map-specific effect
+1342027	Undead Dragon (c3420) map-specific effect
+1342100	Bounding Demon (c3421) map-specific effect
+1347000	Sanctuary Guardian: attack effect (anim 1750,3007,3008,3009...)
+1347001	Sanctuary Guardian (unused) (c3470) map-specific effect
+1347003	Sanctuary Guardian (unused) (c3470) map-specific effect
+1347020	Sanctuary Guardian (unused) (c3470) map-specific effect
+1347100	Sanctuary Guardian: attack effect (anim 701,702,703,711...)
+1347101	Sanctuary Guardian (c3471) map-specific effect
+1347103	Sanctuary Guardian (c3471) map-specific effect
+1347120	Sanctuary Guardian (c3471) map-specific effect
+1347200	Sanctuary Guardian: attack effect (anim 500,502,503,602...)
+1347201	Sanctuary Guardian (tail) (c3472) map-specific effect
+1347203	Sanctuary Guardian (tail) (c3472) map-specific effect
+1347220	Sanctuary Guardian (tail) (c3472) map-specific effect
+1347300	Sanctuary Guardian: attack effect (anim 200,201,202,203...)
+1347301	Probably related to: Sanctuary Guardian: attack effect (anim 200,201,202,203...) (sibling id 1347300)
+1347303	Probably related to: Sanctuary Guardian: attack effect (anim 200,201,202,203...) (sibling id 1347300)
+1347320	Unidentified effect (blood/liquid; ships in c3471)
+1347400	Sanctuary Guardian: attack effect (anim 500,502,503,701...)
+1347401	Probably related to: Sanctuary Guardian: attack effect (anim 500,502,503,701...) (sibling id 1347400)
+1347403	Probably related to: Sanctuary Guardian: attack effect (anim 500,502,503,701...) (sibling id 1347400)
+1347420	Unidentified effect (blood/liquid/dust/debris; ships in c3471)
+1347500	Sanctuary Guardian: attack effect (anim 3000,3001,3002,3003...)
+1347501	Variant of Scripted effect on entity 1811200 (Undead Asylum) (same sprite set as 180100)
+1347503	Variant of Scripted effect on entity 1811200 (Undead Asylum) (same sprite set as 180100)
+1347520	Unidentified effect (blood/liquid/sparkle; ships in c3471)
+1347600	Sanctuary Guardian: attack effect (anim 3006)
+1347601	Probably related to: Sanctuary Guardian: attack effect (anim 3006) (sibling id 1347600)
+1347603	Probably related to: Sanctuary Guardian: attack effect (anim 3006) (sibling id 1347600)
+1347620	Unidentified effect (blood/liquid/smoke; ships in c3471)
+1412000	Chained Prisoner: attack effect (anim 200,201,202,203...)
+1412001	Stone Guardian (c4120) map-specific effect
+1412002	Stone Guardian (c4120) map-specific effect
+1412003	Stone Guardian (c4120) map-specific effect
+1412004	Stone Guardian (c4120) map-specific effect
+1412020	Stone Guardian (c4120) map-specific effect
+1412100	Stone Guardian: attack effect (anim 200,201,202,203...)
+1412101	Probably related to: Stone Guardian: attack effect (anim 200,201,202,203...) (sibling id 1412100)
+1412102	Probably related to: Stone Guardian: attack effect (anim 200,201,202,203...) (sibling id 1412100)
+1412103	Probably related to: Stone Guardian: attack effect (anim 200,201,202,203...) (sibling id 1412100)
+1412104	Probably related to: Stone Guardian: attack effect (anim 200,201,202,203...) (sibling id 1412100)
+1412120	Unidentified effect (no sprites; ships in m12_01)
+1451000	Black Dragon Kalameet: attack effect (anim 200,201,202,203...)
+1451003	Black Dragon Kalameet (c4510) map-specific effect
+1451004	Black Dragon Kalameet (c4510) map-specific effect
+1451020	Black Dragon Kalameet (c4510) map-specific effect
+1451100	Black Dragon Kalameet: attack effect (anim 3000,3001,3004,3005...)
+1451103	Black Dragon Kalameet (tail) (c4511) map-specific effect
+1451104	Black Dragon Kalameet (tail) (c4511) map-specific effect
+1451120	Black Dragon Kalameet (tail) (c4511) map-specific effect
+1520000	Centipede Demon (arm): attack effect (anim 200,201,202,203...)
+1520003	Centipede Demon (c5200) map-specific effect
+1520027	Centipede Demon (c5200) map-specific effect
+1520100	Centipede Demon (tail): attack effect (anim 1750,1751,2040,3000...)
+1520103	Centipede Demon (arm) (c5201) map-specific effect
+1520127	Centipede Demon (arm) (c5201) map-specific effect
+1521000	Sif: attack effect (anim 500,502,503,701...)
+1521003	Sif (c5210) map-specific effect
+1521020	Sif (c5210) map-specific effect
+1521021	Sif (c5210) map-specific effect
+1521100	Sif: attack effect (anim 200,201,202,203...)
+1521101	Probably related to: Sif: attack effect (anim 200,201,202,203...) (sibling id 1521100)
+1521103	Probably related to: Sif: attack effect (anim 200,201,202,203...) (sibling id 1521100)
+1521120	Unidentified effect (blood/liquid/sparkle; ships in m12)
+1521121	Unidentified effect (blood/liquid/sparkle; ships in m12)
+1521200	Sif: attack effect (anim 500,502,503,701...)
+1521203	Probably related to: Sif: attack effect (anim 500,502,503,701...) (sibling id 1521200)
+1521220	Unidentified effect (blood/liquid/sparkle; ships in m12)
+1521221	Unidentified effect (no sprites; ships in m12)
+1525000	Ceaseless Discharge: event/idle effect (anim 200,201,202,203...)
+1526000	Gaping Dragon: attack effect (anim 200,201,600,601...)
+1526001	Gaping Dragon (c5260) map-specific effect
+1526002	Gaping Dragon (c5260) map-specific effect
+1526007	Gaping Dragon (c5260) map-specific effect
+1526020	Cutscene effect (scn100000, Depths)
+1526100	Gaping Dragon: attack effect (anim 3000)
+1526102	Gaping Dragon (tail) (c5261) map-specific effect
+1526107	Gaping Dragon (tail) (c5261) map-specific effect
+1526120	Gaping Dragon (tail) (c5261) map-specific effect
+1526122	Gaping Dragon (tail) (c5261) map-specific effect
+1533000	Primordial Serpent (c5330) map-specific effect
+1533001	Primordial Serpent (c5330) map-specific effect
+1533002	Primordial Serpent (c5330) map-specific effect
+1533003	Primordial Serpent (c5330) map-specific effect
+1533004	Primordial Serpent (c5330) map-specific effect
+1533005	Primordial Serpent (c5330) map-specific effect
+1533012	Primordial Serpent (c5330) map-specific effect
+1533020	Primordial Serpent (c5330) map-specific effect
+1535000	Bell Gargoyle (c5350) map-specific effect
+1535001	Bell Gargoyle (c5350) map-specific effect
+1535014	Bell Gargoyle (c5350) map-specific effect
+100000000	Surface hit/footstep dispatcher type 00.000 surface 0
+100000001	Surface hit/footstep dispatcher type 00.000 surface 1 -> stone (outdoor), wood
+100000002	Cutscene effect (scn130010, Catacombs)
+100000003	Surface hit/footstep dispatcher type 00.000 surface 3 -> gravel
+100000004	Surface hit/footstep dispatcher type 00.000 surface 4 -> stone (indoor)
+100000005	Surface hit/footstep dispatcher type 00.000 surface 5 -> soil
+100000006	Surface hit/footstep dispatcher type 00.000 surface 6 -> wood
+100000007	Surface hit/footstep dispatcher type 00.000 surface 7 -> ash
+100000008	Surface hit/footstep dispatcher type 00.000 surface 8 -> giant tree
+100000009	Surface hit/footstep dispatcher type 00.000 surface 9 -> stone (outdoor)
+100000010	Surface hit/footstep dispatcher type 00.000 surface 10 -> grass
+100000011	Surface hit/footstep dispatcher type 00.000 surface 11 -> map set
+100000012	Surface hit/footstep dispatcher type 00.000 surface 12 -> rotten wood
+100000014	Surface hit/footstep dispatcher type 00.000 surface 14 -> stone (indoor)
+100000015	Surface hit/footstep dispatcher type 00.000 surface 15 -> stone (indoor)
+100000016	Surface hit/footstep dispatcher type 00.000 surface 16 -> map set
+100000017	Surface hit/footstep dispatcher type 00.000 surface 17 -> ash
+100000020	Surface hit/footstep dispatcher type 00.000 surface 20 -> ice
+100000021	Surface hit/footstep dispatcher type 00.000 surface 21 -> ice
+100000022	Surface hit/footstep dispatcher type 00.000 surface 22 -> snow
+100000023	Surface hit/footstep dispatcher type 00.000 surface 23 -> iron
+100000025	Surface hit/footstep dispatcher type 00.000 surface 25 -> bone
+100000027	Surface hit/footstep dispatcher type 00.000 surface 27 -> map set
+100000028	Surface hit/footstep dispatcher type 00.000 surface 28 -> wood
+100000029	Surface hit/footstep dispatcher type 00.000 surface 29
+100000034	Surface hit/footstep dispatcher type 00.000 surface 34
+100000050	Surface hit/footstep dispatcher type 00.000 surface 50 -> stone (outdoor)
+100000051	Surface hit/footstep dispatcher type 00.000 surface 51 -> dummy, stone (outdoor)
+100000052	Surface hit/footstep dispatcher type 00.000 surface 52 -> map set
+100000056	Surface hit/footstep dispatcher type 00.000 surface 56 -> dummy, stone (outdoor)
+100000059	Surface hit/footstep dispatcher type 00.000 surface 59 -> dummy
+100000060	Surface hit/footstep dispatcher type 00.000 surface 60 -> dummy
+100000061	Surface hit/footstep dispatcher type 00.000 surface 61 -> map set
+100000062	Surface hit/footstep dispatcher type 00.000 surface 62 -> map set
+100000063	Surface hit/footstep dispatcher type 00.000 surface 63 -> dummy, stone (outdoor)
+100000064	Surface hit/footstep dispatcher type 00.000 surface 64 -> map set
+100000065	Surface hit/footstep dispatcher type 00.000 surface 65 -> map set
+100000068	Surface hit/footstep dispatcher type 00.000 surface 68 -> map set
+100000069	Surface hit/footstep dispatcher type 00.000 surface 69 -> map set
+100000070	Surface hit/footstep dispatcher type 00.000 surface 70 -> map set
+100000071	Surface hit/footstep dispatcher type 00.000 surface 71 -> map set
+100000072	Surface hit/footstep dispatcher type 00.000 surface 72 -> map set
+100000073	Surface hit/footstep dispatcher type 00.000 surface 73 -> map set
+100000074	Surface hit/footstep dispatcher type 00.000 surface 74 -> map set
+100000075	Surface hit/footstep dispatcher type 00.000 surface 75 -> map set
+100000076	Surface hit/footstep dispatcher type 00.000 surface 76 -> map set
+100000077	Surface hit/footstep dispatcher type 00.000 surface 77 -> map set
+100000078	Surface hit/footstep dispatcher type 00.000 surface 78 -> map set
+100000080	Surface hit/footstep dispatcher type 00.000 surface 80 -> map set
+100000081	Surface hit/footstep dispatcher type 00.000 surface 81 -> map set
+100000082	Surface hit/footstep dispatcher type 00.000 surface 82 -> map set
+100000083	Surface hit/footstep dispatcher type 00.000 surface 83 -> map set
+100000084	Surface hit/footstep dispatcher type 00.000 surface 84 -> map set
+100000085	Surface hit/footstep dispatcher type 00.000 surface 85 -> map set
+100000086	Surface hit/footstep dispatcher type 00.000 surface 86 -> map set
+100000087	Surface hit/footstep dispatcher type 00.000 surface 87 -> map set
+100000088	Surface hit/footstep dispatcher type 00.000 surface 88 -> map set
+100000089	Surface hit/footstep dispatcher type 00.000 surface 89 -> map set
+100000090	Surface hit/footstep dispatcher type 00.000 surface 90 -> map set
+100001000	Surface hit/footstep dispatcher type 00.001 surface 0
+100001001	Surface hit/footstep dispatcher type 00.001 surface 1 -> stone (outdoor), wood
+100001002	Surface hit/footstep dispatcher type 00.001 surface 2
+100001003	Surface hit/footstep dispatcher type 00.001 surface 3 -> gravel
+100001004	Surface hit/footstep dispatcher type 00.001 surface 4 -> stone (indoor)
+100001005	Surface hit/footstep dispatcher type 00.001 surface 5 -> soil
+100001006	Surface hit/footstep dispatcher type 00.001 surface 6 -> wood
+100001007	Surface hit/footstep dispatcher type 00.001 surface 7 -> ash
+100001008	Surface hit/footstep dispatcher type 00.001 surface 8 -> giant tree
+100001009	Surface hit/footstep dispatcher type 00.001 surface 9 -> stone (outdoor)
+100001010	Surface hit/footstep dispatcher type 00.001 surface 10 -> grass
+100001011	Surface hit/footstep dispatcher type 00.001 surface 11 -> map set
+100001012	Surface hit/footstep dispatcher type 00.001 surface 12 -> rotten wood
+100001014	Surface hit/footstep dispatcher type 00.001 surface 14 -> stone (indoor)
+100001015	Surface hit/footstep dispatcher type 00.001 surface 15 -> stone (indoor)
+100001016	Surface hit/footstep dispatcher type 00.001 surface 16 -> map set
+100001017	Surface hit/footstep dispatcher type 00.001 surface 17 -> ash
+100001020	Surface hit/footstep dispatcher type 00.001 surface 20 -> ice
+100001021	Surface hit/footstep dispatcher type 00.001 surface 21 -> ice
+100001022	Surface hit/footstep dispatcher type 00.001 surface 22 -> snow
+100001023	Surface hit/footstep dispatcher type 00.001 surface 23 -> iron
+100001025	Surface hit/footstep dispatcher type 00.001 surface 25 -> bone
+100001027	Surface hit/footstep dispatcher type 00.001 surface 27 -> map set
+100001028	Surface hit/footstep dispatcher type 00.001 surface 28 -> wood
+100001029	Surface hit/footstep dispatcher type 00.001 surface 29
+100001034	Surface hit/footstep dispatcher type 00.001 surface 34
+100001050	Surface hit/footstep dispatcher type 00.001 surface 50 -> stone (outdoor)
+100001051	Surface hit/footstep dispatcher type 00.001 surface 51 -> dummy, stone (outdoor)
+100001052	Surface hit/footstep dispatcher type 00.001 surface 52 -> map set
+100001056	Surface hit/footstep dispatcher type 00.001 surface 56 -> dummy, stone (outdoor)
+100001059	Surface hit/footstep dispatcher type 00.001 surface 59 -> dummy
+100001060	Surface hit/footstep dispatcher type 00.001 surface 60 -> dummy
+100001061	Surface hit/footstep dispatcher type 00.001 surface 61 -> map set
+100001062	Surface hit/footstep dispatcher type 00.001 surface 62 -> map set
+100001063	Surface hit/footstep dispatcher type 00.001 surface 63 -> dummy, stone (outdoor)
+100001064	Surface hit/footstep dispatcher type 00.001 surface 64 -> map set
+100001065	Surface hit/footstep dispatcher type 00.001 surface 65 -> map set
+100001068	Surface hit/footstep dispatcher type 00.001 surface 68 -> map set
+100001069	Surface hit/footstep dispatcher type 00.001 surface 69 -> map set
+100001070	Surface hit/footstep dispatcher type 00.001 surface 70 -> map set
+100001071	Surface hit/footstep dispatcher type 00.001 surface 71 -> map set
+100001072	Surface hit/footstep dispatcher type 00.001 surface 72 -> map set
+100001073	Surface hit/footstep dispatcher type 00.001 surface 73 -> map set
+100001074	Surface hit/footstep dispatcher type 00.001 surface 74 -> map set
+100001075	Surface hit/footstep dispatcher type 00.001 surface 75 -> map set
+100001076	Surface hit/footstep dispatcher type 00.001 surface 76 -> map set
+100001077	Surface hit/footstep dispatcher type 00.001 surface 77 -> map set
+100001078	Surface hit/footstep dispatcher type 00.001 surface 78 -> map set
+100001080	Surface hit/footstep dispatcher type 00.001 surface 80 -> map set
+100001081	Surface hit/footstep dispatcher type 00.001 surface 81 -> map set
+100001082	Surface hit/footstep dispatcher type 00.001 surface 82 -> map set
+100001083	Surface hit/footstep dispatcher type 00.001 surface 83 -> map set
+100001084	Surface hit/footstep dispatcher type 00.001 surface 84 -> map set
+100001085	Surface hit/footstep dispatcher type 00.001 surface 85 -> map set
+100001086	Surface hit/footstep dispatcher type 00.001 surface 86 -> map set
+100001087	Surface hit/footstep dispatcher type 00.001 surface 87 -> map set
+100001088	Surface hit/footstep dispatcher type 00.001 surface 88 -> map set
+100001089	Surface hit/footstep dispatcher type 00.001 surface 89 -> map set
+100001090	Surface hit/footstep dispatcher type 00.001 surface 90 -> map set
+100010000	Surface hit/footstep dispatcher type 00.010 surface 0
+100010001	Surface hit/footstep dispatcher type 00.010 surface 1 -> stone (outdoor), wood
+100010002	Surface hit/footstep dispatcher type 00.010 surface 2
+100010003	Surface hit/footstep dispatcher type 00.010 surface 3 -> gravel
+100010004	Surface hit/footstep dispatcher type 00.010 surface 4 -> stone (indoor)
+100010005	Surface hit/footstep dispatcher type 00.010 surface 5 -> soil
+100010006	Surface hit/footstep dispatcher type 00.010 surface 6 -> wood
+100010007	Surface hit/footstep dispatcher type 00.010 surface 7 -> ash
+100010008	Surface hit/footstep dispatcher type 00.010 surface 8 -> giant tree
+100010009	Surface hit/footstep dispatcher type 00.010 surface 9 -> stone (outdoor)
+100010010	Surface hit/footstep dispatcher type 00.010 surface 10 -> grass
+100010012	Surface hit/footstep dispatcher type 00.010 surface 12 -> rotten wood
+100010014	Surface hit/footstep dispatcher type 00.010 surface 14 -> map set
+100010015	Surface hit/footstep dispatcher type 00.010 surface 15 -> stone (indoor)
+100010016	Surface hit/footstep dispatcher type 00.010 surface 16 -> map set
+100010017	Surface hit/footstep dispatcher type 00.010 surface 17 -> ash
+100010020	Surface hit/footstep dispatcher type 00.010 surface 20 -> ice
+100010021	Surface hit/footstep dispatcher type 00.010 surface 21 -> ice
+100010022	Surface hit/footstep dispatcher type 00.010 surface 22 -> snow
+100010023	Surface hit/footstep dispatcher type 00.010 surface 23 -> iron
+100010025	Surface hit/footstep dispatcher type 00.010 surface 25 -> bone
+100010027	Surface hit/footstep dispatcher type 00.010 surface 27 -> map set
+100010028	Surface hit/footstep dispatcher type 00.010 surface 28 -> wood
+100010029	Surface hit/footstep dispatcher type 00.010 surface 29
+100010034	Surface hit/footstep dispatcher type 00.010 surface 34
+100010050	Surface hit/footstep dispatcher type 00.010 surface 50 -> stone (outdoor)
+100010052	Surface hit/footstep dispatcher type 00.010 surface 52 -> map set
+100010056	Surface hit/footstep dispatcher type 00.010 surface 56 -> dummy, stone (outdoor)
+100010059	Surface hit/footstep dispatcher type 00.010 surface 59 -> dummy
+100010060	Surface hit/footstep dispatcher type 00.010 surface 60 -> dummy
+100010061	Surface hit/footstep dispatcher type 00.010 surface 61 -> map set
+100010062	Surface hit/footstep dispatcher type 00.010 surface 62 -> map set
+100010063	Surface hit/footstep dispatcher type 00.010 surface 63 -> dummy, stone (outdoor)
+100010064	Surface hit/footstep dispatcher type 00.010 surface 64 -> map set
+100010065	Surface hit/footstep dispatcher type 00.010 surface 65 -> map set
+100010068	Surface hit/footstep dispatcher type 00.010 surface 68 -> map set
+100010069	Surface hit/footstep dispatcher type 00.010 surface 69 -> map set
+100010070	Surface hit/footstep dispatcher type 00.010 surface 70 -> map set
+100010071	Surface hit/footstep dispatcher type 00.010 surface 71 -> map set
+100010072	Surface hit/footstep dispatcher type 00.010 surface 72 -> map set
+100010073	Surface hit/footstep dispatcher type 00.010 surface 73 -> map set
+100010074	Surface hit/footstep dispatcher type 00.010 surface 74 -> map set
+100010075	Surface hit/footstep dispatcher type 00.010 surface 75 -> map set
+100010076	Surface hit/footstep dispatcher type 00.010 surface 76 -> map set
+100010077	Surface hit/footstep dispatcher type 00.010 surface 77 -> map set
+100010078	Surface hit/footstep dispatcher type 00.010 surface 78 -> map set
+100010080	Surface hit/footstep dispatcher type 00.010 surface 80 -> map set
+100010081	Surface hit/footstep dispatcher type 00.010 surface 81 -> map set
+100010082	Surface hit/footstep dispatcher type 00.010 surface 82 -> map set
+100010083	Surface hit/footstep dispatcher type 00.010 surface 83 -> map set
+100010084	Surface hit/footstep dispatcher type 00.010 surface 84 -> map set
+100010085	Surface hit/footstep dispatcher type 00.010 surface 85 -> map set
+100010086	Surface hit/footstep dispatcher type 00.010 surface 86 -> map set
+100010087	Surface hit/footstep dispatcher type 00.010 surface 87 -> map set
+100010088	Surface hit/footstep dispatcher type 00.010 surface 88 -> map set
+100010089	Surface hit/footstep dispatcher type 00.010 surface 89 -> map set
+100010090	Surface hit/footstep dispatcher type 00.010 surface 90 -> map set
+100011000	Surface hit/footstep dispatcher type 00.011 surface 0
+100011001	Surface hit/footstep dispatcher type 00.011 surface 1 -> stone (outdoor), wood
+100011002	Surface hit/footstep dispatcher type 00.011 surface 2
+100011003	Surface hit/footstep dispatcher type 00.011 surface 3 -> gravel
+100011004	Surface hit/footstep dispatcher type 00.011 surface 4 -> stone (indoor)
+100011005	Surface hit/footstep dispatcher type 00.011 surface 5 -> soil
+100011006	Surface hit/footstep dispatcher type 00.011 surface 6 -> wood
+100011007	Surface hit/footstep dispatcher type 00.011 surface 7 -> ash
+100011008	Surface hit/footstep dispatcher type 00.011 surface 8 -> giant tree
+100011009	Surface hit/footstep dispatcher type 00.011 surface 9 -> stone (outdoor)
+100011010	Surface hit/footstep dispatcher type 00.011 surface 10 -> grass
+100011012	Surface hit/footstep dispatcher type 00.011 surface 12 -> rotten wood
+100011014	Surface hit/footstep dispatcher type 00.011 surface 14 -> stone (indoor)
+100011015	Surface hit/footstep dispatcher type 00.011 surface 15 -> stone (indoor)
+100011016	Surface hit/footstep dispatcher type 00.011 surface 16 -> map set
+100011017	Surface hit/footstep dispatcher type 00.011 surface 17 -> ash
+100011020	Surface hit/footstep dispatcher type 00.011 surface 20 -> ice
+100011021	Surface hit/footstep dispatcher type 00.011 surface 21 -> ice
+100011022	Surface hit/footstep dispatcher type 00.011 surface 22 -> snow
+100011023	Surface hit/footstep dispatcher type 00.011 surface 23 -> iron
+100011025	Surface hit/footstep dispatcher type 00.011 surface 25 -> bone
+100011027	Surface hit/footstep dispatcher type 00.011 surface 27 -> map set
+100011028	Surface hit/footstep dispatcher type 00.011 surface 28 -> wood
+100011029	Surface hit/footstep dispatcher type 00.011 surface 29
+100011034	Surface hit/footstep dispatcher type 00.011 surface 34
+100011050	Surface hit/footstep dispatcher type 00.011 surface 50 -> stone (outdoor)
+100011052	Surface hit/footstep dispatcher type 00.011 surface 52 -> map set
+100011056	Surface hit/footstep dispatcher type 00.011 surface 56 -> dummy, stone (outdoor)
+100011059	Surface hit/footstep dispatcher type 00.011 surface 59 -> dummy
+100011060	Surface hit/footstep dispatcher type 00.011 surface 60 -> dummy
+100011061	Surface hit/footstep dispatcher type 00.011 surface 61 -> map set
+100011062	Surface hit/footstep dispatcher type 00.011 surface 62 -> map set
+100011063	Surface hit/footstep dispatcher type 00.011 surface 63 -> dummy, stone (outdoor)
+100011064	Surface hit/footstep dispatcher type 00.011 surface 64 -> map set
+100011065	Surface hit/footstep dispatcher type 00.011 surface 65 -> map set
+100011068	Surface hit/footstep dispatcher type 00.011 surface 68 -> map set
+100011069	Surface hit/footstep dispatcher type 00.011 surface 69 -> map set
+100011070	Surface hit/footstep dispatcher type 00.011 surface 70 -> map set
+100011071	Surface hit/footstep dispatcher type 00.011 surface 71 -> map set
+100011072	Surface hit/footstep dispatcher type 00.011 surface 72 -> map set
+100011073	Surface hit/footstep dispatcher type 00.011 surface 73 -> map set
+100011074	Surface hit/footstep dispatcher type 00.011 surface 74 -> map set
+100011075	Surface hit/footstep dispatcher type 00.011 surface 75 -> map set
+100011076	Surface hit/footstep dispatcher type 00.011 surface 76 -> map set
+100011077	Surface hit/footstep dispatcher type 00.011 surface 77 -> map set
+100011078	Surface hit/footstep dispatcher type 00.011 surface 78 -> map set
+100011080	Surface hit/footstep dispatcher type 00.011 surface 80 -> map set
+100011081	Surface hit/footstep dispatcher type 00.011 surface 81 -> map set
+100011082	Surface hit/footstep dispatcher type 00.011 surface 82 -> map set
+100011083	Surface hit/footstep dispatcher type 00.011 surface 83 -> map set
+100011084	Surface hit/footstep dispatcher type 00.011 surface 84 -> map set
+100011085	Surface hit/footstep dispatcher type 00.011 surface 85 -> map set
+100011086	Surface hit/footstep dispatcher type 00.011 surface 86 -> map set
+100011087	Surface hit/footstep dispatcher type 00.011 surface 87 -> map set
+100011088	Surface hit/footstep dispatcher type 00.011 surface 88 -> map set
+100011089	Surface hit/footstep dispatcher type 00.011 surface 89 -> map set
+100011090	Surface hit/footstep dispatcher type 00.011 surface 90 -> map set
+100020000	Surface hit/footstep dispatcher type 00.020 surface 0
+100020001	Surface hit/footstep dispatcher type 00.020 surface 1 -> stone (outdoor), wood
+100020002	Surface hit/footstep dispatcher type 00.020 surface 2
+100020003	Surface hit/footstep dispatcher type 00.020 surface 3 -> gravel
+100020004	Surface hit/footstep dispatcher type 00.020 surface 4 -> stone (indoor)
+100020005	Surface hit/footstep dispatcher type 00.020 surface 5 -> soil
+100020006	Surface hit/footstep dispatcher type 00.020 surface 6 -> wood
+100020007	Surface hit/footstep dispatcher type 00.020 surface 7 -> ash
+100020008	Surface hit/footstep dispatcher type 00.020 surface 8 -> giant tree
+100020009	Surface hit/footstep dispatcher type 00.020 surface 9 -> stone (outdoor)
+100020010	Surface hit/footstep dispatcher type 00.020 surface 10 -> grass
+100020012	Surface hit/footstep dispatcher type 00.020 surface 12 -> rotten wood
+100020014	Surface hit/footstep dispatcher type 00.020 surface 14 -> map set
+100020015	Surface hit/footstep dispatcher type 00.020 surface 15 -> stone (indoor)
+100020016	Surface hit/footstep dispatcher type 00.020 surface 16 -> map set
+100020017	Surface hit/footstep dispatcher type 00.020 surface 17 -> ash
+100020020	Surface hit/footstep dispatcher type 00.020 surface 20 -> ice
+100020021	Surface hit/footstep dispatcher type 00.020 surface 21 -> ice
+100020022	Surface hit/footstep dispatcher type 00.020 surface 22 -> snow
+100020023	Surface hit/footstep dispatcher type 00.020 surface 23 -> iron
+100020025	Surface hit/footstep dispatcher type 00.020 surface 25 -> bone
+100020027	Surface hit/footstep dispatcher type 00.020 surface 27 -> map set
+100020028	Surface hit/footstep dispatcher type 00.020 surface 28 -> wood
+100020029	Surface hit/footstep dispatcher type 00.020 surface 29
+100020034	Surface hit/footstep dispatcher type 00.020 surface 34
+100020050	Surface hit/footstep dispatcher type 00.020 surface 50 -> stone (outdoor)
+100020051	Surface hit/footstep dispatcher type 00.020 surface 51 -> dummy, stone (outdoor)
+100020052	Surface hit/footstep dispatcher type 00.020 surface 52 -> map set
+100020056	Surface hit/footstep dispatcher type 00.020 surface 56 -> dummy, stone (outdoor)
+100020059	Surface hit/footstep dispatcher type 00.020 surface 59 -> dummy
+100020060	Surface hit/footstep dispatcher type 00.020 surface 60 -> dummy
+100020061	Surface hit/footstep dispatcher type 00.020 surface 61 -> map set
+100020062	Surface hit/footstep dispatcher type 00.020 surface 62 -> map set
+100020063	Surface hit/footstep dispatcher type 00.020 surface 63 -> dummy, stone (outdoor)
+100020064	Surface hit/footstep dispatcher type 00.020 surface 64 -> map set
+100020065	Surface hit/footstep dispatcher type 00.020 surface 65 -> map set
+100020068	Surface hit/footstep dispatcher type 00.020 surface 68 -> map set
+100020069	Surface hit/footstep dispatcher type 00.020 surface 69 -> map set
+100020070	Surface hit/footstep dispatcher type 00.020 surface 70 -> map set
+100020071	Surface hit/footstep dispatcher type 00.020 surface 71 -> map set
+100020072	Surface hit/footstep dispatcher type 00.020 surface 72 -> map set
+100020073	Surface hit/footstep dispatcher type 00.020 surface 73 -> map set
+100020074	Surface hit/footstep dispatcher type 00.020 surface 74 -> map set
+100020075	Surface hit/footstep dispatcher type 00.020 surface 75 -> map set
+100020076	Surface hit/footstep dispatcher type 00.020 surface 76 -> map set
+100020077	Surface hit/footstep dispatcher type 00.020 surface 77 -> map set
+100020078	Surface hit/footstep dispatcher type 00.020 surface 78 -> map set
+100020080	Surface hit/footstep dispatcher type 00.020 surface 80 -> map set
+100020081	Surface hit/footstep dispatcher type 00.020 surface 81 -> map set
+100020082	Surface hit/footstep dispatcher type 00.020 surface 82 -> map set
+100020083	Surface hit/footstep dispatcher type 00.020 surface 83 -> map set
+100020084	Surface hit/footstep dispatcher type 00.020 surface 84 -> map set
+100020085	Surface hit/footstep dispatcher type 00.020 surface 85 -> map set
+100020086	Surface hit/footstep dispatcher type 00.020 surface 86 -> map set
+100020087	Surface hit/footstep dispatcher type 00.020 surface 87 -> map set
+100020088	Surface hit/footstep dispatcher type 00.020 surface 88 -> map set
+100020089	Surface hit/footstep dispatcher type 00.020 surface 89 -> map set
+100020090	Surface hit/footstep dispatcher type 00.020 surface 90 -> map set
+100021000	Surface hit/footstep dispatcher type 00.021 surface 0
+100021001	Surface hit/footstep dispatcher type 00.021 surface 1 -> stone (outdoor), wood
+100021002	Surface hit/footstep dispatcher type 00.021 surface 2
+100021003	Surface hit/footstep dispatcher type 00.021 surface 3 -> gravel
+100021004	Surface hit/footstep dispatcher type 00.021 surface 4 -> stone (indoor)
+100021005	Surface hit/footstep dispatcher type 00.021 surface 5 -> soil
+100021006	Surface hit/footstep dispatcher type 00.021 surface 6 -> wood
+100021007	Surface hit/footstep dispatcher type 00.021 surface 7 -> ash
+100021009	Surface hit/footstep dispatcher type 00.021 surface 9 -> stone (outdoor)
+100021010	Surface hit/footstep dispatcher type 00.021 surface 10 -> grass
+100021012	Surface hit/footstep dispatcher type 00.021 surface 12 -> rotten wood
+100021014	Surface hit/footstep dispatcher type 00.021 surface 14 -> map set
+100021015	Surface hit/footstep dispatcher type 00.021 surface 15 -> stone (indoor)
+100021016	Surface hit/footstep dispatcher type 00.021 surface 16 -> map set
+100021017	Surface hit/footstep dispatcher type 00.021 surface 17 -> ash
+100021020	Surface hit/footstep dispatcher type 00.021 surface 20 -> ice
+100021021	Surface hit/footstep dispatcher type 00.021 surface 21 -> ice
+100021022	Surface hit/footstep dispatcher type 00.021 surface 22
+100021023	Surface hit/footstep dispatcher type 00.021 surface 23 -> iron
+100021025	Surface hit/footstep dispatcher type 00.021 surface 25 -> bone
+100021027	Surface hit/footstep dispatcher type 00.021 surface 27 -> map set
+100021028	Surface hit/footstep dispatcher type 00.021 surface 28 -> wood
+100021029	Surface hit/footstep dispatcher type 00.021 surface 29
+100021034	Surface hit/footstep dispatcher type 00.021 surface 34
+100021050	Surface hit/footstep dispatcher type 00.021 surface 50 -> stone (outdoor)
+100021051	Surface hit/footstep dispatcher type 00.021 surface 51 -> dummy, stone (outdoor)
+100021052	Surface hit/footstep dispatcher type 00.021 surface 52 -> map set
+100021056	Surface hit/footstep dispatcher type 00.021 surface 56 -> dummy, stone (outdoor)
+100021059	Surface hit/footstep dispatcher type 00.021 surface 59 -> dummy
+100021060	Surface hit/footstep dispatcher type 00.021 surface 60 -> dummy
+100021061	Surface hit/footstep dispatcher type 00.021 surface 61 -> map set
+100021062	Surface hit/footstep dispatcher type 00.021 surface 62 -> map set
+100021063	Surface hit/footstep dispatcher type 00.021 surface 63 -> dummy, stone (outdoor)
+100021064	Surface hit/footstep dispatcher type 00.021 surface 64 -> map set
+100021065	Surface hit/footstep dispatcher type 00.021 surface 65 -> map set
+100021068	Surface hit/footstep dispatcher type 00.021 surface 68 -> map set
+100021069	Surface hit/footstep dispatcher type 00.021 surface 69 -> map set
+100021070	Surface hit/footstep dispatcher type 00.021 surface 70 -> map set
+100021071	Surface hit/footstep dispatcher type 00.021 surface 71 -> map set
+100021072	Surface hit/footstep dispatcher type 00.021 surface 72 -> map set
+100021073	Surface hit/footstep dispatcher type 00.021 surface 73 -> map set
+100021074	Surface hit/footstep dispatcher type 00.021 surface 74 -> map set
+100021075	Surface hit/footstep dispatcher type 00.021 surface 75 -> map set
+100021076	Surface hit/footstep dispatcher type 00.021 surface 76 -> map set
+100021077	Surface hit/footstep dispatcher type 00.021 surface 77 -> map set
+100021078	Surface hit/footstep dispatcher type 00.021 surface 78 -> map set
+100021080	Surface hit/footstep dispatcher type 00.021 surface 80 -> map set
+100021081	Surface hit/footstep dispatcher type 00.021 surface 81 -> map set
+100021082	Surface hit/footstep dispatcher type 00.021 surface 82 -> map set
+100021083	Surface hit/footstep dispatcher type 00.021 surface 83 -> map set
+100021084	Surface hit/footstep dispatcher type 00.021 surface 84 -> map set
+100021085	Surface hit/footstep dispatcher type 00.021 surface 85 -> map set
+100021086	Surface hit/footstep dispatcher type 00.021 surface 86 -> map set
+100021087	Surface hit/footstep dispatcher type 00.021 surface 87 -> map set
+100021088	Surface hit/footstep dispatcher type 00.021 surface 88 -> map set
+100021089	Surface hit/footstep dispatcher type 00.021 surface 89 -> map set
+100021090	Surface hit/footstep dispatcher type 00.021 surface 90 -> map set
+102020000	Surface hit/footstep dispatcher type 02.020 surface 0
+102020001	Surface hit/footstep dispatcher type 02.020 surface 1 -> wood
+102020002	Surface hit/footstep dispatcher type 02.020 surface 2
+102020003	Surface hit/footstep dispatcher type 02.020 surface 3 -> gravel
+102020004	Surface hit/footstep dispatcher type 02.020 surface 4 -> stone (indoor)
+102020005	Surface hit/footstep dispatcher type 02.020 surface 5 -> soil
+102020006	Surface hit/footstep dispatcher type 02.020 surface 6 -> wood
+102020007	Surface hit/footstep dispatcher type 02.020 surface 7 -> ash
+102020008	Surface hit/footstep dispatcher type 02.020 surface 8 -> giant tree
+102020009	Surface hit/footstep dispatcher type 02.020 surface 9 -> stone (outdoor)
+102020010	Surface hit/footstep dispatcher type 02.020 surface 10 -> grass
+102020012	Surface hit/footstep dispatcher type 02.020 surface 12 -> rotten wood
+102020014	Surface hit/footstep dispatcher type 02.020 surface 14 -> stone (indoor)
+102020015	Surface hit/footstep dispatcher type 02.020 surface 15 -> stone (indoor)
+102020016	Surface hit/footstep dispatcher type 02.020 surface 16 -> map set
+102020017	Surface hit/footstep dispatcher type 02.020 surface 17 -> ash
+102020020	Surface hit/footstep dispatcher type 02.020 surface 20 -> ice
+102020021	Surface hit/footstep dispatcher type 02.020 surface 21 -> ice
+102020022	Surface hit/footstep dispatcher type 02.020 surface 22 -> snow
+102020023	Surface hit/footstep dispatcher type 02.020 surface 23 -> iron
+102020025	Surface hit/footstep dispatcher type 02.020 surface 25 -> bone
+102020027	Surface hit/footstep dispatcher type 02.020 surface 27 -> map set
+102020028	Surface hit/footstep dispatcher type 02.020 surface 28 -> wood
+102020029	Surface hit/footstep dispatcher type 02.020 surface 29
+102020034	Surface hit/footstep dispatcher type 02.020 surface 34 -> stone (indoor)
+102020050	Surface hit/footstep dispatcher type 02.020 surface 50 -> stone (outdoor)
+102020051	Surface hit/footstep dispatcher type 02.020 surface 51 -> stone (outdoor)
+102020052	Surface hit/footstep dispatcher type 02.020 surface 52 -> stone (outdoor)
+102020056	Surface hit/footstep dispatcher type 02.020 surface 56 -> dummy, stone (outdoor)
+102020059	Surface hit/footstep dispatcher type 02.020 surface 59 -> dummy
+102020060	Surface hit/footstep dispatcher type 02.020 surface 60 -> dummy
+102020061	Surface hit/footstep dispatcher type 02.020 surface 61 -> map set
+102020062	Surface hit/footstep dispatcher type 02.020 surface 62 -> map set
+102020063	Surface hit/footstep dispatcher type 02.020 surface 63 -> dummy, stone (outdoor)
+102020064	Surface hit/footstep dispatcher type 02.020 surface 64 -> map set
+102020065	Surface hit/footstep dispatcher type 02.020 surface 65 -> map set
+102020068	Surface hit/footstep dispatcher type 02.020 surface 68 -> map set
+102020069	Surface hit/footstep dispatcher type 02.020 surface 69 -> map set
+102020070	Surface hit/footstep dispatcher type 02.020 surface 70 -> map set
+102020071	Surface hit/footstep dispatcher type 02.020 surface 71 -> map set
+102020072	Surface hit/footstep dispatcher type 02.020 surface 72 -> map set
+102020073	Surface hit/footstep dispatcher type 02.020 surface 73 -> map set
+102020074	Surface hit/footstep dispatcher type 02.020 surface 74 -> map set
+102020075	Surface hit/footstep dispatcher type 02.020 surface 75 -> map set
+102020076	Surface hit/footstep dispatcher type 02.020 surface 76 -> map set
+102020077	Surface hit/footstep dispatcher type 02.020 surface 77 -> map set
+102020078	Surface hit/footstep dispatcher type 02.020 surface 78 -> map set
+102020080	Surface hit/footstep dispatcher type 02.020 surface 80 -> map set
+102020081	Surface hit/footstep dispatcher type 02.020 surface 81 -> map set
+102020082	Surface hit/footstep dispatcher type 02.020 surface 82 -> map set
+102020083	Surface hit/footstep dispatcher type 02.020 surface 83 -> map set
+102020084	Surface hit/footstep dispatcher type 02.020 surface 84 -> map set
+102020085	Surface hit/footstep dispatcher type 02.020 surface 85 -> map set
+102020086	Surface hit/footstep dispatcher type 02.020 surface 86 -> map set
+102020087	Surface hit/footstep dispatcher type 02.020 surface 87 -> map set
+102020088	Surface hit/footstep dispatcher type 02.020 surface 88 -> map set
+102020089	Surface hit/footstep dispatcher type 02.020 surface 89 -> map set, stone (outdoor)
+102020090	Surface hit/footstep dispatcher type 02.020 surface 90 -> map set
+102021001	Surface hit/footstep dispatcher type 02.021 surface 1 -> wood
+102021002	Surface hit/footstep dispatcher type 02.021 surface 2
+102021003	Surface hit/footstep dispatcher type 02.021 surface 3 -> gravel
+102021004	Surface hit/footstep dispatcher type 02.021 surface 4 -> stone (indoor)
+102021005	Surface hit/footstep dispatcher type 02.021 surface 5 -> soil
+102021006	Surface hit/footstep dispatcher type 02.021 surface 6 -> wood
+102021007	Surface hit/footstep dispatcher type 02.021 surface 7 -> ash
+102021008	Surface hit/footstep dispatcher type 02.021 surface 8 -> giant tree
+102021009	Surface hit/footstep dispatcher type 02.021 surface 9 -> stone (outdoor)
+102021010	Surface hit/footstep dispatcher type 02.021 surface 10 -> grass
+102021012	Surface hit/footstep dispatcher type 02.021 surface 12 -> rotten wood
+102021014	Surface hit/footstep dispatcher type 02.021 surface 14 -> stone (indoor)
+102021015	Surface hit/footstep dispatcher type 02.021 surface 15 -> stone (indoor)
+102021016	Surface hit/footstep dispatcher type 02.021 surface 16 -> map set
+102021017	Surface hit/footstep dispatcher type 02.021 surface 17 -> ash
+102021020	Surface hit/footstep dispatcher type 02.021 surface 20 -> ice
+102021021	Surface hit/footstep dispatcher type 02.021 surface 21 -> ice
+102021022	Surface hit/footstep dispatcher type 02.021 surface 22 -> snow
+102021023	Surface hit/footstep dispatcher type 02.021 surface 23 -> iron
+102021025	Surface hit/footstep dispatcher type 02.021 surface 25 -> bone
+102021027	Surface hit/footstep dispatcher type 02.021 surface 27 -> map set
+102021028	Surface hit/footstep dispatcher type 02.021 surface 28 -> wood
+102021029	Surface hit/footstep dispatcher type 02.021 surface 29
+102021034	Surface hit/footstep dispatcher type 02.021 surface 34
+102021050	Surface hit/footstep dispatcher type 02.021 surface 50 -> stone (outdoor)
+102021052	Surface hit/footstep dispatcher type 02.021 surface 52 -> stone (outdoor)
+102021056	Surface hit/footstep dispatcher type 02.021 surface 56 -> dummy, stone (outdoor)
+102021059	Surface hit/footstep dispatcher type 02.021 surface 59 -> dummy
+102021060	Surface hit/footstep dispatcher type 02.021 surface 60 -> dummy
+102021061	Surface hit/footstep dispatcher type 02.021 surface 61 -> map set
+102021062	Surface hit/footstep dispatcher type 02.021 surface 62 -> map set
+102021063	Surface hit/footstep dispatcher type 02.021 surface 63 -> dummy, stone (outdoor)
+102021064	Surface hit/footstep dispatcher type 02.021 surface 64 -> map set
+102021065	Surface hit/footstep dispatcher type 02.021 surface 65 -> map set
+102021068	Surface hit/footstep dispatcher type 02.021 surface 68 -> map set
+102021069	Surface hit/footstep dispatcher type 02.021 surface 69 -> map set
+102021070	Surface hit/footstep dispatcher type 02.021 surface 70 -> map set
+102021071	Surface hit/footstep dispatcher type 02.021 surface 71 -> map set
+102021072	Surface hit/footstep dispatcher type 02.021 surface 72 -> map set
+102021073	Surface hit/footstep dispatcher type 02.021 surface 73 -> map set
+102021074	Surface hit/footstep dispatcher type 02.021 surface 74 -> map set
+102021075	Surface hit/footstep dispatcher type 02.021 surface 75 -> map set
+102021076	Surface hit/footstep dispatcher type 02.021 surface 76 -> map set
+102021077	Surface hit/footstep dispatcher type 02.021 surface 77 -> map set
+102021078	Surface hit/footstep dispatcher type 02.021 surface 78 -> map set
+102021080	Surface hit/footstep dispatcher type 02.021 surface 80 -> map set
+102021081	Surface hit/footstep dispatcher type 02.021 surface 81 -> map set
+102021082	Surface hit/footstep dispatcher type 02.021 surface 82 -> map set
+102021083	Surface hit/footstep dispatcher type 02.021 surface 83 -> map set
+102021084	Surface hit/footstep dispatcher type 02.021 surface 84 -> map set
+102021085	Surface hit/footstep dispatcher type 02.021 surface 85 -> map set
+102021086	Surface hit/footstep dispatcher type 02.021 surface 86 -> map set
+102021087	Surface hit/footstep dispatcher type 02.021 surface 87 -> map set
+102021088	Surface hit/footstep dispatcher type 02.021 surface 88 -> map set
+102021089	Surface hit/footstep dispatcher type 02.021 surface 89 -> map set
+102021090	Surface hit/footstep dispatcher type 02.021 surface 90 -> map set
+103010000	Surface hit/footstep dispatcher type 03.010 surface 0
+103010001	Surface hit/footstep dispatcher type 03.010 surface 1 -> wood
+103010002	Surface hit/footstep dispatcher type 03.010 surface 2
+103010003	Surface hit/footstep dispatcher type 03.010 surface 3 -> gravel
+103010006	Surface hit/footstep dispatcher type 03.010 surface 6 -> wood
+103010015	Surface hit/footstep dispatcher type 03.010 surface 15 -> stone (indoor)
+103010016	Surface hit/footstep dispatcher type 03.010 surface 16 -> map set
+103010020	Surface hit/footstep dispatcher type 03.010 surface 20 -> ice
+103010021	Surface hit/footstep dispatcher type 03.010 surface 21 -> ice
+103010027	Surface hit/footstep dispatcher type 03.010 surface 27 -> map set
+103010028	Surface hit/footstep dispatcher type 03.010 surface 28 -> wood
+103010050	Surface hit/footstep dispatcher type 03.010 surface 50 -> stone (outdoor)
+103010051	Surface hit/footstep dispatcher type 03.010 surface 51 -> stone (outdoor)
+103010052	Surface hit/footstep dispatcher type 03.010 surface 52 -> stone (outdoor)
+103010056	Surface hit/footstep dispatcher type 03.010 surface 56 -> dummy, stone (outdoor)
+103010059	Surface hit/footstep dispatcher type 03.010 surface 59 -> dummy
+103020000	Surface hit/footstep dispatcher type 03.020 surface 0
+103020001	Surface hit/footstep dispatcher type 03.020 surface 1 -> wood
+103020002	Surface hit/footstep dispatcher type 03.020 surface 2
+103020003	Surface hit/footstep dispatcher type 03.020 surface 3 -> gravel
+103020004	Surface hit/footstep dispatcher type 03.020 surface 4
+103020005	Surface hit/footstep dispatcher type 03.020 surface 5 -> soil
+103020006	Surface hit/footstep dispatcher type 03.020 surface 6 -> wood
+103020007	Surface hit/footstep dispatcher type 03.020 surface 7 -> ash
+103020008	Surface hit/footstep dispatcher type 03.020 surface 8 -> giant tree
+103020009	Surface hit/footstep dispatcher type 03.020 surface 9 -> stone (outdoor)
+103020010	Surface hit/footstep dispatcher type 03.020 surface 10 -> grass
+103020012	Surface hit/footstep dispatcher type 03.020 surface 12 -> rotten wood
+103020015	Surface hit/footstep dispatcher type 03.020 surface 15
+103020016	Surface hit/footstep dispatcher type 03.020 surface 16 -> map set
+103020017	Surface hit/footstep dispatcher type 03.020 surface 17 -> ash
+103020020	Surface hit/footstep dispatcher type 03.020 surface 20 -> ice
+103020021	Surface hit/footstep dispatcher type 03.020 surface 21 -> ice
+103020022	Surface hit/footstep dispatcher type 03.020 surface 22 -> snow
+103020023	Surface hit/footstep dispatcher type 03.020 surface 23 -> iron
+103020025	Surface hit/footstep dispatcher type 03.020 surface 25 -> bone
+103020027	Surface hit/footstep dispatcher type 03.020 surface 27 -> map set
+103020028	Surface hit/footstep dispatcher type 03.020 surface 28 -> wood
+103020029	Surface hit/footstep dispatcher type 03.020 surface 29
+103020034	Surface hit/footstep dispatcher type 03.020 surface 34
+103020040	Surface hit/footstep dispatcher type 03.020 surface 40
+103020050	Surface hit/footstep dispatcher type 03.020 surface 50 -> stone (outdoor)
+103020051	Surface hit/footstep dispatcher type 03.020 surface 51 -> stone (outdoor)
+103020052	Surface hit/footstep dispatcher type 03.020 surface 52 -> stone (outdoor)
+103020056	Surface hit/footstep dispatcher type 03.020 surface 56 -> dummy, stone (outdoor)
+103020059	Surface hit/footstep dispatcher type 03.020 surface 59 -> dummy
+103020060	Surface hit/footstep dispatcher type 03.020 surface 60 -> dummy
+103020061	Surface hit/footstep dispatcher type 03.020 surface 61 -> map set
+103020062	Surface hit/footstep dispatcher type 03.020 surface 62 -> map set
+103020063	Surface hit/footstep dispatcher type 03.020 surface 63 -> dummy, stone (outdoor)
+103020064	Surface hit/footstep dispatcher type 03.020 surface 64 -> map set
+103020065	Surface hit/footstep dispatcher type 03.020 surface 65 -> map set
+103020068	Surface hit/footstep dispatcher type 03.020 surface 68 -> map set
+103020069	Surface hit/footstep dispatcher type 03.020 surface 69 -> map set
+103020070	Surface hit/footstep dispatcher type 03.020 surface 70 -> map set
+103020071	Surface hit/footstep dispatcher type 03.020 surface 71 -> map set
+103020072	Surface hit/footstep dispatcher type 03.020 surface 72 -> map set
+103020073	Surface hit/footstep dispatcher type 03.020 surface 73 -> map set
+103020074	Surface hit/footstep dispatcher type 03.020 surface 74 -> map set
+103020075	Surface hit/footstep dispatcher type 03.020 surface 75 -> map set
+103020076	Surface hit/footstep dispatcher type 03.020 surface 76 -> map set
+103020077	Surface hit/footstep dispatcher type 03.020 surface 77 -> map set
+103020078	Surface hit/footstep dispatcher type 03.020 surface 78 -> map set
+103020080	Surface hit/footstep dispatcher type 03.020 surface 80 -> map set
+103020081	Surface hit/footstep dispatcher type 03.020 surface 81 -> map set
+103020082	Surface hit/footstep dispatcher type 03.020 surface 82 -> map set
+103020083	Surface hit/footstep dispatcher type 03.020 surface 83 -> map set
+103020084	Surface hit/footstep dispatcher type 03.020 surface 84 -> map set
+103020085	Surface hit/footstep dispatcher type 03.020 surface 85 -> map set
+103020086	Surface hit/footstep dispatcher type 03.020 surface 86 -> map set
+103020087	Surface hit/footstep dispatcher type 03.020 surface 87 -> map set
+103020088	Surface hit/footstep dispatcher type 03.020 surface 88 -> map set
+103020089	Surface hit/footstep dispatcher type 03.020 surface 89 -> map set
+103020090	Surface hit/footstep dispatcher type 03.020 surface 90 -> map set
+103021000	Surface hit/footstep dispatcher type 03.021 surface 0
+103021001	Surface hit/footstep dispatcher type 03.021 surface 1 -> wood
+103021002	Surface hit/footstep dispatcher type 03.021 surface 2
+103021003	Surface hit/footstep dispatcher type 03.021 surface 3 -> gravel
+103021004	Surface hit/footstep dispatcher type 03.021 surface 4 -> stone (indoor)
+103021005	Surface hit/footstep dispatcher type 03.021 surface 5 -> soil
+103021006	Surface hit/footstep dispatcher type 03.021 surface 6 -> wood
+103021007	Surface hit/footstep dispatcher type 03.021 surface 7 -> ash
+103021008	Surface hit/footstep dispatcher type 03.021 surface 8 -> giant tree
+103021009	Surface hit/footstep dispatcher type 03.021 surface 9 -> stone (outdoor)
+103021010	Surface hit/footstep dispatcher type 03.021 surface 10 -> grass
+103021012	Surface hit/footstep dispatcher type 03.021 surface 12 -> rotten wood
+103021014	Surface hit/footstep dispatcher type 03.021 surface 14 -> stone (indoor)
+103021015	Surface hit/footstep dispatcher type 03.021 surface 15 -> stone (indoor)
+103021016	Surface hit/footstep dispatcher type 03.021 surface 16 -> map set
+103021017	Surface hit/footstep dispatcher type 03.021 surface 17 -> ash
+103021020	Surface hit/footstep dispatcher type 03.021 surface 20 -> ice
+103021021	Surface hit/footstep dispatcher type 03.021 surface 21 -> ice
+103021022	Surface hit/footstep dispatcher type 03.021 surface 22 -> snow
+103021023	Surface hit/footstep dispatcher type 03.021 surface 23 -> iron
+103021025	Surface hit/footstep dispatcher type 03.021 surface 25 -> bone
+103021027	Surface hit/footstep dispatcher type 03.021 surface 27 -> map set
+103021028	Surface hit/footstep dispatcher type 03.021 surface 28 -> wood
+103021029	Surface hit/footstep dispatcher type 03.021 surface 29
+103021034	Surface hit/footstep dispatcher type 03.021 surface 34
+103021050	Surface hit/footstep dispatcher type 03.021 surface 50 -> stone (outdoor)
+103021052	Surface hit/footstep dispatcher type 03.021 surface 52 -> stone (outdoor)
+103021056	Surface hit/footstep dispatcher type 03.021 surface 56 -> dummy, stone (outdoor)
+103021059	Surface hit/footstep dispatcher type 03.021 surface 59 -> dummy
+103021060	Surface hit/footstep dispatcher type 03.021 surface 60 -> dummy
+103021061	Surface hit/footstep dispatcher type 03.021 surface 61 -> map set
+103021062	Surface hit/footstep dispatcher type 03.021 surface 62 -> map set
+103021063	Surface hit/footstep dispatcher type 03.021 surface 63 -> dummy, stone (outdoor)
+103021064	Surface hit/footstep dispatcher type 03.021 surface 64 -> map set
+103021065	Surface hit/footstep dispatcher type 03.021 surface 65 -> map set
+103021068	Surface hit/footstep dispatcher type 03.021 surface 68 -> map set
+103021069	Surface hit/footstep dispatcher type 03.021 surface 69 -> map set
+103021070	Surface hit/footstep dispatcher type 03.021 surface 70 -> map set
+103021071	Surface hit/footstep dispatcher type 03.021 surface 71 -> map set
+103021072	Surface hit/footstep dispatcher type 03.021 surface 72 -> map set
+103021074	Surface hit/footstep dispatcher type 03.021 surface 74 -> map set
+103021075	Surface hit/footstep dispatcher type 03.021 surface 75 -> map set
+103021076	Surface hit/footstep dispatcher type 03.021 surface 76 -> map set
+103021077	Surface hit/footstep dispatcher type 03.021 surface 77 -> map set
+103021078	Surface hit/footstep dispatcher type 03.021 surface 78 -> map set
+103021080	Surface hit/footstep dispatcher type 03.021 surface 80 -> map set
+103021081	Surface hit/footstep dispatcher type 03.021 surface 81 -> map set
+103021082	Surface hit/footstep dispatcher type 03.021 surface 82 -> map set
+103021083	Surface hit/footstep dispatcher type 03.021 surface 83 -> map set
+103021084	Surface hit/footstep dispatcher type 03.021 surface 84 -> map set
+103021085	Surface hit/footstep dispatcher type 03.021 surface 85 -> map set
+103021086	Surface hit/footstep dispatcher type 03.021 surface 86 -> map set
+103021087	Surface hit/footstep dispatcher type 03.021 surface 87 -> map set
+103021088	Surface hit/footstep dispatcher type 03.021 surface 88 -> map set
+103021089	Surface hit/footstep dispatcher type 03.021 surface 89 -> map set
+103021090	Surface hit/footstep dispatcher type 03.021 surface 90 -> map set
+104000016	Surface hit/footstep dispatcher type 04.000 surface 16
+104000017	Surface hit/footstep dispatcher type 04.000 surface 17
+104001016	Surface hit/footstep dispatcher type 04.001 surface 16
+104001017	Surface hit/footstep dispatcher type 04.001 surface 17
+105000001	Surface hit/footstep dispatcher type 05.000 surface 1 -> water (ankle)
+105000002	Surface hit/footstep dispatcher type 05.000 surface 2 -> water (ankle)
+105000003	Surface hit/footstep dispatcher type 05.000 surface 3 -> water (ankle)
+105000004	Surface hit/footstep dispatcher type 05.000 surface 4 -> water (ankle)
+105000005	Surface hit/footstep dispatcher type 05.000 surface 5 -> water (ankle)
+105000006	Surface hit/footstep dispatcher type 05.000 surface 6 -> water (ankle)
+105000007	Surface hit/footstep dispatcher type 05.000 surface 7 -> water (ankle)
+105000008	Surface hit/footstep dispatcher type 05.000 surface 8 -> water (ankle)
+105000009	Surface hit/footstep dispatcher type 05.000 surface 9 -> water (ankle)
+105000010	Surface hit/footstep dispatcher type 05.000 surface 10 -> water (ankle)
+105000012	Surface hit/footstep dispatcher type 05.000 surface 12 -> water (ankle)
+105000014	Surface hit/footstep dispatcher type 05.000 surface 14 -> water (ankle)
+105000015	Surface hit/footstep dispatcher type 05.000 surface 15 -> water (ankle)
+105000016	Surface hit/footstep dispatcher type 05.000 surface 16 -> water (ankle)
+105000017	Surface hit/footstep dispatcher type 05.000 surface 17 -> water (ankle)
+105000020	Surface hit/footstep dispatcher type 05.000 surface 20 -> water (ankle)
+105000021	Surface hit/footstep dispatcher type 05.000 surface 21 -> water (ankle)
+105000022	Surface hit/footstep dispatcher type 05.000 surface 22 -> water (ankle)
+105000023	Surface hit/footstep dispatcher type 05.000 surface 23 -> water (ankle)
+105000025	Surface hit/footstep dispatcher type 05.000 surface 25 -> bone
+105000027	Surface hit/footstep dispatcher type 05.000 surface 27 -> map set
+105000028	Surface hit/footstep dispatcher type 05.000 surface 28 -> water (ankle)
+105000029	Surface hit/footstep dispatcher type 05.000 surface 29
+105000034	Surface hit/footstep dispatcher type 05.000 surface 34 -> water (ankle)
+105000050	Surface hit/footstep dispatcher type 05.000 surface 50 -> water (ankle)
+105000051	Surface hit/footstep dispatcher type 05.000 surface 51 -> water (ankle)
+105000052	Surface hit/footstep dispatcher type 05.000 surface 52 -> water (ankle)
+105000056	Surface hit/footstep dispatcher type 05.000 surface 56 -> water (ankle)
+105000059	Surface hit/footstep dispatcher type 05.000 surface 59 -> water (ankle)
+105000060	Surface hit/footstep dispatcher type 05.000 surface 60 -> water (ankle)
+105000061	Surface hit/footstep dispatcher type 05.000 surface 61 -> water (ankle)
+105000062	Surface hit/footstep dispatcher type 05.000 surface 62 -> water (ankle)
+105000063	Surface hit/footstep dispatcher type 05.000 surface 63 -> water (ankle)
+105000064	Surface hit/footstep dispatcher type 05.000 surface 64 -> water (ankle)
+105000065	Surface hit/footstep dispatcher type 05.000 surface 65 -> water (ankle)
+105000068	Surface hit/footstep dispatcher type 05.000 surface 68 -> water (ankle)
+105000069	Surface hit/footstep dispatcher type 05.000 surface 69 -> water (ankle)
+105000070	Surface hit/footstep dispatcher type 05.000 surface 70 -> water (ankle)
+105000071	Surface hit/footstep dispatcher type 05.000 surface 71 -> water (ankle)
+105000072	Surface hit/footstep dispatcher type 05.000 surface 72 -> water (ankle)
+105000073	Surface hit/footstep dispatcher type 05.000 surface 73 -> water (ankle)
+105000074	Surface hit/footstep dispatcher type 05.000 surface 74 -> water (ankle)
+105000075	Surface hit/footstep dispatcher type 05.000 surface 75 -> water (ankle)
+105000076	Surface hit/footstep dispatcher type 05.000 surface 76 -> water (ankle)
+105000077	Surface hit/footstep dispatcher type 05.000 surface 77 -> water (ankle)
+105000078	Surface hit/footstep dispatcher type 05.000 surface 78 -> water (ankle)
+105000080	Surface hit/footstep dispatcher type 05.000 surface 80 -> water (ankle)
+105000081	Surface hit/footstep dispatcher type 05.000 surface 81 -> water (ankle)
+105000082	Surface hit/footstep dispatcher type 05.000 surface 82 -> water (ankle)
+105000083	Surface hit/footstep dispatcher type 05.000 surface 83 -> water (ankle)
+105000084	Surface hit/footstep dispatcher type 05.000 surface 84 -> water (ankle)
+105000085	Surface hit/footstep dispatcher type 05.000 surface 85 -> water (ankle)
+105000086	Surface hit/footstep dispatcher type 05.000 surface 86 -> water (ankle)
+105000087	Surface hit/footstep dispatcher type 05.000 surface 87 -> water (ankle)
+105000088	Surface hit/footstep dispatcher type 05.000 surface 88 -> water (ankle)
+105000089	Surface hit/footstep dispatcher type 05.000 surface 89 -> water (ankle)
+105000090	Surface hit/footstep dispatcher type 05.000 surface 90 -> water (ankle)
+105001000	Surface hit/footstep dispatcher type 05.001 surface 0
+105001001	Surface hit/footstep dispatcher type 05.001 surface 1 -> water (ankle)
+105001002	Surface hit/footstep dispatcher type 05.001 surface 2 -> water (ankle)
+105001003	Surface hit/footstep dispatcher type 05.001 surface 3 -> water (ankle)
+105001004	Surface hit/footstep dispatcher type 05.001 surface 4 -> water (ankle)
+105001005	Surface hit/footstep dispatcher type 05.001 surface 5 -> water (ankle)
+105001006	Surface hit/footstep dispatcher type 05.001 surface 6 -> water (ankle)
+105001007	Surface hit/footstep dispatcher type 05.001 surface 7 -> water (ankle)
+105001008	Surface hit/footstep dispatcher type 05.001 surface 8 -> water (ankle)
+105001009	Surface hit/footstep dispatcher type 05.001 surface 9 -> water (ankle)
+105001010	Surface hit/footstep dispatcher type 05.001 surface 10 -> water (ankle)
+105001012	Surface hit/footstep dispatcher type 05.001 surface 12 -> water (ankle)
+105001014	Surface hit/footstep dispatcher type 05.001 surface 14 -> water (ankle)
+105001015	Surface hit/footstep dispatcher type 05.001 surface 15 -> water (ankle)
+105001016	Surface hit/footstep dispatcher type 05.001 surface 16 -> water (ankle)
+105001017	Surface hit/footstep dispatcher type 05.001 surface 17 -> water (ankle)
+105001020	Surface hit/footstep dispatcher type 05.001 surface 20 -> water (ankle)
+105001021	Surface hit/footstep dispatcher type 05.001 surface 21 -> water (ankle)
+105001022	Surface hit/footstep dispatcher type 05.001 surface 22 -> water (ankle)
+105001023	Surface hit/footstep dispatcher type 05.001 surface 23 -> water (ankle)
+105001025	Surface hit/footstep dispatcher type 05.001 surface 25 -> bone
+105001027	Surface hit/footstep dispatcher type 05.001 surface 27 -> map set
+105001028	Surface hit/footstep dispatcher type 05.001 surface 28 -> water (ankle)
+105001029	Surface hit/footstep dispatcher type 05.001 surface 29
+105001034	Surface hit/footstep dispatcher type 05.001 surface 34 -> water (ankle)
+105001050	Surface hit/footstep dispatcher type 05.001 surface 50 -> water (ankle)
+105001052	Surface hit/footstep dispatcher type 05.001 surface 52 -> water (ankle)
+105001056	Surface hit/footstep dispatcher type 05.001 surface 56 -> water (ankle)
+105001059	Surface hit/footstep dispatcher type 05.001 surface 59 -> water (ankle)
+105001060	Surface hit/footstep dispatcher type 05.001 surface 60 -> water (ankle)
+105001061	Surface hit/footstep dispatcher type 05.001 surface 61 -> water (ankle)
+105001062	Surface hit/footstep dispatcher type 05.001 surface 62 -> water (ankle)
+105001063	Surface hit/footstep dispatcher type 05.001 surface 63 -> water (ankle)
+105001064	Surface hit/footstep dispatcher type 05.001 surface 64 -> water (ankle)
+105001065	Surface hit/footstep dispatcher type 05.001 surface 65 -> water (ankle)
+105001068	Surface hit/footstep dispatcher type 05.001 surface 68 -> water (ankle)
+105001069	Surface hit/footstep dispatcher type 05.001 surface 69 -> water (ankle)
+105001070	Surface hit/footstep dispatcher type 05.001 surface 70 -> water (ankle)
+105001071	Surface hit/footstep dispatcher type 05.001 surface 71 -> water (ankle)
+105001072	Surface hit/footstep dispatcher type 05.001 surface 72 -> water (ankle)
+105001073	Surface hit/footstep dispatcher type 05.001 surface 73 -> water (ankle)
+105001074	Surface hit/footstep dispatcher type 05.001 surface 74 -> water (ankle)
+105001075	Surface hit/footstep dispatcher type 05.001 surface 75 -> water (ankle)
+105001076	Surface hit/footstep dispatcher type 05.001 surface 76 -> water (ankle)
+105001077	Surface hit/footstep dispatcher type 05.001 surface 77 -> water (ankle)
+105001078	Surface hit/footstep dispatcher type 05.001 surface 78 -> water (ankle)
+105001080	Surface hit/footstep dispatcher type 05.001 surface 80 -> water (ankle)
+105001081	Surface hit/footstep dispatcher type 05.001 surface 81 -> water (ankle)
+105001082	Surface hit/footstep dispatcher type 05.001 surface 82 -> water (ankle)
+105001083	Surface hit/footstep dispatcher type 05.001 surface 83 -> water (ankle)
+105001084	Surface hit/footstep dispatcher type 05.001 surface 84 -> water (ankle)
+105001085	Surface hit/footstep dispatcher type 05.001 surface 85 -> water (ankle)
+105001086	Surface hit/footstep dispatcher type 05.001 surface 86 -> water (ankle)
+105001087	Surface hit/footstep dispatcher type 05.001 surface 87 -> water (ankle)
+105001088	Surface hit/footstep dispatcher type 05.001 surface 88 -> water (ankle)
+105001089	Surface hit/footstep dispatcher type 05.001 surface 89 -> water (ankle)
+105001090	Surface hit/footstep dispatcher type 05.001 surface 90 -> water (ankle)
+106000000	Surface hit/footstep dispatcher type 06.000 surface 0
+106000001	Surface hit/footstep dispatcher type 06.000 surface 1
+106000002	Surface hit/footstep dispatcher type 06.000 surface 2
+106000003	Surface hit/footstep dispatcher type 06.000 surface 3
+106000004	Surface hit/footstep dispatcher type 06.000 surface 4
+106000005	Surface hit/footstep dispatcher type 06.000 surface 5
+106000006	Surface hit/footstep dispatcher type 06.000 surface 6
+106000007	Surface hit/footstep dispatcher type 06.000 surface 7
+106000008	Surface hit/footstep dispatcher type 06.000 surface 8
+106000009	Surface hit/footstep dispatcher type 06.000 surface 9
+106000010	Surface hit/footstep dispatcher type 06.000 surface 10
+106000011	Surface hit/footstep dispatcher type 06.000 surface 11
+106000012	Surface hit/footstep dispatcher type 06.000 surface 12
+106000014	Surface hit/footstep dispatcher type 06.000 surface 14
+106000015	Surface hit/footstep dispatcher type 06.000 surface 15
+106000016	Surface hit/footstep dispatcher type 06.000 surface 16
+106000017	Surface hit/footstep dispatcher type 06.000 surface 17
+106000020	Surface hit/footstep dispatcher type 06.000 surface 20
+106000021	Surface hit/footstep dispatcher type 06.000 surface 21
+106000022	Surface hit/footstep dispatcher type 06.000 surface 22
+106000023	Surface hit/footstep dispatcher type 06.000 surface 23
+106000025	Surface hit/footstep dispatcher type 06.000 surface 25
+106000027	Surface hit/footstep dispatcher type 06.000 surface 27 -> map set
+106000028	Surface hit/footstep dispatcher type 06.000 surface 28
+106000029	Surface hit/footstep dispatcher type 06.000 surface 29
+106000034	Surface hit/footstep dispatcher type 06.000 surface 34
+106000050	Surface hit/footstep dispatcher type 06.000 surface 50
+106000051	Surface hit/footstep dispatcher type 06.000 surface 51
+106000052	Surface hit/footstep dispatcher type 06.000 surface 52
+106000056	Surface hit/footstep dispatcher type 06.000 surface 56
+106000059	Surface hit/footstep dispatcher type 06.000 surface 59
+106000060	Surface hit/footstep dispatcher type 06.000 surface 60
+106000061	Surface hit/footstep dispatcher type 06.000 surface 61
+106000062	Surface hit/footstep dispatcher type 06.000 surface 62
+106000063	Surface hit/footstep dispatcher type 06.000 surface 63
+106000064	Surface hit/footstep dispatcher type 06.000 surface 64
+106000065	Surface hit/footstep dispatcher type 06.000 surface 65
+106000068	Surface hit/footstep dispatcher type 06.000 surface 68
+106000069	Surface hit/footstep dispatcher type 06.000 surface 69
+106000070	Surface hit/footstep dispatcher type 06.000 surface 70
+106000071	Surface hit/footstep dispatcher type 06.000 surface 71
+106000072	Surface hit/footstep dispatcher type 06.000 surface 72
+106000073	Surface hit/footstep dispatcher type 06.000 surface 73
+106000074	Surface hit/footstep dispatcher type 06.000 surface 74
+106000075	Surface hit/footstep dispatcher type 06.000 surface 75
+106000076	Surface hit/footstep dispatcher type 06.000 surface 76
+106000077	Surface hit/footstep dispatcher type 06.000 surface 77
+106000078	Surface hit/footstep dispatcher type 06.000 surface 78
+106000080	Surface hit/footstep dispatcher type 06.000 surface 80
+106000081	Surface hit/footstep dispatcher type 06.000 surface 81
+106000082	Surface hit/footstep dispatcher type 06.000 surface 82
+106000083	Surface hit/footstep dispatcher type 06.000 surface 83
+106000084	Surface hit/footstep dispatcher type 06.000 surface 84
+106000085	Surface hit/footstep dispatcher type 06.000 surface 85
+106000086	Surface hit/footstep dispatcher type 06.000 surface 86
+106000087	Surface hit/footstep dispatcher type 06.000 surface 87
+106000088	Surface hit/footstep dispatcher type 06.000 surface 88
+106000089	Surface hit/footstep dispatcher type 06.000 surface 89
+106000090	Surface hit/footstep dispatcher type 06.000 surface 90
+106001000	Surface hit/footstep dispatcher type 06.001 surface 0
+106001001	Surface hit/footstep dispatcher type 06.001 surface 1
+106001002	Surface hit/footstep dispatcher type 06.001 surface 2
+106001003	Surface hit/footstep dispatcher type 06.001 surface 3
+106001004	Surface hit/footstep dispatcher type 06.001 surface 4
+106001005	Surface hit/footstep dispatcher type 06.001 surface 5
+106001006	Surface hit/footstep dispatcher type 06.001 surface 6
+106001007	Surface hit/footstep dispatcher type 06.001 surface 7
+106001008	Surface hit/footstep dispatcher type 06.001 surface 8
+106001009	Surface hit/footstep dispatcher type 06.001 surface 9
+106001010	Surface hit/footstep dispatcher type 06.001 surface 10
+106001012	Surface hit/footstep dispatcher type 06.001 surface 12
+106001014	Surface hit/footstep dispatcher type 06.001 surface 14
+106001015	Surface hit/footstep dispatcher type 06.001 surface 15
+106001016	Surface hit/footstep dispatcher type 06.001 surface 16
+106001017	Surface hit/footstep dispatcher type 06.001 surface 17
+106001020	Surface hit/footstep dispatcher type 06.001 surface 20
+106001021	Surface hit/footstep dispatcher type 06.001 surface 21
+106001022	Surface hit/footstep dispatcher type 06.001 surface 22
+106001023	Surface hit/footstep dispatcher type 06.001 surface 23
+106001025	Surface hit/footstep dispatcher type 06.001 surface 25
+106001027	Surface hit/footstep dispatcher type 06.001 surface 27 -> map set
+106001028	Surface hit/footstep dispatcher type 06.001 surface 28
+106001029	Surface hit/footstep dispatcher type 06.001 surface 29
+106001034	Surface hit/footstep dispatcher type 06.001 surface 34
+106001050	Surface hit/footstep dispatcher type 06.001 surface 50
+106001051	Surface hit/footstep dispatcher type 06.001 surface 51
+106001052	Surface hit/footstep dispatcher type 06.001 surface 52
+106001056	Surface hit/footstep dispatcher type 06.001 surface 56
+106001059	Surface hit/footstep dispatcher type 06.001 surface 59
+106001060	Surface hit/footstep dispatcher type 06.001 surface 60
+106001061	Surface hit/footstep dispatcher type 06.001 surface 61
+106001062	Surface hit/footstep dispatcher type 06.001 surface 62
+106001063	Surface hit/footstep dispatcher type 06.001 surface 63
+106001064	Surface hit/footstep dispatcher type 06.001 surface 64
+106001065	Surface hit/footstep dispatcher type 06.001 surface 65
+106001068	Surface hit/footstep dispatcher type 06.001 surface 68
+106001069	Surface hit/footstep dispatcher type 06.001 surface 69
+106001070	Surface hit/footstep dispatcher type 06.001 surface 70
+106001071	Surface hit/footstep dispatcher type 06.001 surface 71
+106001072	Surface hit/footstep dispatcher type 06.001 surface 72
+106001073	Surface hit/footstep dispatcher type 06.001 surface 73
+106001074	Surface hit/footstep dispatcher type 06.001 surface 74
+106001075	Surface hit/footstep dispatcher type 06.001 surface 75
+106001076	Surface hit/footstep dispatcher type 06.001 surface 76
+106001077	Surface hit/footstep dispatcher type 06.001 surface 77
+106001078	Surface hit/footstep dispatcher type 06.001 surface 78
+106001080	Surface hit/footstep dispatcher type 06.001 surface 80
+106001081	Surface hit/footstep dispatcher type 06.001 surface 81
+106001082	Surface hit/footstep dispatcher type 06.001 surface 82
+106001083	Surface hit/footstep dispatcher type 06.001 surface 83
+106001084	Surface hit/footstep dispatcher type 06.001 surface 84
+106001085	Surface hit/footstep dispatcher type 06.001 surface 85
+106001086	Surface hit/footstep dispatcher type 06.001 surface 86
+106001087	Surface hit/footstep dispatcher type 06.001 surface 87
+106001088	Surface hit/footstep dispatcher type 06.001 surface 88
+106001089	Surface hit/footstep dispatcher type 06.001 surface 89
+106001090	Surface hit/footstep dispatcher type 06.001 surface 90
+108000000	Surface hit/footstep dispatcher type 08.000 surface 0
+190000000	Ground-material impact particles: dummy (variant 0000)
+190000200	Ground-material impact particles: dummy (variant 0200)
+190000300	Ground-material impact particles: dummy (variant 0300)
+190001000	Ground-material impact particles: dummy (variant 1000)
+190001200	Ground-material impact particles: dummy (variant 1200)
+190001300	Ground-material impact particles: dummy (variant 1300)
+190002000	Ground-material impact particles: dummy (variant 2000)
+190002200	Ground-material impact particles: dummy (variant 2200)
+190002300	Ground-material impact particles: dummy (variant 2300)
+190010000	Ground-material impact particles: stone (outdoor) (variant 0000)
+190010200	Ground-material impact particles: stone (outdoor) (variant 0200)
+190011000	Ground-material impact particles: stone (outdoor) (variant 1000)
+190011200	Ground-material impact particles: stone (outdoor) (variant 1200)
+190012000	Ground-material impact particles: stone (outdoor) (variant 2000)
+190012200	Ground-material impact particles: stone (outdoor) (variant 2200)
+190013000	Ground-material impact particles: stone (outdoor) (variant 3000)
+190018000	Ground-material impact particles: stone (outdoor) (variant 8000)
+190019000	Ground-material impact particles: stone (outdoor) (variant 9000)
+190020000	Ground-material impact particles: stone (indoor) (variant 0000)
+190020200	Ground-material impact particles: stone (indoor) (variant 0200)
+190021000	Ground-material impact particles: stone (indoor) (variant 1000)
+190021200	Ground-material impact particles: stone (indoor) (variant 1200)
+190022000	Ground-material impact particles: stone (indoor) (variant 2000)
+190022200	Ground-material impact particles: stone (indoor) (variant 2200)
+190030000	Ground-material impact particles: soil (variant 0000)
+190030200	Ground-material impact particles: soil (variant 0200)
+190031000	Ground-material impact particles: soil (variant 1000)
+190031200	Ground-material impact particles: soil (variant 1200)
+190032000	Ground-material impact particles: soil (variant 2000)
+190032200	Ground-material impact particles: soil (variant 2200)
+190040000	Ground-material impact particles: wood (variant 0000)
+190040200	Ground-material impact particles: wood (variant 0200)
+190041000	Ground-material impact particles: wood (variant 1000)
+190041200	Ground-material impact particles: wood (variant 1200)
+190042000	Ground-material impact particles: wood (variant 2000)
+190042200	Ground-material impact particles: wood (variant 2200)
+190050000	Ground-material impact particles: grass (variant 0000)
+190050200	Ground-material impact particles: grass (variant 0200)
+190051000	Ground-material impact particles: grass (variant 1000)
+190051200	Ground-material impact particles: grass (variant 1200)
+190052000	Ground-material impact particles: grass (variant 2000)
+190052200	Ground-material impact particles: grass (variant 2200)
+190060000	Ground-material impact particles: gravel (variant 0000)
+190060200	Ground-material impact particles: gravel (variant 0200)
+190061000	Ground-material impact particles: gravel (variant 1000)
+190061200	Ground-material impact particles: gravel (variant 1200)
+190062000	Ground-material impact particles: gravel (variant 2000)
+190062200	Ground-material impact particles: gravel (variant 2200)
+190070000	Ground-material impact particles: snow (variant 0000)
+190070200	Ground-material impact particles: snow (variant 0200)
+190071000	Ground-material impact particles: snow (variant 1000)
+190071200	Ground-material impact particles: snow (variant 1200)
+190072000	Ground-material impact particles: snow (variant 2000)
+190072200	Ground-material impact particles: snow (variant 2200)
+190080000	Ground-material impact particles: ice (variant 0000)
+190080200	Ground-material impact particles: ice (variant 0200)
+190081000	Ground-material impact particles: ice (variant 1000)
+190081200	Ground-material impact particles: ice (variant 1200)
+190082000	Ground-material impact particles: ice (variant 2000)
+190082200	Ground-material impact particles: ice (variant 2200)
+190090000	Ground-material impact particles: iron (variant 0000)
+190090200	Ground-material impact particles: iron (variant 0200)
+190091000	Ground-material impact particles: iron (variant 1000)
+190091200	Ground-material impact particles: iron (variant 1200)
+190092000	Ground-material impact particles: iron (variant 2000)
+190092200	Ground-material impact particles: iron (variant 2200)
+190110000	Ground-material impact particles: bone (variant 0000)
+190110200	Ground-material impact particles: bone (variant 0200)
+190111000	Ground-material impact particles: bone (variant 1000)
+190111200	Ground-material impact particles: bone (variant 1200)
+190112000	Ground-material impact particles: bone (variant 2000)
+190112200	Ground-material impact particles: bone (variant 2200)
+190120000	Ground-material impact particles: ash (variant 0000)
+190120200	Ground-material impact particles: ash (variant 0200)
+190121000	Ground-material impact particles: ash (variant 1000)
+190121200	Ground-material impact particles: ash (variant 1200)
+190122000	Ground-material impact particles: ash (variant 2000)
+190122200	Ground-material impact particles: ash (variant 2200)
+190130000	Ground-material impact particles: material 13 (variant 0000)
+190130200	Ground-material impact particles: material 13 (variant 0200)
+190131000	Ground-material impact particles: material 13 (variant 1000)
+190131200	Ground-material impact particles: material 13 (variant 1200)
+190132000	Ground-material impact particles: material 13 (variant 2000)
+190132200	Ground-material impact particles: material 13 (variant 2200)
+190140000	Ground-material impact particles: rotten wood (variant 0000)
+190140200	Ground-material impact particles: rotten wood (variant 0200)
+190141000	Ground-material impact particles: rotten wood (variant 1000)
+190141200	Ground-material impact particles: rotten wood (variant 1200)
+190142000	Ground-material impact particles: rotten wood (variant 2000)
+190142200	Ground-material impact particles: rotten wood (variant 2200)
+190150000	Ground-material impact particles: giant tree (variant 0000)
+190150200	Ground-material impact particles: giant tree (variant 0200)
+190151000	Ground-material impact particles: giant tree (variant 1000)
+190151200	Ground-material impact particles: giant tree (variant 1200)
+190152000	Ground-material impact particles: giant tree (variant 2000)
+190152200	Ground-material impact particles: giant tree (variant 2200)
+190160000	Ground-material impact particles: material 16 (variant 0000)
+190160200	Ground-material impact particles: material 16 (variant 0200)
+190161000	Ground-material impact particles: material 16 (variant 1000)
+190161200	Ground-material impact particles: material 16 (variant 1200)
+190162000	Ground-material impact particles: material 16 (variant 2000)
+190162200	Ground-material impact particles: material 16 (variant 2200)
+190210000	Ground-material impact particles: water (ankle) (variant 0000)
+190210100	Ground-material impact particles: water (ankle) (variant 0100)
+190210200	Ground-material impact particles: water (ankle) (variant 0200)
+190210300	Ground-material impact particles: water (ankle) (variant 0300)
+190500000	Ground-material impact particles: map-specific ground set (variant 0000)
+190502000	Ground-material impact particles: map-specific ground set (variant 2000)
+190600000	Ground-material impact particles: map-specific ground set (variant 0000)
+190600200	Ground-material impact particles: map-specific ground set (variant 0200)
+190601000	Ground-material impact particles: map-specific ground set (variant 1000)
+190601200	Ground-material impact particles: map-specific ground set (variant 1200)
+190602000	Ground-material impact particles: map-specific ground set (variant 2000)
+190602200	Ground-material impact particles: map-specific ground set (variant 2200)
+190700000	Ground-material impact particles: map-specific ground set (variant 0000)
+190700200	Ground-material impact particles: map-specific ground set (variant 0200)
+190700300	Ground-material impact particles: map-specific ground set (variant 0300)
+190701000	Ground-material impact particles: map-specific ground set (variant 1000)
+190701200	Ground-material impact particles: map-specific ground set (variant 1200)
+190702000	Ground-material impact particles: map-specific ground set (variant 2000)
+190702200	Ground-material impact particles: map-specific ground set (variant 2200)
+190702300	Ground-material impact particles: map-specific ground set (variant 2300)
+190710000	Ground-material impact particles: map-specific ground set (variant 0000)
+190710200	Ground-material impact particles: map-specific ground set (variant 0200)
+190710300	Ground-material impact particles: map-specific ground set (variant 0300)
+190711000	Ground-material impact particles: map-specific ground set (variant 1000)
+190711200	Ground-material impact particles: map-specific ground set (variant 1200)
+190711300	Ground-material impact particles: map-specific ground set (variant 1300)
+190712000	Ground-material impact particles: map-specific ground set (variant 2000)
+190712200	Ground-material impact particles: map-specific ground set (variant 2200)
+190712300	Ground-material impact particles: map-specific ground set (variant 2300)
+190720000	Ground-material impact particles: map-specific ground set (variant 0000)
+190720200	Ground-material impact particles: map-specific ground set (variant 0200)
+190720300	Ground-material impact particles: map-specific ground set (variant 0300)
+190721000	Ground-material impact particles: map-specific ground set (variant 1000)
+190721200	Ground-material impact particles: map-specific ground set (variant 1200)
+190722000	Ground-material impact particles: map-specific ground set (variant 2000)
+190722200	Ground-material impact particles: map-specific ground set (variant 2200)
+190722300	Ground-material impact particles: map-specific ground set (variant 2300)
+190730000	Ground-material impact particles: map-specific ground set (variant 0000)
+190730200	Ground-material impact particles: map-specific ground set (variant 0200)
+190730300	Ground-material impact particles: map-specific ground set (variant 0300)
+190731000	Ground-material impact particles: map-specific ground set (variant 1000)
+190731200	Ground-material impact particles: map-specific ground set (variant 1200)
+190731300	Ground-material impact particles: map-specific ground set (variant 1300)
+190732000	Ground-material impact particles: map-specific ground set (variant 2000)
+190732200	Ground-material impact particles: map-specific ground set (variant 2200)
+190732300	Ground-material impact particles: map-specific ground set (variant 2300)
+190740000	Ground-material impact particles: map-specific ground set (variant 0000)
+190740200	Ground-material impact particles: map-specific ground set (variant 0200)
+190741000	Ground-material impact particles: map-specific ground set (variant 1000)
+190741200	Ground-material impact particles: map-specific ground set (variant 1200)
+190742000	Ground-material impact particles: map-specific ground set (variant 2000)
+190742200	Ground-material impact particles: map-specific ground set (variant 2200)
+190743000	Ground-material impact particles: map-specific ground set (variant 3000)
+190750000	Ground-material impact particles: map-specific ground set (variant 0000)
+190750200	Ground-material impact particles: map-specific ground set (variant 0200)
+190750300	Ground-material impact particles: map-specific ground set (variant 0300)
+190751000	Ground-material impact particles: map-specific ground set (variant 1000)
+190751200	Ground-material impact particles: map-specific ground set (variant 1200)
+190752000	Ground-material impact particles: map-specific ground set (variant 2000)
+190752200	Ground-material impact particles: map-specific ground set (variant 2200)
+190752300	Ground-material impact particles: map-specific ground set (variant 2300)
+190760000	Ground-material impact particles: map-specific ground set (variant 0000)
+190760200	Ground-material impact particles: map-specific ground set (variant 0200)
+190761000	Ground-material impact particles: map-specific ground set (variant 1000)
+190761200	Ground-material impact particles: map-specific ground set (variant 1200)
+190762000	Ground-material impact particles: map-specific ground set (variant 2000)
+190762200	Ground-material impact particles: map-specific ground set (variant 2200)
+190780000	Ground-material impact particles: map-specific ground set (variant 0000)
+190780200	Ground-material impact particles: map-specific ground set (variant 0200)
+190780300	Ground-material impact particles: map-specific ground set (variant 0300)
+190781000	Ground-material impact particles: map-specific ground set (variant 1000)
+190781200	Ground-material impact particles: map-specific ground set (variant 1200)
+190782000	Ground-material impact particles: map-specific ground set (variant 2000)
+190782200	Ground-material impact particles: map-specific ground set (variant 2200)
+190782300	Ground-material impact particles: map-specific ground set (variant 2300)
+190790000	Ground-material impact particles: map-specific ground set (variant 0000)
+190790200	Ground-material impact particles: map-specific ground set (variant 0200)
+190791000	Ground-material impact particles: map-specific ground set (variant 1000)
+190791200	Ground-material impact particles: map-specific ground set (variant 1200)
+190792000	Ground-material impact particles: map-specific ground set (variant 2000)
+190792200	Ground-material impact particles: map-specific ground set (variant 2200)
+190800000	Ground-material impact particles: map-specific ground set (variant 0000)
+190800200	Ground-material impact particles: map-specific ground set (variant 0200)
+190801000	Ground-material impact particles: map-specific ground set (variant 1000)
+190801200	Ground-material impact particles: map-specific ground set (variant 1200)
+190802000	Ground-material impact particles: map-specific ground set (variant 2000)
+190802200	Ground-material impact particles: map-specific ground set (variant 2200)
+190810000	Ground-material impact particles: map-specific ground set (variant 0000)
+190810200	Ground-material impact particles: map-specific ground set (variant 0200)
+190811000	Ground-material impact particles: map-specific ground set (variant 1000)
+190811200	Ground-material impact particles: map-specific ground set (variant 1200)
+190812000	Ground-material impact particles: map-specific ground set (variant 2000)
+190812200	Ground-material impact particles: map-specific ground set (variant 2200)
+190820000	Ground-material impact particles: map-specific ground set (variant 0000)
+190820200	Ground-material impact particles: map-specific ground set (variant 0200)
+190821000	Ground-material impact particles: map-specific ground set (variant 1000)
+190821200	Ground-material impact particles: map-specific ground set (variant 1200)
+190822000	Ground-material impact particles: map-specific ground set (variant 2000)
+190822200	Ground-material impact particles: map-specific ground set (variant 2200)
+190830000	Ground-material impact particles: map-specific ground set (variant 0000)
+190830200	Ground-material impact particles: map-specific ground set (variant 0200)
+190831000	Ground-material impact particles: map-specific ground set (variant 1000)
+190831200	Ground-material impact particles: map-specific ground set (variant 1200)
+190832000	Ground-material impact particles: map-specific ground set (variant 2000)
+190832200	Ground-material impact particles: map-specific ground set (variant 2200)
+190840000	Ground-material impact particles: map-specific ground set (variant 0000)
+190840200	Ground-material impact particles: map-specific ground set (variant 0200)
+190850000	Ground-material impact particles: map-specific ground set (variant 0000)
+190850200	Ground-material impact particles: map-specific ground set (variant 0200)
+190860000	Ground-material impact particles: map-specific ground set (variant 0000)
+190860200	Ground-material impact particles: map-specific ground set (variant 0200)
+190870000	Ground-material impact particles: map-specific ground set (variant 0000)
+190870200	Ground-material impact particles: map-specific ground set (variant 0200)
+190880000	Ground-material impact particles: map-specific ground set (variant 0000)
+190880200	Ground-material impact particles: map-specific ground set (variant 0200)

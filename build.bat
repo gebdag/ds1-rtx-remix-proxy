@@ -272,6 +272,10 @@ if not "!DEPLOY_TARGET!"=="" (
         if exist "%ROOT%assets\glass" robocopy "%ROOT%assets\glass" "!DEPLOY_TARGET!\rtx_comp\glass" *.dds >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy the glass textures
         ver >nul
+        :: The FFX effect names and effect lights (scripts\gen_ffx_tables.py), always refreshed.
+        if exist "%ROOT%assets\ffx" robocopy "%ROOT%assets\ffx" "!DEPLOY_TARGET!\rtx_comp" *.tsv >nul 2>&1
+        if errorlevel 8 echo WARNING: could not deploy the FFX tables
+        ver >nul
         echo Deployed to: !DEPLOY_TARGET!
     ) else (
         echo WARNING: deploy.conf target not found: !DEPLOY_TARGET!

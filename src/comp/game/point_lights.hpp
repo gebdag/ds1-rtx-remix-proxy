@@ -13,6 +13,7 @@ namespace comp::game::point_lights
 		entity,     // the entity's own GetLightParams (FX/SFX lights, item lights, lerp lights)
 		synthetic,  // not from the engine at all — see game::map_lights
 		effect,     // stands in for an effect the engine lights only briefly — see game::effect_lights
+		ffx_table,  // an effect the game draws without a light, lit from the effect table — see game::ffx_lights
 	};
 
 	struct light

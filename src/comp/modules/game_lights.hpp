@@ -69,6 +69,7 @@ namespace comp
 			fx_direct,    // DirectPointLightEntity (FX / SFX / item lights)
 			synthetic,    // stand-in from rtx_comp\lights\<map>.txt
 			effect,       // stand-in for a lit effect's draws (game::effect_lights)
+			ffx_table,    // an unlit effect's light from the effect table (game::ffx_lights)
 			unresolved,   // live slot with no usable parameters
 			count
 		};
@@ -135,6 +136,10 @@ namespace comp
 		struct light_row
 		{
 			uint64_t key = 0;
+			// The row's own identity (selection, flash, ImGui ids) when it shares its edit key with other
+			// rows: every instance of an unlit effect is edited as one. 0 = the key.
+			uint64_t id = 0;
+			uint64_t ident() const { return id ? id : key; }
 			light_kind kind = light_kind::unresolved;
 			row_state state = row_state::on;
 			int slot = -1;
@@ -170,7 +175,7 @@ namespace comp
 		// Row construction and per-light edits.
 		light_row make_row(const game::point_lights::light& l, const float* player) const;
 		const light_override* find_override(uint64_t key) const;
-		float edit_multiplier(uint64_t key) const;   // solo / flash / override, 0 = off
+		float edit_multiplier(uint64_t key, uint64_t ident = 0) const;   // solo / flash / override, 0 = off
 
 		// Settings persistence: [Lights], [Sun], [PlayerLight] in the INI, overrides
 		// in rtx_comp\lights\light_overrides.txt, categories through map_lights.
@@ -230,12 +235,12 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
-		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true };
+		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true, true };
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
 		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
 		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no
 		// parameters, stay out.
-		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, false };
+		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, true, false };
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;

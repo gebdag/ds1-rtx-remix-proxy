@@ -4,6 +4,7 @@
 #include "../game/map_lights.hpp"
 #include "../game/effect_lights.hpp"
 #include "../game/ffx_names.hpp"
+#include "../game/ffx_lights.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
@@ -62,7 +63,8 @@ namespace comp
 
 		// Short source name per kind (switches, the selected light's heading), in section order.
 		const char* const kKindSource[] = {
-			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "Effect stand-in", "No parameters",
+			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "Effect stand-in", "Unlit effect",
+			"No parameters",
 		};
 		static_assert(std::size(kKindSource) == static_cast<size_t>(kind::count));
 
@@ -75,6 +77,7 @@ namespace comp
 			"Effect lights (spells, items, SFX)",
 			"Stand-ins (synthesized for unlit flames)",
 			"Effect stand-ins (lightning bolts)",
+			"Unlit effects (lights from the effect table)",
 			"Engine slots without parameters (never drawn)",
 		};
 		static_assert(std::size(kKindSection) == static_cast<size_t>(kind::count));
@@ -139,6 +142,9 @@ namespace comp
 
 		uint64_t row_key(kind k, const game::point_lights::light& l)
 		{
+			// Unlit effect lights are keyed by their effect, saved: an edit applies to every instance of it.
+			if (k == kind::ffx_table)
+				return string_hash64(va("ffx:%d", l.ffx_id)) | 0x8000000000000000ull;
 			const uint64_t h = is_static(k)
 				? string_hash64(va("pos:%d:%ld:%ld:%ld", static_cast<int>(k),
 					std::lround(l.x * 20.0f), std::lround(l.y * 20.0f), std::lround(l.z * 20.0f)))
@@ -153,6 +159,7 @@ namespace comp
 			using src = game::point_lights::param_source;
 			if (l.source == src::synthetic) return kind::synthetic;
 			if (l.source == src::effect) return kind::effect;
+			if (l.source == src::ffx_table) return kind::ffx_table;
 			if (l.source == src::bank_row) return kind::map_row;
 			if (l.source == src::entity)
 			{
@@ -347,7 +354,7 @@ namespace comp
 	}
 
 	// Brightness factor of a light from the list's edits: 0 = not drawn.
-	float game_lights::edit_multiplier(uint64_t key) const
+	float game_lights::edit_multiplier(uint64_t key, uint64_t ident) const
 	{
 		if (solo_ != 0 && solo_ != key)
 			return 0.0f;
@@ -358,7 +365,7 @@ namespace comp
 				return 0.0f;
 			m = o->multiplier;
 		}
-		if (flash_selected_ && key == selected_)
+		if (flash_selected_ && (ident ? ident : key) == selected_)
 			m *= kFlashMultiplier;
 		return m;
 	}
@@ -407,6 +414,8 @@ namespace comp
 		light_row row;
 		row.kind = classify(l);
 		row.key = row_key(row.kind, l);
+		if (row.kind == kind::ffx_table)
+			row.id = string_hash64(va("ffx_slot:%d", l.slot)) | 0x8000000000000000ull | kSessionKeyBit;
 		row.slot = l.slot;
 		row.pos[0] = l.x; row.pos[1] = l.y; row.pos[2] = l.z;
 		if (player)
@@ -470,6 +479,21 @@ namespace comp
 			row.origin = particles
 				? "synthesized from a cluster of fire-coloured additive particles the game lights with no light of its own"
 				: "synthesized from the breath's bolt draws (s00502 / s00504): the game lights only its first flash";
+			break;
+		}
+		case kind::ffx_table:
+		{
+			const char* effect = game::ffx_names::name(l.ffx_id);
+			row.name = std::format("{} (FFX {})", effect ? effect : "Effect", l.ffx_id);
+			row.origin = std::format("ffx_lights.tsv: the developers' effect-light rule on FFX {}", l.ffx_id);
+			if (const auto* e = game::ffx_lights::find(l.ffx_id))
+			{
+				row.group = pretty_category(e->category);
+				row.origin += std::format(" ({} confidence{}{})", e->confidence == 'h' ? "high" : e->confidence == 'm' ? "medium" : "low",
+					e->planar ? ", planar sprite" : "", e->persistent ? ", persistent" : "");
+			}
+			if (l.ffx_top_id && l.ffx_top_id != l.ffx_id)
+				row.origin += std::format(", called by FFX {}", l.ffx_top_id);
 			break;
 		}
 		default:
@@ -551,6 +575,18 @@ namespace comp
 			}
 			sources.push_back(&l);
 		}
+		if (kind_enabled_[static_cast<int>(kind::ffx_table)])
+		{
+			std::vector<const game::point_lights::light*> map_lights;
+			for (const auto* s : sources)
+			{
+				const kind k = classify(*s);
+				if ((k == kind::map_row || k == kind::bank_entity || k == kind::synthetic) && s->has_params)
+					map_lights.push_back(s);
+			}
+			for (const auto& l : game::ffx_lights::collect(map_lights))
+				sources.push_back(&l);
+		}
 
 		harvested_count_ = static_cast<int>(sources.size());
 		create_failed_ = 0;
@@ -567,7 +603,7 @@ namespace comp
 
 			// Stand-ins of an effect that comes and goes shine as strongly as it is drawn.
 			const float effect = row.kind == kind::synthetic ? game::map_lights::effect_level(src.slot) : 1.0f;
-			const float mult = edit_multiplier(row.key) * effect;
+			const float mult = edit_multiplier(row.key, row.ident()) * effect;
 			const auto* edit = find_override(row.key);
 			row.state = !generic ? row_state::lights_off
 				: !src.has_params ? row_state::no_params
@@ -614,7 +650,7 @@ namespace comp
 				// Character lights (the player's head light among them, harvested as a LerpBank entity) keep
 				// the third: the game's strength was only measured for effect lights, and the head light at it
 				// lit Painted World's close-up ground 1.4x the game's (frame_20261030_093046).
-				const bool exact = row.kind == kind::fx_direct || row.kind == kind::effect ||
+				const bool exact = row.kind == kind::fx_direct || row.kind == kind::effect || row.kind == kind::ffx_table ||
 					(is_static(row.kind) && bound_to_lightmap(src.x, src.y, src.z));
 				const float scale = intensity_scale * mult / (exact ? 1.0f : 3.14159265f);
 				radiance = {
@@ -1471,7 +1507,7 @@ namespace comp
 		{
 			const light_row* sel = nullptr;
 			for (const auto& r : rows_)
-				if (r.key == selected_) sel = &r;
+				if (r.ident() == selected_) sel = &r;
 			if (sel)
 				point_light_imgui(*sel);
 			else
@@ -1668,9 +1704,9 @@ namespace comp
 		const bool pinned = r.kind == kind::sun || r.kind == kind::player;
 		if (pinned)
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.4f, 1.0f));
-		if (ImGui::Selectable(std::format("{}{}##{:016x}", r.name, solo_ == r.key ? "  [solo]" : "", r.key).c_str(),
-			selected_ == r.key, ImGuiSelectableFlags_SpanAllColumns))
-			selected_ = r.key;
+		if (ImGui::Selectable(std::format("{}{}##{:016x}", r.name, solo_ == r.key ? "  [solo]" : "", r.ident()).c_str(),
+			selected_ == r.ident(), ImGuiSelectableFlags_SpanAllColumns))
+			selected_ = r.ident();
 		if (pinned)
 			ImGui::PopStyleColor();
 
@@ -1683,7 +1719,7 @@ namespace comp
 			const auto* o = find_override(r.key);
 			const float* c = o && o->recolour ? o->colour : r.colour;
 			const float peak = std::max({ c[0], c[1], c[2], 1e-6f });
-			ImGui::ColorButton(std::format("##sw{:016x}", r.key).c_str(),
+			ImGui::ColorButton(std::format("##sw{:016x}", r.ident()).c_str(),
 				ImVec4(c[0] / peak, c[1] / peak, c[2] / peak, 1.0f),
 				ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, ImVec2(12, 12));
 		}
@@ -1710,7 +1746,10 @@ namespace comp
 			row.pos[0], row.pos[1], row.pos[2], row.distance, row.colour[0], row.colour[1], row.colour[2],
 			row.range_begin, row.range_end);
 		ImGui::TextDisabled("  Remix radiance %.2f %.2f %.2f", row.radiance[0], row.radiance[1], row.radiance[2]);
-		if (!is_static(row.kind))
+		if (row.kind == kind::ffx_table)
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+				"  unlit effect: edits apply to every instance of this effect and are saved");
+		else if (!is_static(row.kind))
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
 				"  moving light: edits follow its slot for this session and are not saved");
 
