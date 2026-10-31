@@ -17,6 +17,7 @@
 #include "game/atmosphere.hpp"
 #include "game/map_lights.hpp"
 #include "game/swamp.hpp"
+#include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
@@ -62,6 +63,9 @@ namespace comp
 
 		// The swamp's constants and the last frame's wake rings (rtx.ds1Swamp.*).
 		game::swamp::frame_update(shared::common::ffp_state::get().frame_count());
+
+		// Where the runtime's water ripple field is centred (rtx.ds1Ripple.playerPosition).
+		game::water_ripples::frame_update();
 
 		// Sync camera override flags to ffp_state each frame
 		{
