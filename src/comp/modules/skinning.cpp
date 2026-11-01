@@ -5,6 +5,8 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "../game/texture_scroll.hpp"
+#include "../game/sky_meshes.hpp"
+#include "../game/effect_lights.hpp"
 
 namespace comp
 {
@@ -85,6 +87,8 @@ namespace comp
 		if (fur)
 			ffp.apply_vertex_colour_stage(dev);
 
+		if (game::sky_meshes::is_emitter_draw(ffp.cur_ib(), pt, start_idx, prim_count))
+			game::effect_lights::observe_emitter(ffp.vs_const_data());
 		const bool tinted = ffp.apply_draw_tint(dev);
 		const bool effect = ffp.apply_sp_effect(dev);
 		const bool toned = ffp.apply_skin_tone(dev, false);

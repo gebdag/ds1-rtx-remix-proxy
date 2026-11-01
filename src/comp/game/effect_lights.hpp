@@ -11,6 +11,8 @@ namespace comp::game::effect_lights
 	//   bolt draws (additive, the game's shared lightning textures, also lightning miracles and
 	//   weapons) are grouped per effect, each group lit like the game's flash light, reaching 2 m
 	//   past the bolts' spread.
+	// - Blue bonfires (the DLC's): the game's bonfire effect tinted blue, without its light. Each gets a
+	//   bonfire's light in blue.
 	// - Additive particles (fire breath, fireballs, flames): the light their sprites add to the
 	//   frame, summed per cluster, as a point light. game_lights drops a particle light that an
 	//   engine or table light already stands for (a bonfire, a torch).
@@ -22,6 +24,9 @@ namespace comp::game::effect_lights
 	// The renderer, for each converted rigid draw, with the game's diffuse. Only a bolt texture's draw
 	// reads the blend state; every other draw pays one texture-name flag lookup.
 	void observe_draw(IDirect3DDevice9* dev, IDirect3DBaseTexture9* diffuse, const float* vs_const, const float* ps_const);
+
+	// The skinning path, for a listed mesh of a crystal lizard (sky_meshes::is_emitter_draw): its faint blue light.
+	void observe_emitter(const float* vs_const);
 
 	// The sprite observer (ffp_state::set_sprite_observer): drawn particle triangles.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);

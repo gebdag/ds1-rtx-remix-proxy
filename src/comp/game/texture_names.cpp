@@ -17,6 +17,7 @@ namespace comp::game::texture_names
 			std::string name;
 			bool atmospheric = false;
 			bool lit_effect = false;
+			bool blue_flame = false;
 			bool lava = false;
 			owner owned_by = owner::unknown;
 		};
@@ -187,6 +188,12 @@ namespace comp::game::texture_names
 			return s == "s00502" || s == "s00504";
 		}
 
+		// The blue bonfire's flame meshes (frame_20261101_135358; a bonfire's are s00101-s00103).
+		bool classify_blue_flame(const std::string& s)
+		{
+			return s == "s00107" || s == "s00110" || s == "s00914";
+		}
+
 		// The lava materials' diffuse textures (m14_n_lava_00/01/03 and copies, "mNN_n_lava_*"); not
 		// m14_n_wall_14_lav, the rock that borders it.
 		owner classify_owner(const std::string& s)
@@ -245,6 +252,7 @@ namespace comp::game::texture_names
 		entry e{ stem(*name), false };
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
+		e.blue_flame = classify_blue_flame(e.name);
 		e.lava = classify_lava(e.name);
 		e.owned_by = classify_owner(e.name);
 		++g_named;
@@ -284,6 +292,15 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.lava;
 	}
 
+	bool is_blue_flame(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.blue_flame;
+	}
+
 	bool is_lit_effect(IDirect3DBaseTexture9* texture)
 	{
 		if (!texture)
@@ -316,6 +333,7 @@ namespace comp::game::texture_names
 		entry e{ stem(name), false };
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
+		e.blue_flame = classify_blue_flame(e.name);
 		e.lava = classify_lava(e.name);
 		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);

@@ -37,6 +37,12 @@ namespace comp::game::effect_lights
 		// came out at 17: that sum swings 10x between frames of one fire and is huge for big soft
 		// sprites. Only fire: white, blue and green particles (item pickups, souls, motes, fog,
 		// magic) are lit by no game light, and none is stood in for them.
+		// A blue bonfire's light: its tint c139 (0.2, 0.39, 1), at twice the peak of a bonfire's (0.72, 0.52, 0.21) to
+		// a bonfire's 4.8 m. It has no game light to match, and a bonfire's strength hardly showed in blue.
+		constexpr float kBlueFlameLight[3] = { 0.3f, 0.6f, 1.5f };
+		// A crystal lizard's light: faint, in the blue of its gem, about as far as the lizard is long.
+		constexpr float kEmitterLight[3] = { 0.25f, 0.45f, 0.75f };
+		constexpr float kEmitterReach = 3.5f;
 		constexpr float kTorchPower = 0.14f;   // a torch's flame (torches1 0.139, torch_wall 0.168)
 		constexpr float kTorchLight = 1.97f;   // a held torch's effect light, peak channel
 		constexpr float kTorchReach = 1.9f;
@@ -77,7 +83,7 @@ namespace comp::game::effect_lights
 		constexpr float kOff = 0.01f;
 		constexpr int kFirstSlot = 0x20000;
 
-		enum class kind { bolt, sprite };
+		enum class kind { bolt, sprite, blue_flame, emitter };
 
 		// A bolt: its origin, fade (c139.w) and tint (c139.rgb). A particle triangle: its centre,
 		// weight 1, and the light it adds (rgb).
@@ -112,7 +118,7 @@ namespace comp::game::effect_lights
 		std::vector<tracked> s_lights;
 		std::vector<point_lights::light> s_out;
 		std::chrono::steady_clock::time_point s_last_collect {};
-		bool s_logged[2] = {};
+		bool s_logged[4] = {};
 		float s_fire_scale = 1.0f;
 
 		float dist2(float ax, float ay, float az, float bx, float by, float bz)
@@ -138,7 +144,10 @@ namespace comp::game::effect_lights
 
 	void observe_draw(IDirect3DDevice9* dev, IDirect3DBaseTexture9* diffuse, const float* vs_const, const float* ps_const)
 	{
-		if (!dev || !diffuse || !vs_const || !ps_const || s_samples.size() >= kMaxSamples || !texture_names::is_lit_effect(diffuse))
+		if (!dev || !diffuse || !vs_const || !ps_const || s_samples.size() >= kMaxSamples)
+			return;
+		const bool blue_flame = texture_names::is_blue_flame(diffuse);
+		if (!blue_flame && !texture_names::is_lit_effect(diffuse))
 			return;
 		DWORD blend = FALSE, src = 0, dst = 0;
 		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
@@ -152,12 +161,24 @@ namespace comp::game::effect_lights
 		if (!shared::common::ffp_state::get().world_offset(ox, oy, oz))
 			return;
 		const float* tint = &ps_const[139 * 4];
+		if (blue_flame && !(tint[2] > tint[0]))
+			return;
 		const sample b { vs_const[8 * 4 + 3] + ox, vs_const[9 * 4 + 3] + oy, vs_const[10 * 4 + 3] + oz,
-			std::clamp(tint[3], 0.0f, 1.0f), tint[0], tint[1], tint[2], kind::bolt };
+			blue_flame ? 1.0f : std::clamp(tint[3], 0.0f, 1.0f), tint[0], tint[1], tint[2], blue_flame ? kind::blue_flame : kind::bolt };
 		if (!(b.fade > 0.0f) || !std::isfinite(b.x) || !std::isfinite(b.y) || !std::isfinite(b.z) ||
 			!std::isfinite(b.r) || !std::isfinite(b.g) || !std::isfinite(b.b))
 			return;
 		s_samples.push_back(b);
+	}
+
+	void observe_emitter(const float* vs_const)
+	{
+		float ox = 0, oy = 0, oz = 0;
+		if (!vs_const || s_samples.size() >= kMaxSamples || !shared::common::ffp_state::get().world_offset(ox, oy, oz))
+			return;
+		const sample e { vs_const[8 * 4 + 3] + ox, vs_const[9 * 4 + 3] + oy, vs_const[10 * 4 + 3] + oz, 1.0f, 1.0f, 1.0f, 1.0f, kind::emitter };
+		if (std::isfinite(e.x) && std::isfinite(e.y) && std::isfinite(e.z))
+			s_samples.push_back(e);
 	}
 
 	void set_fire_scale(float scale)
@@ -271,6 +292,22 @@ namespace comp::game::effect_lights
 					range = std::min(kMaxRange, spread + kFlashRange);
 					target = g->strongest;
 				}
+				else if (g->k == kind::emitter)
+				{
+					r = kEmitterLight[0];
+					gg = kEmitterLight[1];
+					b = kEmitterLight[2];
+					range = kEmitterReach;
+					target = 1.0f;
+				}
+				else if (g->k == kind::blue_flame)
+				{
+					r = s_fire_scale * kBlueFlameLight[0];
+					gg = s_fire_scale * kBlueFlameLight[1];
+					b = s_fire_scale * kBlueFlameLight[2];
+					range = kBonfireReach;
+					target = 1.0f;
+				}
 				else
 				{
 					// The game's torch to bonfire light on the brightest channel, in the particles' colour.
@@ -328,11 +365,11 @@ namespace comp::game::effect_lights
 			t.slot = free_slot();
 			ease_to(t, &g, true);
 			s_lights.push_back(t);
-			if (bool& logged = s_logged[g.k == kind::bolt ? 0 : 1]; !logged)
+			if (bool& logged = s_logged[static_cast<int>(g.k)]; !logged)
 			{
 				logged = true;
 				shared::common::log("EffectLights", std::format("{}: {} samples, light at ({:.1f}, {:.1f}, {:.1f}), colour ({:.3f}, {:.3f}, {:.3f}), range {:.1f} m",
-					g.k == kind::bolt ? "lightning bolts" : "additive particles", g.samples.size(), t.x, t.y, t.z, t.r, t.g, t.b, t.range));
+					g.k == kind::bolt ? "lightning bolts" : g.k == kind::sprite ? "additive particles" : g.k == kind::emitter ? "crystal lizard" : "blue bonfire", g.samples.size(), t.x, t.y, t.z, t.r, t.g, t.b, t.range));
 			}
 		}
 		s_samples.clear();
@@ -367,7 +404,7 @@ namespace comp::game::effect_lights
 			l.source = point_lights::param_source::effect;
 			// Particle stand-ins are told apart by their entity_vtable (game_lights hides those an
 			// engine or table light already stands for).
-			l.entity_vtable = t.k == kind::sprite ? kParticleMarker : 0;
+			l.entity_vtable = t.k != kind::bolt ? kParticleMarker : 0;
 			s_out.push_back(l);
 		}
 		return s_out;
