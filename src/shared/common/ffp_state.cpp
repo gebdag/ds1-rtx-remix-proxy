@@ -181,8 +181,9 @@ namespace shared::common
 	{
 		// First constant register of the view-projection a vertex shader applies to its
 		// position: the lowest float constant read by its first dp4 instructions (DS1's
-		// sprite shaders use c8-c11, point sprites c12-c15; some leave the z row out of
-		// the dp4s). -1 when the shader has none (relative addressing is ignored).
+		// sprite shaders use c8-c11; some leave the z row out of the dp4s; the point sprite
+		// shader's first dp4s are its view, c12-c15, see draw_sprite_up). -1 when the shader
+		// has none (relative addressing is ignored).
 		int parse_vs_viewproj_base(const DWORD* code)
 		{
 			if (!code || (code[0] & 0xFFFF0000) != 0xFFFE0000)
@@ -2177,7 +2178,10 @@ namespace shared::common
 			}
 			return false;
 		};
-		const int base = cur_vs_viewproj_base_;
+		// Point sprites (FRPG_Sfx_PointSpriteType0) are expanded to quads below. Its view-projection is c8-c11;
+		// the dp4s the base was parsed from are its view, c12-c15, which it only needs for the point size.
+		const bool points = prim == D3DPT_POINTLIST;
+		const int base = points ? 8 : cur_vs_viewproj_base_;
 		if (!dev || !vertices || !stride || !cfg_)
 			return reject(0, "no vertices");
 		if (!enabled_)
@@ -2186,11 +2190,14 @@ namespace shared::common
 			return reject(2, "vertex shader has no known view-projection");
 		if (!have_map_viewproj_ || !view_proj_valid_)
 			return reject(3, "no map camera yet");
-		// Fixed-function points and lines do not reach the path tracer as surfaces.
-		if (prim != D3DPT_TRIANGLELIST && prim != D3DPT_TRIANGLESTRIP && prim != D3DPT_TRIANGLEFAN)
-			return reject(4, "points or lines");
+		// Fixed-function lines do not reach the path tracer as surfaces.
+		if (prim != D3DPT_TRIANGLELIST && prim != D3DPT_TRIANGLESTRIP && prim != D3DPT_TRIANGLEFAN && !points)
+			return reject(4, "lines");
 		if (cur_decl_pos_type_ != D3DDECLTYPE_FLOAT3 && cur_decl_pos_type_ != D3DDECLTYPE_FLOAT4)
 			return reject(5, "position not float3/float4");
+		// The point's size is in its position's w.
+		if (points && (indices || cur_decl_pos_type_ != D3DDECLTYPE_FLOAT4))
+			return reject(6, "points without a size in position w");
 
 		// The particle's rows must be the map camera's but for their translation
 		// column (x, y and w rows; some sprite shaders compute z themselves).
@@ -2268,7 +2275,8 @@ namespace shared::common
 		}
 
 		// Repack: position, colour, uv.
-		UINT count = indices ? min_index + num_verts
+		UINT count = points ? prim_count * 6
+			: indices ? min_index + num_verts
 			: (prim == D3DPT_TRIANGLELIST ? prim_count * 3 : prim_count + 2);
 		struct sprite_vertex { float x, y, z; DWORD color; float u, v; };
 		sprite_vertices_.resize(static_cast<size_t>(count) * sizeof(sprite_vertex));
@@ -2282,7 +2290,7 @@ namespace shared::common
 		// texture goes to Remix, the others are sampled per vertex (multi_sprite_triangles below). The masks'
 		// average stands in where that cannot be done, and for the sprite observer.
 		std::array<float, 4> mask = { 1.0f, 1.0f, 1.0f, 1.0f };
-		if (unlit)
+		if (unlit && !points)
 			for (DWORD s : { 1u, 3u })
 				if ((cur_ps_sampler_mask_ & (1u << s)) && cur_texture_[s])
 				{
@@ -2321,6 +2329,49 @@ namespace shared::common
 			return (colour & 0xFF000000u) | channel(16) | channel(8) | channel(0);
 		};
 
+		// A point becomes a quad facing the camera, with the size the shader gives it: its diameter in pixels is
+		// screen height * w / |view position| (with the view position's w of 1, so at the camera's depth z a
+		// world diameter of 2 * w * z / (|view position| * P11)), and P11 is the length of the y row's xyz.
+		if (points)
+		{
+			auto row_length = [&](int r) { return std::sqrt(P[r * 4] * P[r * 4] + P[r * 4 + 1] * P[r * 4 + 1] + P[r * 4 + 2] * P[r * 4 + 2]); };
+			const float p00 = row_length(0), p11 = row_length(1);
+			if (!(p00 > 0.0f) || !(p11 > 0.0f))
+				return false;
+			UINT written = 0;
+			for (UINT p = 0; p < prim_count; p++)
+			{
+				const unsigned char* sv = src + static_cast<size_t>(p) * stride;
+				const auto* pos = reinterpret_cast<const float*>(sv + cur_decl_pos_off_);
+				const double dx = pos[0] - cam[0], dy = pos[1] - cam[1], dz = pos[2] - cam[2];
+				const double z = P[12] * static_cast<double>(pos[0]) + P[13] * static_cast<double>(pos[1]) +
+					P[14] * static_cast<double>(pos[2]) + P[15];
+				const float half = static_cast<float>(pos[3] * z / (std::sqrt(dx * dx + dy * dy + dz * dz + 1.0) * p11));
+				if (!(half > 0.0f) || !std::isfinite(half))
+					continue;
+				DWORD colour = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
+				if (game_colour)
+					colour = vertex_colour(colour);
+				auto corner = [&](float sx, float sy, float u, float v)
+				{
+					auto& o = out[written++];
+					for (int c = 0; c < 3; c++)
+						(&o.x)[c] = pos[c] + half * (sx * P[c] / p00 + sy * P[4 + c] / p11);
+					o.color = colour;
+					o.u = u; o.v = v;
+				};
+				corner(-1.0f, 1.0f, 0.0f, 0.0f); corner(1.0f, 1.0f, 1.0f, 0.0f); corner(-1.0f, -1.0f, 0.0f, 1.0f);
+				corner(-1.0f, -1.0f, 0.0f, 1.0f); corner(1.0f, 1.0f, 1.0f, 0.0f); corner(1.0f, -1.0f, 1.0f, 1.0f);
+			}
+			if (!written)
+			{
+				hr = S_OK;
+				return true;
+			}
+			prim = D3DPT_TRIANGLELIST;
+			prim_count = written / 3;
+		}
+		else
 		for (UINT v = 0; v < count; v++)
 		{
 			const unsigned char* sv = src + static_cast<size_t>(v) * stride;
@@ -2355,7 +2406,8 @@ namespace shared::common
 				}
 			}
 		}
-		if (sprite_observer_fn_ && count)
+		// Point sprites are sparkles, nothing the effect lights follow.
+		if (sprite_observer_fn_ && count && !points)
 		{
 			DWORD blend_on = FALSE, dst_blend = 0;
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_on);
@@ -2470,6 +2522,13 @@ namespace shared::common
 				retarget = true;
 			}
 		}
+		// Points are never culled, whatever the cull state the game left.
+		DWORD game_cull = D3DCULL_NONE;
+		if (points)
+		{
+			dev->GetRenderState(D3DRS_CULLMODE, &game_cull);
+			dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		}
 		DWORD carrier = 0;
 		const UINT masked_triangles = masked ? multi_sprite_triangles(prim, prim_count, indices, index_format, vertices, stride,
 			count, colour_scale, carrier) : 0;
@@ -2494,6 +2553,8 @@ namespace shared::common
 			: indices
 			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
+		if (points)
+			dev->SetRenderState(D3DRS_CULLMODE, game_cull);
 		if (carried)
 		{
 			for (size_t i = 0; i < std::size(kCarrierStates); i++)
