@@ -160,6 +160,7 @@ namespace comp::game::atmosphere
 		constexpr DWORD kSelfLitMarker = 0xD5000000;
 		constexpr float kSelfLitMin = 3.0f;
 		constexpr float kSelfLitRange = 16.0f;
+		constexpr float kBrightCharacterMin = 1.2f;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
 
 		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
@@ -553,12 +554,12 @@ namespace comp::game::atmosphere
 		// ghosts blazed and gave themselves away from afar. Tagged with that light, averaged over
 		// the directions (c100 * (c86 * the probe's mean face + the hemisphere's mean)), the runtime
 		// emits texture * light instead.
-		bool additive_lit_colour(IDirect3DDevice9* dev, const float* ps_const, IDirect3DBaseTexture9* probe, float value[3])
+		bool additive_lit_colour(IDirect3DDevice9* dev, const float* ps_const, IDirect3DBaseTexture9* probe, float value[3], bool bright_character)
 		{
 			DWORD blend = FALSE, dst = 0;
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
 			dev->GetRenderState(D3DRS_DESTBLEND, &dst);
-			if (!blend || dst != D3DBLEND_ONE)
+			if (!bright_character && (!blend || dst != D3DBLEND_ONE))
 				return false;
 			std::array<std::array<float, 3>, 6> faces {};
 			const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
@@ -584,24 +585,28 @@ namespace comp::game::atmosphere
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit)
 	{
 		DWORD tag = 0;
-		// Only alpha-blended layers (Bed of Chaos's glyph shells). An opaque unlit mesh (m18_ao, c100 7) is an
-		// ordinary surface Remix lights, and the tag would add its c100 glow on top of that light. Additive ones
-		// (bonfire and torch flames, Bed of Chaos's seal shells) keep the fixed additive intensity: the tag
-		// measured below snapshot noise on them (bonfire1, torches1, frame_20261029_191418) and cut the light
-		// the flames cast.
+		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
+		// (m18_ao, c100 7) is an ordinary surface Remix lights, and the tag would add its c100 glow on top of that
+		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
+		// flame layers, each (1, 0.39, 0.2) * texture, clip red and climb through orange to yellow there, while a
+		// linear sum stays red (frame_20261101_135237).
 		DWORD blended = FALSE, dst_blend = 0;
 		if (unlit && dev)
 		{
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
 			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
 		}
-		if (unlit && blended && dst_blend != D3DBLEND_ONE && ps_const)
+		if (unlit && blended && ps_const)
 		{
 			// The game's light for it is c100 alone. At least 1 per channel, as for additive draws below.
+			// An additive layer has no exposure count like the alpha-blended ones' unlit marker
+			// (ffp_state::apply_unlit_layer_marker): its colour carries the game's c135.x / c135.y.
 			const float* diffuse = &ps_const[100 * 4];
+			const float* exposure = &ps_const[135 * 4];
+			const float scale = dst_blend == D3DBLEND_ONE && exposure[1] > 0.0f ? exposure[0] / exposure[1] : 1.0f;
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
-				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c], 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c] * scale, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 		}
 		else if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
 		{
@@ -609,7 +614,12 @@ namespace comp::game::atmosphere
 			for (int c = 0; c < 3; c++)
 				tag |= static_cast<DWORD>(std::lround(std::min(value[c] / kSelfLitRange, 1.0f) * 255.0f)) << (16 - 8 * c);
 		}
-		else if (ambient && ps_const && additive_lit_colour(dev, ps_const, probe, value))
+		// Or a character the game lights past its texture (c100 above 1: Seath 1.5-3, Bed of Chaos's body 1.7;
+		// every other character is 1 or below, frames across 158 captures): the game's ambient on it, as its
+		// own light. Remix's albedo stops at 1, and such a boss went dim in its cave.
+		else if (ambient && ps_const && additive_lit_colour(dev, ps_const, probe, value,
+			shared::common::ffp_state::get().cur_decl_is_skinned() &&
+				std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] }) >= kBrightCharacterMin))
 		{
 			// At least 1 per channel: the runtime tells a tagged additive surface by a non-zero value.
 			tag = kSelfLitMarker;
