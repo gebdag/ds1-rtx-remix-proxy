@@ -32,6 +32,10 @@ namespace comp::game::texture_names
 	// True for the Estus flask's diffuse (the drinking effect's model), see game/estus.hpp.
 	bool is_estus_flask(IDirect3DBaseTexture9* texture);
 
+	// True for the Moonlight Butterfly's diffuse (c3230): parts of its wings are two single-sided faces whose
+	// fronts face each other, which it draws as a thin wall (game/thin_walls.hpp).
+	bool is_butterfly_wing(IDirect3DBaseTexture9* texture);
+
 	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
 	bool is_lava(IDirect3DBaseTexture9* texture);
 

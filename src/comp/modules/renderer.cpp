@@ -613,8 +613,15 @@ namespace comp
 				const bool swamp = swamp_pass == game::swamp::pass::Surface;
 				if (swamp)
 					dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
+				// A character with thin wall faces (the Moonlight Butterfly's wings: black patches otherwise).
+				const bool thin_wall_skin = game::texture_names::is_butterfly_wing(
+					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+				if (thin_wall_skin)
+					dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
 				hr = skin->draw_skinned_dip(dev, PrimitiveType, BaseVertexIndex,
 					MinVertexIndex, NumVertices, startIndex, primCount);
+				if (thin_wall_skin)
+					dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				if (swamp)
 					dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 			}
