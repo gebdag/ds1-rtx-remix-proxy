@@ -590,6 +590,11 @@ namespace shared::common
 		bool have_map_viewproj_ = false;
 		std::vector<unsigned char> sprite_vertices_;
 		std::vector<sprite_point> sprite_points_;
+		// A soft sprite vertex pushed towards the camera by half its feather along its view ray, as the
+		// sprite shaders' ZFeather does (draw_sprite_up: the camera and the w row of its view-projection).
+		double sprite_cam_[3] = {};
+		float sprite_w_row_[4] = {};
+		void push_soft_sprite(float* position, float feather) const;
 		// Average colour (rgba, 0-1) of textures used as sprite masks, from their smallest mip.
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
 		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);

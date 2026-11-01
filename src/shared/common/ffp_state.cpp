@@ -1921,6 +1921,23 @@ namespace shared::common
 			dev->SetTextureStageState(5, D3DTSS_CONSTANT, 0);
 	}
 
+	void ffp_state::push_soft_sprite(float* position, float feather) const
+	{
+		// A soft sprite sits half a feather nearer than its vertices say, so it fades from 50% at a surface
+		// (alpha = saturate(gap / feather)) and shows down to half a feather behind one: the Darksign's
+		// ground ring, a few centimetres off the floor. On screen it stays where it was, along its view ray.
+		if (!(feather > 0.0f) || !std::isfinite(feather))
+			return;
+		constexpr float kNear = 0.1f;
+		const double w = sprite_w_row_[0] * static_cast<double>(position[0]) + sprite_w_row_[1] * static_cast<double>(position[1]) +
+			sprite_w_row_[2] * static_cast<double>(position[2]) + sprite_w_row_[3];
+		if (!(w > kNear))
+			return;
+		const double t = std::max(w - 0.5 * feather, static_cast<double>(kNear)) / w;
+		for (int c = 0; c < 3; c++)
+			position[c] = static_cast<float>(sprite_cam_[c] + (position[c] - sprite_cam_[c]) * t);
+	}
+
 	bool ffp_state::draw_sprite_up(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, UINT prim_count,
 		UINT min_index, UINT num_verts, const void* indices, D3DFORMAT index_format,
 		const void* vertices, UINT stride, bool unlit, HRESULT& hr)
@@ -2001,6 +2018,9 @@ namespace shared::common
 
 		// Into the space map pieces get: camera-relative, plus the injected camera
 		// position when world offsetting is on (see apply_transforms).
+		std::memcpy(sprite_cam_, cam, sizeof(sprite_cam_));
+		std::memcpy(sprite_w_row_, &P[3 * 4], sizeof(sprite_w_row_));
+
 		float world[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
 		world[12] = static_cast<float>(-cam[0]);
 		world[13] = static_cast<float>(-cam[1]);
@@ -2080,6 +2100,8 @@ namespace shared::common
 			const unsigned char* sv = src + static_cast<size_t>(v) * stride;
 			const auto* pos = reinterpret_cast<const float*>(sv + cur_decl_pos_off_);
 			out[v].x = pos[0]; out[v].y = pos[1]; out[v].z = pos[2];
+			if (soft)
+				push_soft_sprite(&out[v].x, *reinterpret_cast<const float*>(sv + cur_decl_feather_off_));
 			out[v].color = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
 			if (masked)
 			{
@@ -2555,6 +2577,8 @@ namespace shared::common
 			const unsigned char* sv = src + static_cast<size_t>(i) * stride;
 			vertex v {};
 			std::memcpy(v.p, sv + cur_decl_pos_off_, sizeof(v.p));
+			if (cur_ps_sfx_class_ == sfx_class::SoftSprite && cur_decl_feather_off_ >= 0)
+				push_soft_sprite(v.p, *reinterpret_cast<const float*>(sv + cur_decl_feather_off_));
 			const DWORD c = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
 			v.c[0] = ((c >> 16) & 0xFF) / 255.0f; v.c[1] = ((c >> 8) & 0xFF) / 255.0f; v.c[2] = (c & 0xFF) / 255.0f; v.c[3] = (c >> 24) / 255.0f;
 			for (int l = 0; l < 3; l++)
