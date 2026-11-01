@@ -773,6 +773,14 @@ namespace comp::game::atmosphere
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }
+		// Menu.Tab=<name>: opens the F4 menu on that tab (lookdev screenshots of the UI); "Lights+" also
+		// opens every section of the Lights tab. Menu.Tab=0 closes the menu.
+		else if (key == "Menu.Tab")
+		{
+			shared::globals::imgui_menu_open = value != "0";
+			shared::globals::imgui_open_light_sections = !value.empty() && value.back() == '+';
+			shared::globals::imgui_select_tab = shared::globals::imgui_open_light_sections ? value.substr(0, value.size() - 1) : value;
+		}
 		else if (key == "Lights.GameFalloffFX" || key == "Lights.GameFalloffCharacter")
 		{
 			auto* gl = game_lights::get();

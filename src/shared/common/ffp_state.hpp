@@ -355,7 +355,10 @@ namespace shared::common
 		// True when the current pixel shader reads the game's point lights (c112-c119: four lights'
 		// camera-relative positions and colours, the *PntS* variants). Other shaders leave those
 		// registers holding the last draw's lights.
-		bool cur_ps_reads_point_lights() const { return cur_ps_point_lights_; }
+		bool cur_ps_reads_point_lights() const { return cur_ps_point_lights_ > 0; }
+		// How many of those lights it reads (c112+i / c116+i for i below it): the *PntS* map shaders read
+		// one, and the registers past it still hold an earlier draw's lights.
+		int cur_ps_point_light_count() const { return cur_ps_point_lights_; }
 
 		// For a converted draw whose pixel shader reads c139 and whose c139 is not
 		// (1,1,1,1): put c139 in D3DRS_TEXTUREFACTOR and enable stage 1 as
@@ -587,8 +590,8 @@ namespace shared::common
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_draw_tint_;
 		bool cur_ps_draw_tint_ = false;
 		// Pixel shaders that read c116 (see cur_ps_reads_point_lights).
-		std::unordered_map<IDirect3DPixelShader9*, bool> ps_point_lights_;
-		bool cur_ps_point_lights_ = false;
+		std::unordered_map<IDirect3DPixelShader9*, int> ps_point_lights_;
+		int cur_ps_point_lights_ = 0;
 		// Pixel shaders that read c156 (see apply_skin_tone).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_skin_tone_;
 		bool cur_ps_skin_tone_ = false;

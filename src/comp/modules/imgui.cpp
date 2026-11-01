@@ -913,7 +913,7 @@ namespace comp
 #define ADD_TAB(NAME, FUNC) \
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ChildBg));					\
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x + 12.0f, 8));	\
-	if (ImGui::BeginTabItem(NAME)) {																		\
+	if (ImGui::BeginTabItem(NAME, nullptr, shared::globals::imgui_select_tab == NAME ? ImGuiTabItemFlags_SetSelected : 0)) {	\
 		ImGui::PopStyleVar(1);																				\
 		if (ImGui::BeginChild("##child_" NAME, ImVec2(0, ImGui::GetContentRegionAvail().y - 38), ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_AlwaysVerticalScrollbar )) {	\
 			FUNC(); ImGui::EndChild();																		\
@@ -951,6 +951,7 @@ namespace comp
 			ADD_TAB("Lights", tab_lights);
 			ADD_TAB("Dev", tab_dev);
 			ADD_TAB("About", tab_about);
+			shared::globals::imgui_select_tab.clear();
 			ImGui::EndTabBar();
 		}
 		else {

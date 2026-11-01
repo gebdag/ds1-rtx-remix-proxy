@@ -18,6 +18,7 @@ namespace comp::game::texture_names
 			bool atmospheric = false;
 			bool lit_effect = false;
 			bool lava = false;
+			owner owned_by = owner::unknown;
 		};
 
 		std::shared_mutex g_mutex;
@@ -188,6 +189,21 @@ namespace comp::game::texture_names
 
 		// The lava materials' diffuse textures (m14_n_lava_00/01/03 and copies, "mNN_n_lava_*"); not
 		// m14_n_wall_14_lav, the rock that borders it.
+		owner classify_owner(const std::string& s)
+		{
+			if (s.empty())
+				return owner::unknown;
+			auto lower = [&](size_t i) { return i < s.size() ? static_cast<char>(std::tolower(static_cast<unsigned char>(s[i]))) : '\0'; };
+			for (const char* prefix : { "wp_", "bd_", "hd_", "lg_", "am_", "fg_" })
+				if (lower(0) == prefix[0] && lower(1) == prefix[1] && lower(2) == '_')
+					return owner::character;
+			if (lower(0) == 'c' && s.size() >= 5 && std::isdigit(static_cast<unsigned char>(s[1])) &&
+				std::isdigit(static_cast<unsigned char>(s[2])) && std::isdigit(static_cast<unsigned char>(s[3])) &&
+				std::isdigit(static_cast<unsigned char>(s[4])))
+				return owner::character;
+			return owner::map;
+		}
+
 		bool classify_lava(const std::string& s)
 		{
 			return s.size() > 10 && s[0] == 'm' && std::isdigit(static_cast<unsigned char>(s[1])) &&
@@ -230,6 +246,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.lava = classify_lava(e.name);
+		e.owned_by = classify_owner(e.name);
 		++g_named;
 		if (e.atmospheric)
 		{
@@ -276,6 +293,15 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.lit_effect;
 	}
 
+	owner owner_of(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return owner::unknown;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() ? it->second.owned_by : owner::unknown;
+	}
+
 	std::string name_of(IDirect3DBaseTexture9* texture)
 	{
 		std::shared_lock lock(g_mutex);
@@ -291,6 +317,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.lava = classify_lava(e.name);
+		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);
 	}

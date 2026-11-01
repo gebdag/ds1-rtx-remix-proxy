@@ -1,0 +1,8 @@
+# Custom lights for m18_01_00_00 (Undead Asylum). F4 > Lights > Custom lights edits and saves this file.
+# x y z dwindle_begin dwindle_end r g b intensity% name [spot dir_x dir_y dir_z cone_deg softness] [off]
+#
+# Corridor sunbeam: the game bakes this patch of sunlight on the rubble into the lightmap and lights
+# only characters with a map light (slot 15, colour 5.0 4.6 4.2), so Remix gets no light there.
+# Placed in the ceiling hole and aimed along the game's god-ray shaft (m19_bg_shaft_10), cone matched to
+# the lightmap's sunlit patch in lookdev capture frame_20261031_161923; intensity 6 (600%).
+-3.20 207.50 19.30 8 12 255 235 215 600 Corridor_sunbeam spot -0.31 -0.88 0.37 16 0.5

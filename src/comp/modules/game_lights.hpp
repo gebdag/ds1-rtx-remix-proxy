@@ -70,6 +70,7 @@ namespace comp
 			synthetic,    // stand-in from rtx_comp\lights\<map>.txt
 			effect,       // stand-in for a lit effect's draws (game::effect_lights)
 			ffx_table,    // an unlit effect's light from the effect table (game::ffx_lights)
+			custom,       // placed by hand, per map (game::custom_lights)
 			unresolved,   // live slot with no usable parameters
 			count
 		};
@@ -86,6 +87,7 @@ namespace comp
 			disabled,     // switched off in the list
 			solo_other,   // another light is soloed
 			over_limit,   // past Max drawn
+			characters,   // the game binds it to characters only (it lights none of the map)
 		};
 
 		// F4 > Lights > Game falloff for one kind (also proxy.Lights.GameFalloff<Kind> live).
@@ -97,7 +99,13 @@ namespace comp
 		// bound to it, camera-relative positions in c112-c115 (colour c116-c119). A map light the game binds to
 		// lightmapped geometry is a dynamic light there and goes to Remix at the game's strength; one it never
 		// binds is baked into the lightmap, and Remix's light stands in for that glow (sync_lights).
-		void observe_lightmapped_draw(const float* ps_const);
+		void observe_lightmapped_draw(const float* ps_const, int light_count);
+		// Any draw whose pixel shader reads the game's point lights: which lights the game binds to map
+		// geometry and which to characters (skinned draws, and the weapons, shields and armour a bone
+		// holds). A light it gives characters only (a map Light event lighting whoever stands in a
+		// beam of baked sunlight) lights none of the map in the game; drawn
+		// as a Remix light it lights the map around it (row_state::characters).
+		void observe_draw_lights(const float* ps_const, int light_count, bool character);
 		// Live diagnostics (atmosphere.cpp set_proxy_option).
 		void set_emitter_radius(float r) { emitter_radius_ = r; }
 		void set_kind_enabled(int k, bool on) { if (k >= 0 && k < static_cast<int>(light_kind::count)) kind_enabled_[k] = on; }
@@ -106,6 +114,14 @@ namespace comp
 		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).
 		std::vector<std::array<float, 3>> lightmap_bound_;
 		bool bound_to_lightmap(float x, float y, float z) const;
+		// Lights the game bound to map draws and to character draws on the current map (observe_draw_lights).
+		std::vector<std::array<float, 3>> map_bound_, character_bound_;
+		unsigned bound_map_id_ = 0;
+		bool characters_only(float x, float y, float z) const;
+		bool skip_characters_only_ = true;
+		void custom_lights_imgui();
+		int custom_selected_ = -1;
+		bool open_custom_ = false;   // open the Custom lights section on the next frame (a custom row's editor)
 		static inline game_lights* p_this = nullptr;
 
 		// One Remix light per engine slot. Kept across frames and updated in place so
@@ -129,7 +145,8 @@ namespace comp
 			float multiplier = 1.0f;
 			bool recolour = false;
 			float colour[3] = { 1.0f, 1.0f, 1.0f };
-			bool is_default() const { return !disabled && multiplier == 1.0f && !recolour; }
+			bool include_map = false;   // a character-only light drawn anyway (row_state::characters)
+			bool is_default() const { return !disabled && multiplier == 1.0f && !recolour && !include_map; }
 		};
 
 		// A row of the list, rebuilt every frame by sync_lights.
@@ -187,6 +204,11 @@ namespace comp
 
 		// UI pieces.
 		void list_imgui();
+		void sources_imgui();
+		void scales_imgui();
+		void table_imgui();
+		void selected_imgui();
+		void solo_flash_imgui(uint64_t key);
 		void sun_imgui();
 		void player_light_imgui();
 		void point_light_imgui(const light_row& row);
@@ -235,12 +257,12 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
-		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true, true };
+		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true, true, true };
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
 		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
 		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no
 		// parameters, stay out.
-		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, true, false };
+		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, true, true, false };
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;

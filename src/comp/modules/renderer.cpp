@@ -454,7 +454,19 @@ namespace comp
 		// The lights the game binds to lightmapped map draws (which map lights it treats as dynamic there).
 		if (ffp.view_proj_valid() && ffp.cur_ps_reads_point_lights() && (ffp.cur_ps_sampler_mask() & (1u << 6)))
 			if (auto* gl = game_lights::get())
-				gl->observe_lightmapped_draw(ffp.ps_const_data());
+				gl->observe_lightmapped_draw(ffp.ps_const_data(), ffp.cur_ps_point_light_count());
+		// ... and which it binds to map geometry and which to characters only. Map pieces carry bone indices too
+		// (one rigid bone), as do weapons and shields (a hand bone), so a rigid draw is told by its texture's name;
+		// one with no recovered name counts as neither.
+		if (ffp.view_proj_valid() && ffp.cur_ps_reads_point_lights())
+			if (auto* gl = game_lights::get())
+			{
+				const auto owner = game::texture_names::owner_of(
+					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+				if (ffp.cur_decl_is_skinned() || owner != game::texture_names::owner::unknown)
+					gl->observe_draw_lights(ffp.ps_const_data(), ffp.cur_ps_point_light_count(),
+						ffp.cur_decl_is_skinned() || owner == game::texture_names::owner::character);
+			}
 
 		// Map materials' c100 (the swamp's colours keep their ratio to them).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && swamp_pass == game::swamp::pass::None)

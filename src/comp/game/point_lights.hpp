@@ -14,6 +14,7 @@ namespace comp::game::point_lights
 		synthetic,  // not from the engine at all — see game::map_lights
 		effect,     // stands in for an effect the engine lights only briefly — see game::effect_lights
 		ffx_table,  // an effect the game draws without a light, lit from the effect table — see game::ffx_lights
+		custom,     // placed by hand, per map — see game::custom_lights
 	};
 
 	struct light
@@ -37,6 +38,11 @@ namespace comp::game::point_lights
 		// 0 when unknown (fx_owner). Last, so captures from before these fields still load.
 		int ffx_id;
 		int ffx_top_id;
+		// A spotlight's aim (unit vector), cone half angle in degrees and edge softness 0-1; cone 0 for a point
+		// light (custom_lights). After the FFX ids, for the same reason.
+		float spot_dir[3];
+		float spot_cone_deg;
+		float spot_softness;
 	};
 
 	// Human-readable class of a resolved entity ("Bank", "Direct", "LerpBank", "?").

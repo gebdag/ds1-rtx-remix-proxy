@@ -29,6 +29,12 @@ namespace comp::game::texture_names
 	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
 	bool is_lava(IDirect3DBaseTexture9* texture);
 
+	// Whose texture it is, by name: a character's or its equipment's (c#### bodies, wp_ weapons and
+	// shields, bd_/hd_/lg_/am_ armour, fg_ faces), anything else named (the map and its objects), or
+	// unknown (no name recovered).
+	enum class owner : unsigned char { unknown, map, character };
+	owner owner_of(IDirect3DBaseTexture9* texture);
+
 	// Name recovered for the texture, or empty.
 	std::string name_of(IDirect3DBaseTexture9* texture);
 
