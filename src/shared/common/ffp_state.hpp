@@ -161,6 +161,9 @@ namespace shared::common
 		// and control whether it gets injected into View/World transforms.
 		using camera_pos_fn = bool(*)(float& x, float& y, float& z);
 		void set_camera_override(camera_pos_fn fn) { camera_override_fn_ = fn; }
+		// Whether a map is loaded: FFP conversion stays on, whatever the frame draws (on_present).
+		using map_loaded_fn = bool(*)();
+		void set_map_loaded(map_loaded_fn fn) { map_loaded_fn_ = fn; }
 
 		// Sprite observer: the comp layer sees where effects are drawn. Called with every sprite
 		// batch draw_sprite_up draws: one point per triangle it draws, the triangle's centre in the
@@ -508,6 +511,7 @@ namespace shared::common
 
 		// Camera override from comp layer
 		camera_pos_fn camera_override_fn_ = nullptr;
+		map_loaded_fn map_loaded_fn_ = nullptr;
 		sprite_observer_fn sprite_observer_fn_ = nullptr;
 		bool inject_view_pos_ = false;
 		bool offset_world_ = false;

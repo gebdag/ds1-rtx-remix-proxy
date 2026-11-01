@@ -75,6 +75,11 @@ namespace comp
 			auto& ffp = shared::common::ffp_state::get();
 			auto& cam_s = game::camera::get_settings();
 			ffp.set_camera_override(camera_pos_provider);
+			ffp.set_map_loaded([]() -> bool
+			{
+				const unsigned id = game::map_lights::current_map_id();
+				return id != 0 && ((id >> 24) & 0xFF) < 99; // the bound of map_lights' current_map_name
+			});
 			ffp.set_sprite_observer(observe_sprites);
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);

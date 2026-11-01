@@ -802,12 +802,16 @@ namespace shared::common
 
 	void ffp_state::on_present()
 	{
-		// Auto-enable/disable: track consecutive frames above/below the eligible draw threshold
+		// Auto-enable/disable: track consecutive frames above/below the eligible draw threshold. A loaded map
+		// counts as above: a load screen fell below the threshold, and the new map's first frames then reached
+		// Remix unconverted until the count came back, its textures smeared (without FFP Remix takes the UVs
+		// from the vertex shader's TEXCOORD0 output, in the map shaders the world position).
 		if (cfg_ && cfg_->auto_enable && cfg_->enabled)
 		{
 			int threshold = cfg_->auto_enable_threshold;
 			int required = cfg_->auto_enable_frames;
-			bool above = static_cast<int>(ffp_eligible_draws_) >= threshold;
+			const bool map_loaded = map_loaded_fn_ && map_loaded_fn_();
+			bool above = map_loaded || static_cast<int>(ffp_eligible_draws_) >= threshold;
 
 			if (!enabled_ && above)
 			{
@@ -819,10 +823,11 @@ namespace shared::common
 				else
 				{
 					auto_consecutive_++;
-					if (auto_consecutive_ >= required)
+					if (map_loaded || auto_consecutive_ >= required)
 					{
 						enabled_ = true;
-						log("FFP", std::format("Auto-enabled ({}+ eligible draws for {} frames)", threshold, required));
+						auto_consecutive_ = 0;
+						log("FFP", std::format("Auto-enabled ({}, {} eligible draws)", map_loaded ? "map loaded" : "draw count", ffp_eligible_draws_));
 					}
 				}
 			}
@@ -832,6 +837,7 @@ namespace shared::common
 				if (auto_consecutive_ >= required)
 				{
 					enabled_ = false;
+					auto_consecutive_ = 0;
 					manual_disable_ = false; // menu detected — reset so next enter-game auto-enables
 					log("FFP", std::format("Auto-disabled (<{} eligible draws for {} frames)", threshold, required));
 				}
