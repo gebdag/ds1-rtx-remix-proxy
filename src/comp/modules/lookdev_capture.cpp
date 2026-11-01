@@ -5,6 +5,7 @@
 
 #include "shared/common/config.hpp"
 #include "shared/lookdev/capture_format.hpp"
+#include "../game/estus.hpp"
 #include "../game/camera.hpp"
 #include "../game/map_lights.hpp"
 #include "../game/point_lights.hpp"
@@ -2347,6 +2348,8 @@ namespace comp
 				f.flags |= GAME_FRAME_HEADING;
 				f.heading = heading;
 			}
+			if (game::estus::player_flask_empty())
+				f.flags |= GAME_FRAME_ESTUS_EMPTY;
 			f.map_id = game::map_lights::current_map_id();
 			c.w.rec(REC_GAME_FRAME, f);
 

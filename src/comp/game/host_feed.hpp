@@ -20,6 +20,7 @@ namespace comp::game::host_feed
 		bool heading_valid = false;
 		float heading = 0.0f;    // camera::get_char_heading
 		unsigned map_id = 0;     // map_lights::current_map_id
+		bool estus_empty = false; // estus::player_flask_empty
 	};
 
 	const frame_state& frame();

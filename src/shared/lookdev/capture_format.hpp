@@ -281,6 +281,7 @@ namespace lookdev
 	constexpr uint32_t GAME_FRAME_CAMERA = 1;
 	constexpr uint32_t GAME_FRAME_PLAYER = 2;
 	constexpr uint32_t GAME_FRAME_HEADING = 4;
+	constexpr uint32_t GAME_FRAME_ESTUS_EMPTY = 8;  // game::estus::player_flask_empty; older captures read as not empty
 
 	struct game_frame
 	{

@@ -33,6 +33,7 @@ extern "C" void __cdecl lookdev_host_feed(uint32_t type, const void* payload, ui
 		s.camera_valid = (f.flags & lookdev::GAME_FRAME_CAMERA) != 0;
 		s.player_valid = (f.flags & lookdev::GAME_FRAME_PLAYER) != 0;
 		s.heading_valid = (f.flags & lookdev::GAME_FRAME_HEADING) != 0;
+		s.estus_empty = (f.flags & lookdev::GAME_FRAME_ESTUS_EMPTY) != 0;
 		std::memcpy(s.camera, f.camera, sizeof(s.camera));
 		std::memcpy(s.player, f.player, sizeof(s.player));
 		s.heading = f.heading;

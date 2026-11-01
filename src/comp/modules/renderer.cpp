@@ -10,6 +10,7 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/estus.hpp"
 #include "../game/shaft_source.hpp"
 #include "../game/glass.hpp"
 #include "../game/effect_lights.hpp"
@@ -731,9 +732,13 @@ namespace comp
 					// Nor are blended shells (sky_meshes::is_shell_draw): they do not lie on
 					// a surface, so as decals they took the lighting of whatever lay behind
 					// them; they are shaded as their own surface instead ([Sky] ShellMode).
+					// Nor is the Estus flask (game/estus.hpp), which goes opaque: the game draws it twice at 0.86, so it
+					// is all but solid there, and a decal needs something behind it.
 					const int shell_mode = shared::common::config::get().sky.shell_mode;
-					const bool shell = shell_mode != 0 &&
-						game::sky_meshes::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+					const bool flask = !water_draw && game::texture_names::is_estus_flask(
+						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+					const bool shell = flask || (shell_mode != 0 &&
+						game::sky_meshes::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
 					// Window glass is split into its came and its glass (game/glass.hpp): the base
 					// draw becomes the came, and neither pass is a decal.
 					DWORD glass_cut = 0;
@@ -745,7 +750,7 @@ namespace comp
 					// Alpha-blended unlit glow layers take the sprites' unlit marker instead (ffp_state).
 					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
 						ffp.apply_unlit_layer_marker(dev);
-					if (shell && shell_mode == 2)
+					if (shell && (shell_mode == 2 || flask))
 					{
 						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).
 						save_overlay_render_states(ctx, dev);
@@ -776,6 +781,10 @@ namespace comp
 							ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))))
 							dev->SetTexture(0, surface);
 					}
+					// Restored below with the rest of the stages.
+					if (flask)
+						if (auto* flask_texture = game::estus::flask_texture(dev, ffp.vs_const_data()))
+							dev->SetTexture(0, flask_texture);
 					// The source VB and IB, as bound by the game (the expanded VB replaced stream 0).
 					IDirect3DVertexBuffer9* const mesh_vb = ffp.stream_vb(0);
 					IDirect3DIndexBuffer9* const mesh_ib = ffp.cur_ib();

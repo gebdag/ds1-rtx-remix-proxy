@@ -29,6 +29,9 @@ namespace comp::game::texture_names
 	// True for the flame textures of the DLC's blue bonfires, which game::effect_lights stands a light in for.
 	bool is_blue_flame(IDirect3DBaseTexture9* texture);
 
+	// True for the Estus flask's diffuse (the drinking effect's model), see game/estus.hpp.
+	bool is_estus_flask(IDirect3DBaseTexture9* texture);
+
 	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
 	bool is_lava(IDirect3DBaseTexture9* texture);
 

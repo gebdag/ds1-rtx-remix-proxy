@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "atmosphere.hpp"
 
+#include "estus.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
@@ -789,6 +790,7 @@ namespace comp::game::atmosphere
 		else if (key == "FFPSteps.PoolDepthSurfaces") steps.pool_depth_surfaces = b;
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
+		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
 		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }

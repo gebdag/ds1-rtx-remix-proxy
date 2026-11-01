@@ -18,6 +18,7 @@ namespace comp::game::texture_names
 			bool atmospheric = false;
 			bool lit_effect = false;
 			bool blue_flame = false;
+			bool estus_flask = false;
 			bool lava = false;
 			owner owned_by = owner::unknown;
 		};
@@ -253,6 +254,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.blue_flame = classify_blue_flame(e.name);
+		e.estus_flask = e.name == "s00902";
 		e.lava = classify_lava(e.name);
 		e.owned_by = classify_owner(e.name);
 		++g_named;
@@ -290,6 +292,15 @@ namespace comp::game::texture_names
 		std::shared_lock lock(g_mutex);
 		const auto it = g_entries.find(texture);
 		return it != g_entries.end() && it->second.lava;
+	}
+
+	bool is_estus_flask(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.estus_flask;
 	}
 
 	bool is_blue_flame(IDirect3DBaseTexture9* texture)
@@ -334,6 +345,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.blue_flame = classify_blue_flame(e.name);
+		e.estus_flask = e.name == "s00902";
 		e.lava = classify_lava(e.name);
 		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);
