@@ -61,7 +61,7 @@ namespace comp
 		if (auto* gl = game_lights::get())
 			gl->frame_update();
 
-		// Hand the game's haze and grade to Remix (rtx.ds1Haze.*, rtx.ds1grading.game*)
+		// Hand the game's haze and grade to Remix (rtx.ds1Haze.*, rtx.ds1Look.*)
 		game::atmosphere::frame_update(shared::common::ffp_state::get().frame_count());
 
 		// The swamp's constants and the last frame's wake rings (rtx.ds1Swamp.*).

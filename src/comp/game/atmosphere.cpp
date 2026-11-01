@@ -408,14 +408,7 @@ namespace comp::game::atmosphere
 
 		void send_grade(const grade_values& v)
 		{
-			const float offset[3] = { v.rows[0][3], v.rows[1][3], v.rows[2][3] };
 			bool ok = true;
-			ok &= set("rtx.ds1grading.gameScale", num(v.scale[2]));
-			ok &= set("rtx.ds1grading.gameRowR", vec3(v.rows[0]));
-			ok &= set("rtx.ds1grading.gameRowG", vec3(v.rows[1]));
-			ok &= set("rtx.ds1grading.gameRowB", vec3(v.rows[2]));
-			ok &= set("rtx.ds1grading.gameOffset", vec3(offset));
-			ok &= set("rtx.ds1grading.gameActive", "True");
 			// The game's own image pipeline (rtx.ds1Look): ColAdj, bloom and bright pass values.
 			auto vec4 = [](const float* r) { return std::format("{}, {}, {}, {}", r[0], r[1], r[2], r[3]); };
 			ok &= set("rtx.ds1Look.sceneScale", num(v.scale[2]));

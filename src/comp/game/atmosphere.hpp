@@ -2,7 +2,7 @@
 
 namespace comp::game::atmosphere
 {
-	// Dark Souls' atmosphere as the runtime reproduces it (rtx.ds1Haze.*, rtx.ds1grading.game*):
+	// Dark Souls' atmosphere as the runtime reproduces it (rtx.ds1Haze.*, rtx.ds1Look.*):
 	//
 	// Haze: every map and character pixel shader ends with the same fog and
 	// sky-scattering tail, driven by per-area DrawParam values that reach it as
