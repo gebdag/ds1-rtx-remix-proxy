@@ -674,6 +674,12 @@ namespace shared::common
 	{
 		if (index != 0) return;
 		cur_rt0_ = rt;
+		// The menus draw their characters (character creator, load game) into small square targets. The other 3D passes
+		// are the 2048 shadow atlas and targets that are not square (seen across 94 captures).
+		cur_rt_menu_scene_ = false;
+		D3DSURFACE_DESC desc;
+		if (rt && SUCCEEDED(rt->GetDesc(&desc)))
+			cur_rt_menu_scene_ = desc.Width == desc.Height && desc.Width <= 1024;
 	}
 
 	void ffp_state::on_set_vertex_declaration(IDirect3DVertexDeclaration9* decl)

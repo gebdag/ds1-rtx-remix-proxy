@@ -107,6 +107,7 @@ def main() -> int:
     ap.add_argument("source", nargs="?", help="capture name or path (omit with --live)")
     ap.add_argument("shots", nargs="*", help='tag="key=value ..." (no settings: tag=)')
     ap.add_argument("--live", action="store_true", help="the host follows the running game")
+    ap.add_argument("--allow-raster", action="store_true", help="accept a frame that matches the game (a menu without path tracing)")
     ap.add_argument("--fresh", action="store_true", help="restart the host first (clears earlier live settings)")
     ap.add_argument("--timeout", type=float, default=90.0, help="seconds for the host to be ready, per step")
     args = ap.parse_intermixed_args()
@@ -137,7 +138,7 @@ def main() -> int:
             t1 = time.time()
             if settings.strip():
                 subprocess.run([sys.executable, "live.py", *settings.split()], cwd=HERE, capture_output=True, check=True)
-            img = wait_frame(reference, args.timeout)
+            img = wait_frame(None if args.allow_raster else reference, args.timeout)
             game = reference if reference is not None else snap.grab_game()
             img.save(OUT / f"remix_{tag}.png")
             if game is not None:

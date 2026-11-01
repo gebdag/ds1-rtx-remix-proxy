@@ -429,6 +429,17 @@ namespace comp
 			return S_OK;
 		}
 
+		// A menu's character view (character creator, load game) keeps the game's raster draws, as its own image: these
+		// are not world draws, and their render target is what the menu shows.
+		if (ffp.cur_rt_is_menu_scene())
+		{
+			ffp.disengage(dev);
+			const auto hr_menu_scene = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			ctx.restore_all(dev);
+			ctx.reset_context();
+			return hr_menu_scene;
+		}
+
 		// Draws that read the game's sun constants (shadow direction c175, key
 		// light c92/c95) vote for the Remix sun. The swamp's FRPG_Snow shader reads
 		// c92/c95 only for a rim lobe weighted by c169.z (0 in Blighttown): with no

@@ -273,6 +273,8 @@ namespace shared::common
 		//   pass 2: Z-write OFF (reading from pre-built depth, correct diffuse textures)
 		// Additional effect passes also have Z-write ON (shadows, decals, etc.).
 		// FFP conversion only belongs in pass 2 (Z-write OFF), where textures are correct.
+		bool cur_rt_is_menu_scene() const { return cur_rt_menu_scene_; }
+
 		bool is_depth_prepass() const
 		{
 			return cur_zwrite_enabled_ && cfg_ && cfg_->suppress_aux_passes;
@@ -529,6 +531,7 @@ namespace shared::common
 		bool world_dirty_ = false;
 		bool view_proj_dirty_ = false;
 		bool view_proj_valid_ = false;
+		bool cur_rt_menu_scene_ = false;
 		bool have_valid_camera_ = false;
 		UINT camera_basis_accepted_ = 0;
 		UINT camera_basis_rejected_ = 0;
