@@ -1275,8 +1275,9 @@ namespace comp
 				return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 			}
 		}
-		// Fullscreen quad post-FX pass detection (stride=24 = pos+uv, 2 tris = single quad)
-		if (PrimitiveCount <= 2 && VertexStreamZeroStride == 24)
+		// Fullscreen quad post-FX pass detection (stride=24 = pos+uv, 2 tris = single quad). The post passes
+		// are triangle fans; a triangle list of this shape is a font draw holding one glyph or button icon.
+		if (PrimitiveType == D3DPT_TRIANGLEFAN && PrimitiveCount <= 2 && VertexStreamZeroStride == 24)
 		{
 			auto& c = shared::common::config::get();
 			int idx = s_postfx_pass_idx++;
