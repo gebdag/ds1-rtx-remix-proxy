@@ -47,11 +47,11 @@ namespace comp::game::texture_scroll
 		};
 
 		// A water mesh's wave layers from its HeightMap draw: tiles per mesh uv (c141), offsets in
-		// tiles (c246, c247.xy) and weights (c134).
+		// tiles (c246, c247.xy, c248.xy) and weights (c134).
 		struct water_layers
 		{
 			float scale[3] = {};
-			double offset1[2] = {}, offset2[2] = {};
+			double offset1[2] = {}, offset2[2] = {}, offset3[2] = {};
 			float weight[3] = {};
 			unsigned int frame = 0;
 		};
@@ -108,15 +108,23 @@ namespace comp::game::texture_scroll
 			// Per unit of Remix's water normal tilt that is c125 * 2 tan(fov_x / 2) / kSlopeMatch.
 			const double smear = ps[125 * 4] * 2.0 * std::tan(kFovX / 2.0) / kSlopeMatch;
 
-			// Layer 2 from layer 1's uv: uv2 = uv * s2 + t2 = (uv1 - t1) * s2 / s1 + t2.
+			// Layers 2 and 3 from layer 1's uv: uv_i = uv * s_i + t_i = (uv1 - t1) * s_i / s1 + t_i.
 			const double ratio = s2 / s1;
 			const double o[2] = { wrap(w.offset2[0] / kTiles - t1[0] * ratio), wrap(w.offset2[1] / kTiles - t1[1] * ratio) };
 			set_transform(dev, 1, static_cast<float>(ratio), static_cast<float>(o[0]), static_cast<float>(o[1]),
 				static_cast<float>(smear));
 
+			// The game sums all three layers: they share a scale but scroll apart, and the sparse ridges of
+			// one fill the flat gaps of the others. Layer 3 goes in stage 2's transform, its strength in _41.
+			const double s3 = w.scale[2] / kTiles;
+			const double ratio3 = s3 / s1;
+			const double o3[2] = { wrap(w.offset3[0] / kTiles - t1[0] * ratio3), wrap(w.offset3[1] / kTiles - t1[1] * ratio3) };
+			set_transform(dev, 2, static_cast<float>(ratio3), static_cast<float>(o3[0]), static_cast<float>(o3[1]),
+				static_cast<float>(wave_height * w.weight[2] * w.scale[2] / kAuthoredSlope));
+
 			const float strength[2] = {
 				static_cast<float>(wave_height * w.weight[0] * w.scale[0] / kAuthoredSlope),
-				static_cast<float>(wave_height * std::hypot(w.weight[1] * w.scale[1], w.weight[2] * w.scale[2]) / kAuthoredSlope),
+				static_cast<float>(wave_height * w.weight[1] * w.scale[1] / kAuthoredSlope),
 			};
 			D3DXFLOAT16 halfs[2];
 			D3DXFloat32To16Array(halfs, strength, 2);
@@ -150,6 +158,7 @@ namespace comp::game::texture_scroll
 		{
 			w.offset1[i] = vs_const[246 * 4 + i];
 			w.offset2[i] = vs_const[247 * 4 + i];
+			w.offset3[i] = vs_const[248 * 4 + i];
 		}
 		w.frame = frame;
 	}
@@ -188,6 +197,7 @@ namespace comp::game::texture_scroll
 		if (g_layer2_set)
 		{
 			dev->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+			dev->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 			dev->SetTextureStageState(1, D3DTSS_CONSTANT, 0);
 			env_reflection::forget();
 			// The game's own texture factor back (and stage 1 as the FFP setup leaves it).
