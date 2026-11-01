@@ -57,7 +57,10 @@ namespace comp
 		auto* src_vb = ffp.stream_vb(0);
 		UINT stride = ffp.stream_stride(0);
 		UINT total_verts = min_vtx + num_verts;
-		auto* exp_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride, false);
+		// A fur shell carries its vertex colour (ffp_state::cur_draw_is_fur_shell).
+		const bool fur = skin_overlay_decl_ && ffp.cur_draw_is_fur_shell(dev);
+		auto* exp_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride,
+			fur ? skin_layout::vertex_colour : skin_layout::base);
 
 		if (!exp_vb)
 		{
@@ -77,8 +80,10 @@ namespace comp
 		// Swap in expanded VB and declaration
 		IDirect3DVertexDeclaration9* orig_decl = nullptr;
 		dev->GetVertexDeclaration(&orig_decl);
-		dev->SetVertexDeclaration(skin_exp_decl_);
-		dev->SetStreamSource(0, exp_vb, 0, SKIN_VTX_SIZE);
+		dev->SetVertexDeclaration(fur ? skin_overlay_decl_ : skin_exp_decl_);
+		dev->SetStreamSource(0, exp_vb, 0, fur ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE);
+		if (fur)
+			ffp.apply_vertex_colour_stage(dev);
 
 		const bool tinted = ffp.apply_draw_tint(dev);
 		const bool effect = ffp.apply_sp_effect(dev);
@@ -212,16 +217,16 @@ namespace comp
 	}
 
 	IDirect3DVertexBuffer9* skinning::get_expanded_vb(IDirect3DDevice9* dev,
-		IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, bool overlay)
+		IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, skin_layout layout)
 	{
 		if (!src_vb || stride == 0 || num_verts == 0) return nullptr;
-		const UINT vtx_size = overlay ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE;
+		const UINT vtx_size = layout == skin_layout::base ? SKIN_VTX_SIZE : SKIN_OVERLAY_VTX_SIZE;
 
 		const UINT frame = shared::common::ffp_state::get().frame_count();
 		if (frame - last_prune_frame_ >= SKIN_CACHE_MAX_AGE)
 			prune_cache(frame);
 
-		auto& entry = skin_cache_[skin_key{ src_vb, base_vtx, num_verts, stride, overlay }];
+		auto& entry = skin_cache_[skin_key{ src_vb, base_vtx, num_verts, stride, layout }];
 		entry.last_frame = frame;
 
 		// Lock source VB
@@ -265,7 +270,7 @@ namespace comp
 		cur_max_idx_ = 0;
 		cur_raw_max_idx_ = 0;
 		for (UINT v = 0; v < num_verts; v++)
-			expand_skin_vertex(&dst_data[v * vtx_size], &src_data[v * stride], overlay);
+			expand_skin_vertex(&dst_data[v * vtx_size], &src_data[v * stride], layout);
 
 		exp_vb->Unlock();
 		src_vb->Unlock();
@@ -277,7 +282,7 @@ namespace comp
 		return exp_vb;
 	}
 
-	void skinning::expand_skin_vertex(unsigned char* dst, const unsigned char* src, bool overlay)
+	void skinning::expand_skin_vertex(unsigned char* dst, const unsigned char* src, skin_layout layout)
 	{
 		auto& ffp = shared::common::ffp_state::get();
 		auto* out = reinterpret_cast<float*>(dst);
@@ -364,7 +369,7 @@ namespace comp
 
 		// Texcoord (FLOAT2 at offset 40). The overlay takes the second pair of a four-component
 		// texcoord (TEXCOORD0.zw, the second layer's uv): only SHORT4/FLOAT4 draws have an overlay.
-		const int first = overlay ? 2 : 0;
+		const int first = layout == skin_layout::overlay ? 2 : 0;
 		if (ffp.cur_decl_has_texcoord())
 		{
 			int tc_type = ffp.cur_decl_texcoord_type();
@@ -398,11 +403,16 @@ namespace comp
 			out[10] = out[11] = 0.0f;
 		}
 
-		// Vertex colour (D3DCOLOR at offset 48, overlay only): its alpha is the second layer's weight.
-		// Its rgb stays white, as on the base layer, which carries no vertex colour.
-		if (overlay)
+		// Vertex colour (D3DCOLOR at offset 48). The overlay takes its alpha, the second layer's weight, its rgb
+		// staying white as on the base layer, which carries no vertex colour; a fur shell takes all of it.
+		if (layout == skin_layout::overlay)
 		{
 			const DWORD argb = (ffp.cur_vertex_color(src) & 0xFF000000u) | 0x00FFFFFFu;
+			std::memcpy(&dst[48], &argb, sizeof(argb));
+		}
+		else if (layout == skin_layout::vertex_colour)
+		{
+			const DWORD argb = ffp.cur_vertex_color(src);
 			std::memcpy(&dst[48], &argb, sizeof(argb));
 		}
 	}
@@ -412,7 +422,7 @@ namespace comp
 	{
 		auto& ffp = shared::common::ffp_state::get();
 		auto* texture = ffp.overlay_texture();
-		auto* overlay_vb = skin_overlay_decl_ ? get_expanded_vb(dev, src_vb, base_vtx, min_vtx + num_verts, stride, true) : nullptr;
+		auto* overlay_vb = skin_overlay_decl_ ? get_expanded_vb(dev, src_vb, base_vtx, min_vtx + num_verts, stride, skin_layout::overlay) : nullptr;
 		if (!texture || !overlay_vb)
 			return S_OK;
 

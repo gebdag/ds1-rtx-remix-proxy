@@ -750,7 +750,10 @@ namespace comp
 		if (FAILED(hr))
 			crash_context::note("Tex2D %ux%u L%u f=%s p=%u t=%u hr=%08X", Width, Height, Levels, format_tag(Format).c_str(), Pool, sw.ms(), hr);
 		else if (ppTexture && *ppTexture)
+		{
 			game::texture_names::on_device_created(*ppTexture);  // D3DX names its textures after this returns
+			shared::common::ffp_state::get().on_texture_created(*ppTexture);
+		}
 		return hr;
 	}
 

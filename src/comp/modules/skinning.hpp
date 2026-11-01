@@ -58,12 +58,16 @@ namespace comp
 		// Remix pairs a draw with last frame's instance only through the same vertex buffer, and a
 		// skinned mesh bound to a single bone becomes a rigid instance whose motion vectors come from
 		// that pairing alone (hair, eyes, parts of the face).
+		// base: SKIN_VTX_SIZE; overlay: the second uv set and the vertex alpha (a two-layer draw's second
+		// diffuse); vertex_colour: the first uv set and the whole vertex colour (fur shells).
+		enum class skin_layout : uint8_t { base, overlay, vertex_colour };
+
 		struct skin_key {
 			IDirect3DVertexBuffer9* src_vb;
 			INT base_vtx;
 			UINT num_verts;
 			UINT stride;
-			bool overlay;   // which layout the entry holds (base or overlay vertices)
+			skin_layout layout;   // which layout the entry holds
 			bool operator==(const skin_key&) const = default;
 		};
 		struct skin_key_hash {
@@ -72,7 +76,7 @@ namespace comp
 				h ^= std::hash<INT>{}(k.base_vtx) + 0x9e3779b9 + (h << 6) + (h >> 2);
 				h ^= std::hash<UINT>{}(k.num_verts) + 0x9e3779b9 + (h << 6) + (h >> 2);
 				h ^= std::hash<UINT>{}(k.stride) + 0x9e3779b9 + (h << 6) + (h >> 2);
-				h ^= std::hash<bool>{}(k.overlay) + 0x9e3779b9 + (h << 6) + (h >> 2);
+				h ^= std::hash<int>{}(static_cast<int>(k.layout)) + 0x9e3779b9 + (h << 6) + (h >> 2);
 				return h;
 			}
 		};
@@ -99,10 +103,10 @@ namespace comp
 		void release_cache();
 		void prune_cache(UINT frame);
 
-		// Vertex expansion (overlay: the SKIN_OVERLAY_VTX_SIZE layout)
+		// Vertex expansion (overlay and vertex_colour: the SKIN_OVERLAY_VTX_SIZE layout)
 		IDirect3DVertexBuffer9* get_expanded_vb(IDirect3DDevice9* dev,
-			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, bool overlay);
-		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, bool overlay);
+			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, skin_layout layout);
+		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, skin_layout layout);
 
 		// A two-layer draw's second diffuse, re-drawn as a coplanar decal (see draw_skinned_dip).
 		HRESULT draw_overlay(IDirect3DDevice9* dev, D3DPRIMITIVETYPE pt, IDirect3DVertexBuffer9* src_vb,

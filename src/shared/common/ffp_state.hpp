@@ -387,6 +387,19 @@ namespace shared::common
 		// whether it set one, to be cleared after the draw. On other draws it remembers the specular scale.
 		bool apply_sp_effect(IDirect3DDevice9* dev);
 		void clear_sp_effect(IDirect3DDevice9* dev);
+
+		// A skinned fur shell (the giant rats' fur, c1200-c1203): a bumped _Alp draw (blended over INVSRCALPHA,
+		// alpha-tested, pixel shader samples s2) whose diffuse is DXT1 with punch-through texels, not fading out
+		// (c139.w = 1). The game blends each shell by texture alpha x vertex alpha and darkens it towards the
+		// roots by the vertex colour, so the shells are expanded with it (skinning's vertex_colour layout).
+		// Without it each shell covered at its texture's 1-bit alpha: an opaque layer of the shell texture, its
+		// holes showing the dark roots below. As a cutout (a hair card) only the high-alpha patches survived, as
+		// hard-edged solid tufts. Lace, veils and wing membranes, the other bumped _Alp draws, have graded alpha.
+		bool cur_draw_is_fur_shell(IDirect3DDevice9* dev);
+		// Stage 0 = texture x vertex colour, for colour and alpha (a fur shell's expanded vertex colour).
+		void apply_vertex_colour_stage(IDirect3DDevice9* dev);
+		// A new texture can reuse a freed one's address: forget what was learnt about it.
+		void on_texture_created(IDirect3DBaseTexture9* texture);
 		void clear_skin_tone(IDirect3DDevice9* dev);
 
 		// Bind an albedo for a water-surface FFP draw: the first non-NULL,
@@ -610,6 +623,8 @@ namespace shared::common
 		bool cur_ps_skin_tone_ = false;
 		// c101 per specular map (sampler 1) on draws without a SpEffect.
 		std::unordered_map<IDirect3DBaseTexture9*, float> spec_scale_;
+		// Whether a texture is DXT1 with punch-through texels (cur_draw_is_fur_shell); unreadable ones are false.
+		std::unordered_map<IDirect3DBaseTexture9*, bool> punch_through_;
 		// The game's own D3DRS_TEXTUREFACTOR, restored by clear_draw_tint.
 		DWORD game_tfactor_ = 0xFFFFFFFF;
 

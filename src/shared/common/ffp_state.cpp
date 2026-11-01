@@ -1803,6 +1803,88 @@ namespace shared::common
 			dev->SetTextureStageState(4, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 	}
 
+	namespace
+	{
+		// At least this share of a DXT1 texture's top level is punch-through (transparent) texels: the rats'
+		// fur shell texture is a field of hair tips over holes; a DXT1 texture with a stray transparent
+		// block stays out.
+		constexpr float kMinPunchThroughShare = 0.005f;
+
+		bool scan_punch_through(IDirect3DBaseTexture9* texture)
+		{
+			if (!texture || texture->GetType() != D3DRTYPE_TEXTURE)
+				return false;
+			auto* tex = static_cast<IDirect3DTexture9*>(texture);
+			D3DSURFACE_DESC desc{};
+			if (FAILED(tex->GetLevelDesc(0, &desc)) || desc.Format != D3DFMT_DXT1 || desc.Width < 4 || desc.Height < 4)
+				return false;
+			D3DLOCKED_RECT rect{};
+			if (FAILED(tex->LockRect(0, &rect, nullptr, D3DLOCK_READONLY)) || !rect.pBits)
+				return false;
+			// A DXT1 block in its three-colour mode (colour0 <= colour1) makes index 3 transparent.
+			const UINT blocks_x = desc.Width / 4, blocks_y = desc.Height / 4;
+			size_t transparent = 0;
+			for (UINT by = 0; by < blocks_y; by++)
+			{
+				const auto* row = static_cast<const uint8_t*>(rect.pBits) + by * rect.Pitch;
+				for (UINT bx = 0; bx < blocks_x; bx++)
+				{
+					const uint8_t* b = row + bx * 8;
+					const uint16_t c0 = static_cast<uint16_t>(b[0] | b[1] << 8);
+					const uint16_t c1 = static_cast<uint16_t>(b[2] | b[3] << 8);
+					if (c0 > c1)
+						continue;
+					const uint32_t bits = static_cast<uint32_t>(b[4] | b[5] << 8 | b[6] << 16 | b[7] << 24);
+					for (int i = 0; i < 16; i++)
+						transparent += ((bits >> (2 * i)) & 3u) == 3u;
+				}
+			}
+			tex->UnlockRect(0);
+			return static_cast<float>(transparent) >= kMinPunchThroughShare * static_cast<float>(desc.Width * desc.Height);
+		}
+	}
+
+	bool ffp_state::cur_draw_is_fur_shell(IDirect3DDevice9* dev)
+	{
+		if (!dev || !cur_decl_is_skinned() || !cur_decl_has_color() || !(cur_ps_sampler_mask_ & (1u << 2)))
+			return false;
+		// Read from the device: the game applies blend state through state blocks.
+		DWORD blend = FALSE, test = FALSE, dest = D3DBLEND_ZERO;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+		dev->GetRenderState(D3DRS_ALPHATESTENABLE, &test);
+		dev->GetRenderState(D3DRS_DESTBLEND, &dest);
+		if (!blend || !test || dest != D3DBLEND_INVSRCALPHA || ps_const_[139 * 4 + 3] < 0.999f)
+			return false;
+		IDirect3DBaseTexture9* diffuse = cur_texture(0);
+		if (!diffuse)
+			return false;
+		const auto it = punch_through_.find(diffuse);
+		if (it != punch_through_.end())
+			return it->second;
+		const bool fur = scan_punch_through(diffuse);
+		log("FFP", std::format("skinned _Alp draw, diffuse {:#x}: {}", reinterpret_cast<uintptr_t>(diffuse),
+			fur ? "fur shell (with its vertex colour)" : "no fur shell"));
+		return punch_through_[diffuse] = fur;
+	}
+
+	void ffp_state::apply_vertex_colour_stage(IDirect3DDevice9* dev)
+	{
+		dev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		dev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+		// Stage 0 now differs from setup_texture_stages; the next converted draw re-applies it.
+		ffp_stages_applied_ = false;
+	}
+
+	void ffp_state::on_texture_created(IDirect3DBaseTexture9* texture)
+	{
+		punch_through_.erase(texture);
+		spec_scale_.erase(texture);
+	}
+
 	bool ffp_state::apply_skin_tone(IDirect3DDevice9* dev, bool overlay)
 	{
 		if (!dev || !cur_ps_skin_tone_)
