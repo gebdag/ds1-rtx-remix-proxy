@@ -10,7 +10,7 @@ namespace comp::game::sky_meshes
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall };
 
 		struct range_key
 		{
@@ -86,6 +86,8 @@ namespace comp::game::sky_meshes
 			load_table_locked("sky_meshes.txt", kind::sky, "sky mesh", "sky layers stay world geometry");
 			load_table_locked("shell_meshes.txt", kind::shell, "blended shell", "blended shells stay decals");
 			load_table_locked("glass_meshes.txt", kind::glass, "window glass", "window glass is not split");
+			// Last: a face set already listed as another kind keeps it.
+			load_table_locked("thin_wall_meshes.txt", kind::thin_wall, "thin wall", "walls split across meshes stay single-sided");
 		}
 
 		uint64_t fnv1a64(const uint8_t* data, size_t size)
@@ -117,7 +119,8 @@ namespace comp::game::sky_meshes
 			if (g_logged.insert(hash).second)
 			{
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
-					it->second.k == kind::shell ? "blended shell" : "window glass";
+					it->second.k == kind::shell ? "blended shell" :
+					it->second.k == kind::glass ? "window glass" : "thin wall";
 				shared::common::log("SkyMeshes", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -160,6 +163,11 @@ namespace comp::game::sky_meshes
 	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
 		return lookup(ib, type, start_index, prim_count).k == kind::shell;
+	}
+
+	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		return lookup(ib, type, start_index, prim_count).k == kind::thin_wall;
 	}
 
 	const std::string* glass_texture(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,

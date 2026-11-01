@@ -709,10 +709,12 @@ namespace comp
 				}
 
 				// A wall of two single-sided faces turned towards each other goes to Remix double-sided (game/thin_walls.hpp).
-				// Measured on the game's own buffers, before the expansion replaces stream 0.
-				const bool inside_out = !water_draw && game::thin_walls::is_inside_out(ffp.stream_vb(0), ffp.stream_offset(0),
-					ffp.stream_stride(0), ffp.last_decl(), ffp.cur_ib(), PrimitiveType, BaseVertexIndex, startIndex, primCount,
-					ffp.frame_count());
+				// Map meshes come from the offline table, which pairs faces across a model's meshes; the rest are
+				// measured on the game's own buffers, before the expansion replaces stream 0.
+				const bool inside_out = !water_draw &&
+					(game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount) ||
+					 game::thin_walls::is_inside_out(ffp.stream_vb(0), ffp.stream_offset(0), ffp.stream_stride(0), ffp.last_decl(),
+						ffp.cur_ib(), PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count()));
 
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);

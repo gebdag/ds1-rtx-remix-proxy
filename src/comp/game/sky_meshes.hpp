@@ -31,6 +31,12 @@ namespace comp::game::sky_meshes
 	const std::string* glass_texture(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
 		uint8_t& cut, const std::string*& derived);
 
+	// True when this indexed draw is a thin-wall mesh (rtx_comp\sky\thin_wall_meshes.txt, scripts/gen_thin_walls.py):
+	// single-sided faces whose fronts face each other a few centimetres apart, measured against every mesh of its
+	// model. game/thin_walls.hpp measures each drawn mesh against itself only, and misses walls whose two faces are
+	// in different meshes (Firelink's m0100B2A10, mesh0 in front of mesh1's stone wall).
+	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }
