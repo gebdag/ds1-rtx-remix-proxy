@@ -47,6 +47,7 @@ namespace shared::common
 			// (main render reading from pre-built depth). Only the Z-write-OFF pass
 			// has correct diffuse textures and should be sent to Remix via FFP.
 			bool suppress_aux_passes = true;
+			bool menu_scene_path_trace = false;
 			// Fix UV format for Remix compatibility without full FFP conversion.
 			// DS1 stores texcoords as SHORT2 with 1/1024 scale applied in the vertex shader.
 			// RTX Remix reads UV directly from the vertex buffer and cannot interpret raw SHORT

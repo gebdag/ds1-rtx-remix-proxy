@@ -504,6 +504,7 @@ namespace comp
 				bone44[3] = src[12]; bone44[7] = src[13]; bone44[11] = src[14]; bone44[15] = src[15];
 			}
 
+			ffp.turn_menu_cell(bone44);
 			if (offset)
 			{
 				bone44[12] += off_x;

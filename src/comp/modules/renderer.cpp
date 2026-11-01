@@ -431,7 +431,7 @@ namespace comp
 
 		// A menu's character view (character creator, load game) keeps the game's raster draws, as its own image: these
 		// are not world draws, and their render target is what the menu shows.
-		if (ffp.cur_rt_is_menu_scene())
+		if (ffp.cur_rt_is_menu_scene() && !ffp.cur_rt_is_menu_path_traced())
 		{
 			ffp.disengage(dev);
 			const auto hr_menu_scene = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);

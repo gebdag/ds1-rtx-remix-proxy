@@ -598,7 +598,9 @@ namespace shared::common
 
 	bool ffp_state::world_offset(float& x, float& y, float& z) const
 	{
-		if (!offset_world_ || !camera_override_fn_)
+		if (offset_world_ && menu_cell_offset(x, y, z))
+			return true;
+		if (!offset_world_ || !camera_override_fn_ || cur_rt_menu_path_traced_)
 			return false;
 		return camera_override_fn_(x, y, z);
 	}
@@ -620,6 +622,21 @@ namespace shared::common
 			cur_texture_[stage] = texture;
 		else if (stage == 11)
 			probe_texture_ = texture;
+		// A menu showing one of its character views: the only frame order Remix can path trace is one view per frame.
+		if (stage == 0 && texture && !cur_rt_menu_scene_)
+			for (int i = 0; i < menu_scene_count_; i++)
+				if (menu_scene_targets_[i] == texture)
+				{
+					bool known = false;
+					for (int s = 0; s < menu_shown_count_; s++)
+						known |= menu_shown_[s] == texture;
+					if (!known && menu_shown_count_ < 8)
+					{
+						menu_shown_[menu_shown_count_] = texture;
+						menu_shown_widths_[menu_shown_count_++] = menu_scene_widths_[i];
+					}
+					break;
+				}
 	}
 
 	void ffp_state::on_set_stream_source(UINT stream, IDirect3DVertexBuffer9* vb, UINT offset, UINT stride)
@@ -670,6 +687,130 @@ namespace shared::common
 		ffp_stages_applied_ = false;
 	}
 
+	namespace
+	{
+		// The row of a load game menu, in the game's world units (metres): one character every kMenuRowSpacing, wide enough
+		// that a neighbour stays out of a view, from g_menu_row_distance away. Closer turns the outermost further (8.5 degrees
+		// at 8 m); from much further the game's view from below is gone and foreheads show through helmets (seen at 20 m).
+		constexpr float kMenuRowSpacing = 0.8f;
+		float g_menu_row_distance = 8.0f;
+		constexpr float kMenuRowHalfWidth = 2.0f * kMenuRowSpacing;
+		constexpr int kMenuRowCells = 4;
+	}
+
+	void ffp_state::set_menu_row_distance(float distance)
+	{
+		g_menu_row_distance = std::max(distance, 1.0f);
+	}
+
+	bool ffp_state::menu_cell_offset(float& x, float& y, float& z) const
+	{
+		if (!cur_rt_menu_path_traced_ || cur_menu_cell_ < 0)
+			return false;
+		const float along = (cur_menu_cell_ - 0.5f * (kMenuRowCells - 1)) * kMenuRowSpacing;
+		x = vs_const_[4 * 4 + 0] * along;
+		y = vs_const_[5 * 4 + 0] * along;
+		z = vs_const_[6 * 4 + 0] * along;
+		return true;
+	}
+
+	// Off to the side of the row's camera, a character would be seen at an angle: it turns by that angle about the vertical
+	// axis through the view's centre, so that each is seen from the front as the game's own camera sees it. world: 4x4, row
+	// vectors, before the row's offset.
+	void ffp_state::turn_menu_cell(float* world) const
+	{
+		if (!cur_rt_menu_path_traced_ || cur_menu_cell_ < 0)
+			return;
+		const float along = (cur_menu_cell_ - 0.5f * (kMenuRowCells - 1)) * kMenuRowSpacing;
+		const float length = std::sqrt(along * along + g_menu_row_distance * g_menu_row_distance);
+		const float sine = along / length, cosine = g_menu_row_distance / length;
+		const float* c4 = &vs_const_[4 * 4];
+		const float* c5 = &vs_const_[5 * 4];
+		const float* c6 = &vs_const_[6 * 4];
+		const float right[3] = { c4[0], c5[0], c6[0] };
+		const float forward[3] = { c4[2], c5[2], c6[2] };
+		const float position[3] = { c4[3], c5[3], c6[3] };
+		const float distance = std::fabs(position[0] * forward[0] + position[1] * forward[1] + position[2] * forward[2]);
+		auto turn = [&](float* v, bool point)
+		{
+			float p[3];
+			for (int i = 0; i < 3; i++)
+				p[i] = v[i] - (point ? position[i] + forward[i] * distance : 0.0f);
+			const float a = p[0] * right[0] + p[1] * right[1] + p[2] * right[2];
+			const float c = p[0] * forward[0] + p[1] * forward[1] + p[2] * forward[2];
+			const float turned_a = a * cosine + c * sine;
+			const float turned_c = -a * sine + c * cosine;
+			for (int i = 0; i < 3; i++)
+				v[i] += right[i] * (turned_a - a) + forward[i] * (turned_c - c);
+		};
+		turn(&world[0], false);
+		turn(&world[4], false);
+		turn(&world[8], false);
+		turn(&world[12], true);
+	}
+
+	bool ffp_state::menu_cell_uv(int cell, float& u0, float& v0, float& du, float& dv) const
+	{
+		if (menu_view_half_x_ <= 0.0f || menu_view_half_y_ <= 0.0f)
+			return false;
+		const float along = (cell - 0.5f * (kMenuRowCells - 1)) * kMenuRowSpacing;
+		du = menu_view_half_x_ / kMenuRowHalfWidth;
+		u0 = 0.5f + (along - menu_view_half_x_) / (2.0f * kMenuRowHalfWidth);
+		dv = 0.5f; // the frame's height is twice a view's
+		v0 = 0.25f;
+		return true;
+	}
+
+	void ffp_state::note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count)
+	{
+		// FRPG_Menu_Common: S2 positions in eighths of the menu's 1280x720 space.
+		D3DSURFACE_DESC screen = {};
+		if (!dev || !vertices || stride != 12 || !count || !cur_rt0_ || FAILED(cur_rt0_->GetDesc(&screen)))
+			return;
+		int min_x = INT_MAX, max_x = INT_MIN, min_y = INT_MAX, max_y = INT_MIN;
+		for (UINT i = 0; i < count; i++)
+		{
+			const auto* v = reinterpret_cast<const short*>(static_cast<const char*>(vertices) + static_cast<size_t>(i) * stride);
+			min_x = std::min<int>(min_x, v[0]);
+			max_x = std::max<int>(max_x, v[0]);
+			min_y = std::min<int>(min_y, v[1]);
+			max_y = std::max<int>(max_y, v[1]);
+		}
+		const float pixels_x = (max_x - min_x) / 8.0f * screen.Width / 1280.0f;
+		const float pixels_y = (max_y - min_y) / 8.0f * screen.Height / 720.0f;
+		UINT width = static_cast<UINT>(std::ceil(std::max(pixels_x, pixels_y)));
+		UINT height = width;
+		if (menu_cell_count_ > 0)
+		{
+			if (menu_view_half_x_ <= 0.0f)
+				return;
+			width = static_cast<UINT>(std::ceil(pixels_x * kMenuRowHalfWidth / menu_view_half_x_));
+			height = static_cast<UINT>(std::ceil(pixels_y * 2.0f));
+		}
+		if (width < 256 || width > 4096 || height > 4096 || (width == menu_native_width_ && height == menu_native_height_))
+			return;
+		release_menu_native();
+		if (FAILED(dev->CreateTexture(width, height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &menu_native_texture_, nullptr)) ||
+			!menu_native_texture_ || FAILED(menu_native_texture_->GetSurfaceLevel(0, &menu_native_surface_)))
+		{
+			release_menu_native();
+			return;
+		}
+		menu_native_width_ = width;
+		menu_native_height_ = height;
+		shared::common::log("MenuScene", std::format("private target {}x{} for a quad of {:.0f}x{:.0f} pixels", width, height, pixels_x, pixels_y));
+	}
+
+	void ffp_state::release_menu_native()
+	{
+		if (menu_native_surface_) menu_native_surface_->Release();
+		if (menu_native_texture_) menu_native_texture_->Release();
+		menu_native_surface_ = nullptr;
+		menu_native_texture_ = nullptr;
+		menu_native_width_ = 0;
+		menu_native_height_ = 0;
+	}
+
 	void ffp_state::on_set_render_target(DWORD index, IDirect3DSurface9* rt)
 	{
 		if (index != 0) return;
@@ -677,9 +818,36 @@ namespace shared::common
 		// The menus draw their characters (character creator, load game) into small square targets. The other 3D passes
 		// are the 2048 shadow atlas and targets that are not square (seen across 94 captures).
 		cur_rt_menu_scene_ = false;
-		D3DSURFACE_DESC desc;
+		cur_rt_menu_path_traced_ = false;
+		cur_menu_cell_ = -1;
+		D3DSURFACE_DESC desc = {};
 		if (rt && SUCCEEDED(rt->GetDesc(&desc)))
 			cur_rt_menu_scene_ = desc.Width == desc.Height && desc.Width <= 1024;
+		if (cur_rt_menu_scene_)
+		{
+			IDirect3DTexture9* texture = nullptr;
+			if (SUCCEEDED(rt->GetContainer(IID_IDirect3DTexture9, reinterpret_cast<void**>(&texture))) && texture)
+			{
+				texture->Release();
+				bool known = false;
+				for (int i = 0; i < menu_scene_count_; i++)
+					known |= menu_scene_targets_[i] == texture;
+				if (!known && menu_scene_count_ < 8)
+				{
+					menu_scene_targets_[menu_scene_count_] = texture;
+					menu_scene_widths_[menu_scene_count_++] = desc.Width;
+				}
+				cur_menu_cell_ = menu_cell_of(texture);
+				cur_rt_menu_path_traced_ = (cur_menu_cell_ >= 0 || texture == menu_path_trace_target_) &&
+					cfg_ && shared::common::config::get().ffp.menu_scene_path_trace;
+				// Each view of a row has its own place and the row's camera.
+				if (cur_rt_menu_path_traced_)
+				{
+					view_proj_dirty_ = true;
+					world_dirty_ = true;
+				}
+			}
+		}
 	}
 
 	void ffp_state::on_set_vertex_declaration(IDirect3DVertexDeclaration9* decl)
@@ -808,6 +976,29 @@ namespace shared::common
 
 	void ffp_state::on_present()
 	{
+		{
+			IDirect3DBaseTexture9* target = nullptr;
+			int cells = 0;
+			bool small_views = menu_shown_count_ >= 1 && menu_shown_count_ <= kMenuRowCells;
+			for (int i = 0; i < menu_shown_count_; i++)
+				small_views &= menu_shown_widths_[i] < 256;
+			if (small_views)
+			{
+				cells = menu_shown_count_;
+				for (int i = 0; i < cells; i++)
+					menu_cells_[i] = menu_shown_[i];
+				target = menu_shown_[0];
+			}
+			else if (menu_shown_count_ == 1)
+				target = menu_shown_[0];
+			if (target != menu_path_trace_target_ || cells != menu_cell_count_)
+				shared::common::log("MenuScene", std::format("path trace target {}, shown {}, targets {}, row of {}, enabled {}", static_cast<const void*>(target), menu_shown_count_, menu_scene_count_, cells, enabled_));
+			menu_path_trace_target_ = target;
+			menu_cell_count_ = cells;
+		}
+		menu_scene_count_ = 0;
+		menu_shown_count_ = 0;
+
 		// Auto-enable/disable: track consecutive frames above/below the eligible draw threshold. A loaded map
 		// counts as above: a load screen fell below the threshold, and the new map's first frames then reached
 		// Remix unconverted until the count came back, its textures smeared (without FFP Remix takes the UVs
@@ -817,7 +1008,7 @@ namespace shared::common
 			int threshold = cfg_->auto_enable_threshold;
 			int required = cfg_->auto_enable_frames;
 			const bool map_loaded = map_loaded_fn_ && map_loaded_fn_();
-			bool above = map_loaded || static_cast<int>(ffp_eligible_draws_) >= threshold;
+			bool above = map_loaded || menu_path_trace_target_ || static_cast<int>(ffp_eligible_draws_) >= threshold;
 
 			if (!enabled_ && above)
 			{
@@ -974,6 +1165,7 @@ namespace shared::common
 
 	void ffp_state::on_reset()
 	{
+		release_menu_native();
 		if (last_vs_) { last_vs_->Release(); last_vs_ = nullptr; }
 		if (last_ps_) { last_ps_->Release(); last_ps_ = nullptr; }
 		last_decl_ = nullptr;
@@ -1568,8 +1760,9 @@ namespace shared::common
 		float override_cam_x = 0.0f;
 		float override_cam_y = 0.0f;
 		float override_cam_z = 0.0f;
-		const bool has_override_camera = camera_override_fn_ &&
-			camera_override_fn_(override_cam_x, override_cam_y, override_cam_z);
+		const bool has_override_camera = menu_cell_offset(override_cam_x, override_cam_y, override_cam_z) ||
+			(camera_override_fn_ && !cur_rt_menu_path_traced_ &&
+			camera_override_fn_(override_cam_x, override_cam_y, override_cam_z));
 
 		// c0-c6 are shared by every subsystem, each with its own register layout: the
 		// world pass uploads a camera basis there, but the 2D/menu pass overwrites the
@@ -1618,11 +1811,22 @@ namespace shared::common
 			cam2world[8]  = c4[2]; cam2world[9]  = c5[2]; cam2world[10] = c6[2]; cam2world[11] = 0.0f;
 			cam2world[12] = c4[3]; cam2world[13] = c5[3]; cam2world[14] = c6[3]; cam2world[15] = 1.0f;
 
-			if (inject_view_pos_ && has_override_camera)
+			if (inject_view_pos_ && has_override_camera && !cur_rt_menu_path_traced_)
 			{
 				cam2world[12] = override_cam_x;
 				cam2world[13] = override_cam_y;
 				cam2world[14] = override_cam_z;
+			}
+
+			// A row's camera: the views' own, backed off along its axis. Their frustum at the character gives the slices.
+			const bool menu_row = cur_rt_menu_path_traced_ && cur_menu_cell_ >= 0;
+			if (menu_row)
+			{
+				const float distance = std::fabs(c4[3] * c4[2] + c5[3] * c5[2] + c6[3] * c6[2]);
+				menu_view_half_x_ = distance / std::max(vs_const_[0], 1e-3f);
+				menu_view_half_y_ = distance / std::max(vs_const_[5], 1e-3f);
+				for (int i = 0; i < 3; i++)
+					cam2world[12 + i] -= cam2world[8 + i] * (g_menu_row_distance - distance);
 			}
 
 			if (!mat4_invert_affine(cached_view_, cam2world))
@@ -1638,6 +1842,11 @@ namespace shared::common
 			float cam2world_rot[16];
 			std::memcpy(cam2world_rot, cam2world, sizeof(cam2world_rot));
 			cam2world_rot[12] = 0.0f; cam2world_rot[13] = 0.0f; cam2world_rot[14] = 0.0f;
+			// A menu's view is not camera-relative: its VP holds the camera's translation (c4-c6.w) too.
+			if (cur_rt_menu_path_traced_)
+			{
+				cam2world_rot[12] = c4[3]; cam2world_rot[13] = c5[3]; cam2world_rot[14] = c6[3];
+			}
 			float vp[16];
 			mat4_transpose(vp, &vs_const_[vs_reg_view_start_ * 4]);
 			mat4_mul(cached_proj_, cam2world_rot, vp);
@@ -1660,6 +1869,15 @@ namespace shared::common
 			cached_proj_[8]  = 0.0f; cached_proj_[9]  = 0.0f;
 			cached_proj_[11] = 1.0f;
 			cached_proj_[12] = 0.0f; cached_proj_[13] = 0.0f; cached_proj_[15] = 0.0f;
+			if (menu_row)
+			{
+				const float near_z = std::max(g_menu_row_distance - 5.0f, 0.05f), far_z = g_menu_row_distance + 5.0f;
+				cached_proj_[0] = g_menu_row_distance / kMenuRowHalfWidth;
+				cached_proj_[5] = g_menu_row_distance / (2.0f * menu_view_half_y_);
+				cached_proj_[10] = far_z / (far_z - near_z);
+				cached_proj_[14] = -near_z * cached_proj_[10];
+				std::memcpy(cached_proj_raw_, cached_proj_, sizeof(cached_proj_raw_));
+			}
 			dev->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(cached_proj_));
 
 			// Log: determinant of the 3x3 rotation part of cam2world (negative = mirror/flip)
@@ -1686,6 +1904,7 @@ namespace shared::common
 			cached_world_[8]  = src[2]; cached_world_[9]  = src[6]; cached_world_[10] = src[10]; cached_world_[11] = 0.0f;
 			cached_world_[12] = src[3]; cached_world_[13] = src[7]; cached_world_[14] = src[11]; cached_world_[15] = 1.0f;
 
+			turn_menu_cell(cached_world_);
 			if (offset_world_ && has_override_camera)
 			{
 				cached_world_[12] += override_cam_x;
@@ -2032,7 +2251,8 @@ namespace shared::common
 		world[13] = static_cast<float>(-cam[1]);
 		world[14] = static_cast<float>(-cam[2]);
 		float ox = 0.0f, oy = 0.0f, oz = 0.0f;
-		const bool offset = offset_world_ && camera_override_fn_ && camera_override_fn_(ox, oy, oz);
+		const bool offset = offset_world_ && (menu_cell_offset(ox, oy, oz) ||
+			(camera_override_fn_ && !cur_rt_menu_path_traced_ && camera_override_fn_(ox, oy, oz)));
 		if (offset)
 		{
 			world[12] += ox;
@@ -2682,7 +2902,7 @@ namespace shared::common
 			return false;
 		auto* cube = static_cast<IDirect3DCubeTexture9*>(texture);
 		D3DSURFACE_DESC desc {};
-		if (FAILED(cube->GetLevelDesc(0, &desc)) || (desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8))
+		if (FAILED(cube->GetLevelDesc(0, &desc)) || (desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_DXT1))
 			return false;
 		for (int f = 0; f < 6; f++)
 		{
@@ -2692,6 +2912,38 @@ namespace shared::common
 				return false;
 			double sum[3] = {};
 			const auto* p = static_cast<const unsigned char*>(lr.pBits);
+			// The menus' probes are DXT1: each 4x4 block's texels, from its two colours and 2-bit indices.
+			if (desc.Format == D3DFMT_DXT1)
+			{
+				const UINT blocks_x = (desc.Width + 3) / 4, blocks_y = (desc.Height + 3) / 4;
+				for (UINT by = 0; by < blocks_y; by++)
+					for (UINT bx = 0; bx < blocks_x; bx++)
+					{
+						const unsigned char* b = p + static_cast<size_t>(by) * lr.Pitch + static_cast<size_t>(bx) * 8;
+						const unsigned c0 = b[0] | (b[1] << 8), c1 = b[2] | (b[3] << 8);
+						double palette[4][3] = {};
+						for (int c = 0; c < 3; c++)
+						{
+							const unsigned shift = c == 0 ? 11 : c == 1 ? 5 : 0;
+							const unsigned bits = c == 1 ? 63 : 31;
+							const double a = 255.0 * ((c0 >> shift) & bits) / bits, z = 255.0 * ((c1 >> shift) & bits) / bits;
+							palette[0][c] = a;
+							palette[1][c] = z;
+							palette[2][c] = c0 > c1 ? (2.0 * a + z) / 3.0 : 0.5 * (a + z);
+							palette[3][c] = c0 > c1 ? (a + 2.0 * z) / 3.0 : 0.0;
+						}
+						for (int t = 0; t < 16; t++)
+						{
+							const int index = (b[4 + t / 4] >> (2 * (t % 4))) & 3;
+							for (int c = 0; c < 3; c++)
+								sum[c] += palette[index][c];
+						}
+					}
+				cube->UnlockRect(face, 0);
+				const double texels = 255.0 * blocks_x * blocks_y * 16.0;
+				faces[f] = { static_cast<float>(sum[0] / texels), static_cast<float>(sum[1] / texels), static_cast<float>(sum[2] / texels) };
+				continue;
+			}
 			for (UINT y = 0; y < desc.Height; y++)
 				for (UINT x = 0; x < desc.Width; x++)
 				{
@@ -3107,11 +3359,13 @@ namespace shared::common
 		float override_cam_x = 0.0f;
 		float override_cam_y = 0.0f;
 		float override_cam_z = 0.0f;
-		const bool has_override_camera = use_palette_indices && camera_override_fn_ &&
-			camera_override_fn_(override_cam_x, override_cam_y, override_cam_z);
+		const bool has_override_camera = menu_cell_offset(override_cam_x, override_cam_y, override_cam_z) ||
+			(use_palette_indices && camera_override_fn_ && !cur_rt_menu_path_traced_ &&
+			camera_override_fn_(override_cam_x, override_cam_y, override_cam_z));
 
 		auto apply_world_offset = [&](float* out)
 		{
+			turn_menu_cell(out);
 			if (offset_world_ && has_override_camera)
 			{
 				out[12] += override_cam_x;

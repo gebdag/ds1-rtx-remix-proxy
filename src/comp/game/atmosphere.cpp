@@ -185,6 +185,9 @@ namespace comp::game::atmosphere
 		bool g_have_ambient = false;
 		std::array<std::array<float, 3>, 6> g_ambient_sent {};
 		bool g_ambient_sent_once = false;
+		float g_menu_diffuse = 1.0f; // c100: the shaders' scale on the diffuse (x1 to the light in a menu's view)
+		bool g_menu_grade_sent = false;
+		float g_menu_ambient_scale = 0.7f; // proxy.MenuScene.AmbientScale, gamma space: the key light takes the rest
 
 		void close_ambient_frame()
 		{
@@ -667,6 +670,7 @@ namespace comp::game::atmosphere
 		std::memcpy(a.upper, &ps_const[98 * 4], sizeof(a.upper));
 		std::memcpy(a.lower, &ps_const[99 * 4], sizeof(a.lower));
 		std::memcpy(a.shadow_dir, &ps_const[175 * 4], sizeof(a.shadow_dir));
+		g_menu_diffuse = ps_const[100 * 4];
 		g_ambient_sets.add(a, prim_count);
 	}
 
@@ -791,6 +795,15 @@ namespace comp::game::atmosphere
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
+		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
+		else if (key == "MenuScene.AmbientScale") g_menu_ambient_scale = static_cast<float>(std::atof(value.c_str()));
+		else if (key == "MenuScene.RowDistance") shared::common::ffp_state::get().set_menu_row_distance(static_cast<float>(std::atof(value.c_str())));
+		else if (key == "MenuScene.Key")
+		{
+			if (auto* gl = game_lights::get())
+				sscanf_s(value.c_str(), "%f,%f,%f,%f,%f,%f,%f", &gl->menu_key[0], &gl->menu_key[1], &gl->menu_key[2],
+					&gl->menu_key[3], &gl->menu_key[4], &gl->menu_key[5], &gl->menu_key[6]);
+		}
 		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
@@ -917,6 +930,16 @@ namespace comp::game::atmosphere
 			sun_light::set_probe_sun(split.sun);
 			std::array<std::array<float, 3>, 6> cube;
 			ambient_cube(g_ambient_ready, split, cube);
+			// A menu's view has no sun to split off (its shaders read no c175): the game's light is the probe's own faces.
+			if (std::array<std::array<float, 3>, 6> faces; shared::common::ffp_state::get().menu_is_path_traced() &&
+				shared::common::ffp_state::get().cube_face_averages(g_ambient_ready.probe, faces))
+				for (int f = 0; f < 6; f++)
+					for (int c = 0; c < 3; c++)
+					{
+						const auto& s = g_ambient_ready;
+						const float hemi = f == 2 ? s.upper[c] : f == 3 ? s.lower[c] : 0.5f * (s.upper[c] + s.lower[c]);
+						cube[f][c] = g_menu_ambient_scale * g_menu_diffuse * (s.scale[c] * faces[f][c] + hemi);
+					}
 			g_ambient_gamma = cube;
 			g_have_ambient_gamma = true;
 			for (auto& face : cube)
@@ -969,7 +992,32 @@ namespace comp::game::atmosphere
 			std::memcpy(g_c54_sent, g_c54, sizeof(g_c54));
 			g_divisor_sent = divisor;
 		}
-		if (g_have_grade && !(g_grade_sent_once && g_grade_sent == g_grade))
+		// A menu's view is what its shaders output, c135 included: none of the map's post chain runs after it.
+		if (const bool menu = shared::common::ffp_state::get().menu_is_path_traced(); menu != g_menu_grade_sent)
+		{
+			g_menu_grade_sent = menu;
+			if (menu)
+			{
+				grade_values neutral;
+				neutral.scale[2] = 1.0f;
+				neutral.rows[0][0] = neutral.rows[1][1] = neutral.rows[2][2] = 1.0f;
+				neutral.bright[0] = neutral.bloom_far[0] = neutral.bloom_far[3] = 1.0f;
+				neutral.dof_far[0] = 10.0f;
+				neutral.dof_far[1] = 100.0f;
+				neutral.dof_near[1] = 1.0f;
+				const float dof_scale[4] = { -6.0f, -3.0f, -2.0f, 0.0f }, dof_bias[4] = { 1.0f, 1.5f, 2.0f, 1.0f };
+				std::memcpy(neutral.dof_scale, dof_scale, sizeof(dof_scale));
+				std::memcpy(neutral.dof_bias, dof_bias, sizeof(dof_bias));
+				send_grade(neutral);
+				set("rtx.ds1Exposure.adaptActive", "False");
+			}
+			else
+			{
+				g_grade_sent_once = false;
+				std::memset(g_c54_sent, 0, sizeof(g_c54_sent));
+			}
+		}
+		if (!g_menu_grade_sent && g_have_grade && !(g_grade_sent_once && g_grade_sent == g_grade))
 		{
 			send_grade(g_grade);
 			g_grade_sent = g_grade;

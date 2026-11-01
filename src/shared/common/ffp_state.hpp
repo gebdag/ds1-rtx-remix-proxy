@@ -69,6 +69,7 @@ namespace shared::common
 		void on_present();
 		void on_begin_scene();
 		void on_reset();
+		void release_menu_native();
 
 		// --- State consumers (called from renderer draw routing) ---
 
@@ -274,9 +275,46 @@ namespace shared::common
 		// Additional effect passes also have Z-write ON (shadows, decals, etc.).
 		// FFP conversion only belongs in pass 2 (Z-write OFF), where textures are correct.
 		bool cur_rt_is_menu_scene() const { return cur_rt_menu_scene_; }
+		// proxy.MenuScene.PathTrace: this character view is converted for Remix, which writes its frame into the target.
+		bool cur_rt_is_menu_path_traced() const { return cur_rt_menu_path_traced_; }
+		// The menu's quad as it reaches the screen sizes the view's private target (the game's stays 512): square, its
+		// larger side in pixels. The view's draws and the quad use that target in place of the game's.
+		void note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count);
+		IDirect3DSurface9* menu_native_surface() const { return cur_rt_menu_path_traced_ ? menu_native_surface_ : nullptr; }
+		IDirect3DBaseTexture9* menu_native_texture_for(IDirect3DBaseTexture9* texture) const
+		{
+			return texture && (texture == menu_path_trace_target_ || menu_cell_of(texture) >= 0) && menu_is_path_traced() ? menu_native_texture_ : nullptr;
+		}
+		// Load game's small views share one camera, and Remix traces one frame: they stand in a row in one wide frame,
+		// seen from far off so that the row keeps their view, and each quad shows its slice. -1: not one of them.
+		int menu_cell_of(IDirect3DBaseTexture9* texture) const
+		{
+			for (int i = 0; i < menu_cell_count_; i++)
+				if (texture && menu_cells_[i] == texture)
+					return i;
+			return -1;
+		}
+		bool menu_row_active() const { return menu_cell_count_ > 0 && menu_is_path_traced(); }
+		void set_menu_row_distance(float distance);
+		void turn_menu_cell(float* world) const;
+		// The slice of the frame that a view's quad shows. False until the row's camera is known.
+		bool menu_cell_uv(int cell, float& u0, float& v0, float& du, float& dv) const;
+		bool menu_is_path_traced() const
+		{
+			return menu_path_trace_target_ && shared::common::config::get().ffp.menu_scene_path_trace;
+		}
+		// The menu's quad is showing that view.
+		bool cur_texture_is_menu_path_traced() const
+		{
+			return menu_path_trace_target_ && (cur_texture_[0] == menu_path_trace_target_ || menu_cell_of(cur_texture_[0]) >= 0) &&
+				!cur_rt_menu_scene_ && shared::common::config::get().ffp.menu_scene_path_trace;
+		}
 
 		bool is_depth_prepass() const
 		{
+			// A menu view writes Z in both of its passes; the depth pass's shader reads no light constants.
+			if (cur_rt_menu_path_traced_)
+				return !(cur_ps_light_flags_ & PS_AMBIENT);
 			return cur_zwrite_enabled_ && cfg_ && cfg_->suppress_aux_passes;
 		}
 
@@ -532,6 +570,22 @@ namespace shared::common
 		bool view_proj_dirty_ = false;
 		bool view_proj_valid_ = false;
 		bool cur_rt_menu_scene_ = false;
+		bool cur_rt_menu_path_traced_ = false;
+		bool menu_cell_offset(float& x, float& y, float& z) const;
+		IDirect3DBaseTexture9* menu_scene_targets_[8] = {};
+		UINT menu_scene_widths_[8] = {};
+		int menu_scene_count_ = 0;
+		IDirect3DBaseTexture9* menu_shown_[8] = {};
+		UINT menu_shown_widths_[8] = {};
+		int menu_shown_count_ = 0;
+		IDirect3DBaseTexture9* menu_cells_[4] = {};
+		int menu_cell_count_ = 0;
+		int cur_menu_cell_ = -1;
+		float menu_view_half_x_ = 0.0f, menu_view_half_y_ = 0.0f; // the small views' frustum at the character
+		IDirect3DBaseTexture9* menu_path_trace_target_ = nullptr;
+		IDirect3DTexture9* menu_native_texture_ = nullptr;
+		IDirect3DSurface9* menu_native_surface_ = nullptr;
+		UINT menu_native_width_ = 0, menu_native_height_ = 0;
 		bool have_valid_camera_ = false;
 		UINT camera_basis_accepted_ = 0;
 		UINT camera_basis_rejected_ = 0;

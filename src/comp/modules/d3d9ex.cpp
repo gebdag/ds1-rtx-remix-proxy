@@ -904,6 +904,8 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, pRenderTarget);
 		auto* effective = rt_tracker::on_set_render_target(RenderTargetIndex, pRenderTarget);
+		if (auto* native = shared::common::ffp_state::get().menu_native_surface(); native && RenderTargetIndex == 0)
+			effective = native;
 		return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, effective);
 	}
 
@@ -1088,6 +1090,8 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_SetTexture, Stage, pTexture);
 		shared::common::ffp_state::get().on_set_texture(Stage, pTexture);
+		if (auto* native = shared::common::ffp_state::get().menu_native_texture_for(pTexture); native && !lookdev_passthrough())
+			return m_pIDirect3DDevice9->SetTexture(Stage, native);
 		return m_pIDirect3DDevice9->SetTexture(Stage, pTexture);
 	}
 
@@ -1296,6 +1300,33 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitiveUP, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		draw_split_scope split_scope;
+		// A path traced menu view has no alpha of its own: the quad adds its colour (over black where nothing was hit).
+		if (!lookdev_passthrough() && shared::common::ffp_state::get().cur_texture_is_menu_path_traced())
+		{
+			shared::common::ffp_state::get().note_menu_quad(m_pIDirect3DDevice9, pVertexStreamZeroData, VertexStreamZeroStride, NumVertices);
+			DWORD src_blend = D3DBLEND_SRCALPHA;
+			m_pIDirect3DDevice9->GetRenderState(D3DRS_SRCBLEND, &src_blend);
+			m_pIDirect3DDevice9->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+			// A row's quad: its S2 texture coordinates (4096 = 1), moved to its slice of the frame.
+			auto& menu_ffp = shared::common::ffp_state::get();
+			short slice[4 * 6];
+			const void* quad_vertices = pVertexStreamZeroData;
+			float u0, v0, du, dv;
+			if (const int cell = menu_ffp.menu_cell_of(menu_ffp.cur_texture(0));
+				cell >= 0 && VertexStreamZeroStride == 12 && NumVertices <= 4 && menu_ffp.menu_cell_uv(cell, u0, v0, du, dv))
+			{
+				std::memcpy(slice, pVertexStreamZeroData, 12 * NumVertices);
+				for (UINT v = 0; v < NumVertices; v++)
+				{
+					slice[v * 6 + 4] = static_cast<short>(std::lround(4096.0f * (u0 + du * slice[v * 6 + 4] / 4096.0f)));
+					slice[v * 6 + 5] = static_cast<short>(std::lround(4096.0f * (v0 + dv * slice[v * 6 + 5] / 4096.0f)));
+				}
+				quad_vertices = slice;
+			}
+			const auto hr = m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, quad_vertices, VertexStreamZeroStride);
+			m_pIDirect3DDevice9->SetRenderState(D3DRS_SRCBLEND, src_blend);
+			return hr;
+		}
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);

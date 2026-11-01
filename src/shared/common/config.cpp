@@ -122,6 +122,7 @@ namespace shared::common
 		ffp.expand_skinned_uv = get_bool("FFP", "ExpandSkinnedUV", true);
 		ffp.skip_postfx = get_bool("FFP", "SkipPostFX", true);
 		ffp.suppress_aux_passes = get_bool("FFP", "SuppressAuxPasses", true);
+		ffp.menu_scene_path_trace = get_bool("FFP", "MenuScenePathTrace", false);
 		ffp.shader_tex_fix = get_bool("FFP", "ShaderTexFix", false);
 		ffp.texture_layer_blend = get_bool("FFP", "TextureLayerBlend", true);
 		ffp.water_surface = get_bool("FFP", "WaterSurface", true);
