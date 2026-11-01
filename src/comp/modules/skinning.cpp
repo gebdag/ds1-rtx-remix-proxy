@@ -81,6 +81,7 @@ namespace comp
 		dev->SetStreamSource(0, exp_vb, 0, SKIN_VTX_SIZE);
 
 		const bool tinted = ffp.apply_draw_tint(dev);
+		const bool effect = ffp.apply_sp_effect(dev);
 		const bool toned = ffp.apply_skin_tone(dev, false);
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
@@ -100,6 +101,8 @@ namespace comp
 		}
 		if (tinted)
 			ffp.clear_draw_tint(dev);
+		if (effect)
+			ffp.clear_sp_effect(dev);
 
 		// Restore original state
 		dev->SetVertexDeclaration(orig_decl);

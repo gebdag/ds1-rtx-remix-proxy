@@ -342,6 +342,12 @@ namespace shared::common
 		//                   haze tail. c100 is its glow (Bed of Chaos's glyph shells: 10). See
 		//                   game/atmosphere.hpp tag_self_lit.
 		static constexpr uint32_t PS_UNLIT = 1u << 7;
+		//   PS_SP_EFFECT    c136, c137 and c138: the FRPG_Gst_* family the game switches a character to while a
+		//                   SpEffect colours it (phantoms, Iron Flesh). It adds a colour by view angle, from c136
+		//                   (rim) to c137 (facing the camera) times c138.x, and overrides c101 / c102.
+		static constexpr uint32_t PS_SP_EFFECT = 1u << 8;
+		//   PS_SPEC_SCALE   c101, the specular map scale.
+		static constexpr uint32_t PS_SPEC_SCALE = 1u << 9;
 		uint32_t cur_ps_light_flags() const { return cur_ps_light_flags_; }
 
 		// The main camera's camera-relative view-projection as the map shaders get it (VS c0..c3,
@@ -374,6 +380,13 @@ namespace shared::common
 		// 0xD3rrggbb, signed bytes in 1/255 (the creator's steps), for the runtime
 		// (Surface::ds1AlbedoOffset). Returns true when it did; pair with clear_skin_tone.
 		bool apply_skin_tone(IDirect3DDevice9* dev, bool overlay);
+		// A PS_SP_EFFECT draw's colouring for the runtime (Surface::ds1Effect): stage 4's texture transform,
+		// D3DTTFF_COUNT3, rows 1-2 = the rim and facing colours (c136 / c137 rgb * w * c138.x), _31 = the
+		// specular scale over the material's own (c101 over what that specular map gets without the effect,
+		// remembered from such draws; 1.5 when none was seen), _32 = the Phong exponent (c102.x). Returns
+		// whether it set one, to be cleared after the draw. On other draws it remembers the specular scale.
+		bool apply_sp_effect(IDirect3DDevice9* dev);
+		void clear_sp_effect(IDirect3DDevice9* dev);
 		void clear_skin_tone(IDirect3DDevice9* dev);
 
 		// Bind an albedo for a water-surface FFP draw: the first non-NULL,
@@ -595,6 +608,8 @@ namespace shared::common
 		// Pixel shaders that read c156 (see apply_skin_tone).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_skin_tone_;
 		bool cur_ps_skin_tone_ = false;
+		// c101 per specular map (sampler 1) on draws without a SpEffect.
+		std::unordered_map<IDirect3DBaseTexture9*, float> spec_scale_;
 		// The game's own D3DRS_TEXTUREFACTOR, restored by clear_draw_tint.
 		DWORD game_tfactor_ = 0xFFFFFFFF;
 

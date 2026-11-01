@@ -300,6 +300,7 @@ namespace comp
 				// behind it, so mist or a backdrop card in front of the sky vanished.
 				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 				const bool tinted = ffp.apply_draw_tint(dev);
+				const bool effect = ffp.apply_sp_effect(dev);
 				const bool toned = ffp.apply_skin_tone(dev, false);
 				const bool scrolled = game::texture_scroll::apply(dev, false, false, nullptr, nullptr,
 					0, 0, 0, ffp.frame_count());
@@ -339,6 +340,8 @@ namespace comp
 				}
 				if (tinted)
 					ffp.clear_draw_tint(dev);
+				if (effect)
+					ffp.clear_sp_effect(dev);
 			}
 			else
 			{
@@ -750,6 +753,7 @@ namespace comp
 						dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 					}
 					const bool tinted = ffp.apply_draw_tint(dev);
+					const bool effect = ffp.apply_sp_effect(dev);
 					if (inside_out)
 					{
 						ctx.save_rs(dev, D3DRS_CULLMODE);
@@ -836,6 +840,8 @@ namespace comp
 					}
 					if (tinted)
 						ffp.clear_draw_tint(dev);
+					if (effect)
+						ffp.clear_sp_effect(dev);
 				}
 				else
 				{

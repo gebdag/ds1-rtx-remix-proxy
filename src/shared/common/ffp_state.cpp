@@ -560,9 +560,14 @@ namespace shared::common
 		bool reads_shaft_origin = false;
 		bool reads_shaft_steps = false;
 		bool reads_diffuse_scale = false;
+		bool reads_effect_rim = false, reads_effect_centre = false, reads_effect_strength = false, reads_spec_scale = false;
 		for_each_const_read(code, [&](DWORD reg)
 		{
 			if (reg == 100) reads_diffuse_scale = true;
+			if (reg == 101) reads_spec_scale = true;
+			if (reg == 136) reads_effect_rim = true;
+			if (reg == 137) reads_effect_centre = true;
+			if (reg == 138) reads_effect_strength = true;
 			if (reg == 176) reads_view_fade = true;
 			if (reg == 69) reads_shaft_origin = true;
 			if (reg == 70) reads_shaft_steps = true;
@@ -583,6 +588,8 @@ namespace shared::common
 			(reads_probe_scale && reads_hemisphere ? PS_AMBIENT : 0u) |
 			(reads_view_fade ? PS_VIEW_FADE : 0u) |
 			(reads_shaft_origin && reads_shaft_steps ? PS_LIGHT_SHAFT : 0u) |
+			(reads_effect_rim && reads_effect_centre && reads_effect_strength ? PS_SP_EFFECT : 0u) |
+			(reads_spec_scale ? PS_SPEC_SCALE : 0u) |
 			// No light term at all: no probe or hemisphere (c86, c98), no directional light (c92, c95).
 			// A lightmap (s6) is a light term too; on_create_pixel_shader clears the flag for those.
 			(reads_diffuse_scale && reads_extinction && reads_inscatter && !reads_probe_scale && !reads_hemisphere
@@ -1756,6 +1763,44 @@ namespace shared::common
 		dev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 		dev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 		dev->SetRenderState(D3DRS_TEXTUREFACTOR, game_tfactor_);
+	}
+
+	bool ffp_state::apply_sp_effect(IDirect3DDevice9* dev)
+	{
+		if (!dev)
+			return false;
+		IDirect3DBaseTexture9* const spec_map = cur_texture(1);
+		const float* strength = &ps_const_[138 * 4];
+		if (!(cur_ps_light_flags_ & PS_SP_EFFECT) || strength[0] == 0.0f)
+		{
+			if ((cur_ps_light_flags_ & PS_SPEC_SCALE) && spec_map && ps_const_[101 * 4] > 0.0f)
+				spec_scale_[spec_map] = ps_const_[101 * 4];
+			return false;
+		}
+
+		const float* rim = &ps_const_[136 * 4];
+		const float* centre = &ps_const_[137 * 4];
+		const auto it = spec_map ? spec_scale_.find(spec_map) : spec_scale_.end();
+		const float own = it != spec_scale_.end() ? it->second : 1.5f;
+		D3DMATRIX m = {};
+		m._11 = rim[0] * rim[3] * strength[0];
+		m._12 = rim[1] * rim[3] * strength[0];
+		m._13 = rim[2] * rim[3] * strength[0];
+		m._21 = centre[0] * centre[3] * strength[0];
+		m._22 = centre[1] * centre[3] * strength[0];
+		m._23 = centre[2] * centre[3] * strength[0];
+		m._31 = ps_const_[101 * 4] / own;
+		m._32 = ps_const_[102 * 4];
+		m._44 = 1.0f;
+		dev->SetTransform(D3DTS_TEXTURE4, &m);
+		dev->SetTextureStageState(4, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT3);
+		return true;
+	}
+
+	void ffp_state::clear_sp_effect(IDirect3DDevice9* dev)
+	{
+		if (dev)
+			dev->SetTextureStageState(4, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 	}
 
 	bool ffp_state::apply_skin_tone(IDirect3DDevice9* dev, bool overlay)
