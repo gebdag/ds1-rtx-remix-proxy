@@ -23,6 +23,7 @@ using comp::tracer;
 #include "../game/render_toggles.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/thin_walls.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/lightmap_sun.hpp"
@@ -791,7 +792,10 @@ namespace comp
 		if (FAILED(hr))
 			crash_context::note("IB len=%u u=%X p=%u t=%u hr=%08X", Length, Usage, Pool, sw.ms(), hr);
 		else if (ppIndexBuffer && *ppIndexBuffer)
+		{
 			game::sky_meshes::on_index_buffer_created(*ppIndexBuffer);
+			game::thin_walls::on_index_buffer_created(*ppIndexBuffer);
+		}
 		return hr;
 	}
 

@@ -17,6 +17,7 @@
 #include "../game/lightmap_sun.hpp"
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
+#include "../game/thin_walls.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
 
@@ -699,6 +700,12 @@ namespace comp
 					return S_OK;
 				}
 
+				// A wall of two single-sided faces turned towards each other goes to Remix double-sided (game/thin_walls.hpp).
+				// Measured on the game's own buffers, before the expansion replaces stream 0.
+				const bool inside_out = !water_draw && game::thin_walls::is_inside_out(ffp.stream_vb(0), ffp.stream_offset(0),
+					ffp.stream_stride(0), ffp.last_decl(), ffp.cur_ib(), PrimitiveType, BaseVertexIndex, startIndex, primCount,
+					ffp.frame_count());
+
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);
 
@@ -728,6 +735,11 @@ namespace comp
 					if (shell && shell_mode == 2)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kShellCutoutMarker);
 					const bool tinted = ffp.apply_draw_tint(dev);
+					if (inside_out)
+					{
+						ctx.save_rs(dev, D3DRS_CULLMODE);
+						dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+					}
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
 					game::effect_lights::observe_draw(dev,
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
