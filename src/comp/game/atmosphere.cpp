@@ -199,16 +199,19 @@ namespace comp::game::atmosphere
 		grade_values g_grade_sent;
 		bool g_grade_sent_once = false;
 
-		// Light shafts: the frame's first LightShaft pass, and what Remix has.
+		// Light shafts: the frame's LightShaft passes, and what Remix has.
 		struct shaft_values
 		{
 			float direction[3] = {}; // towards the shaft sun (world space, unit)
-			float threshold = 1.0f;  // the bright pass threshold for the sky (c71.x)
+			float threshold = 1.0f;  // the shaft bright pass threshold (c71.x)
 			float weight = 0.0f;     // ColAdj's c56.y
+			// Each pass's c70: reach in texels, weight, decay per tap. The game's: (100, 0.04, 0.434), (10, 1, 0.92).
+			float pass[2][3] = { { 100.0f, 0.04f, 0.434f }, { 10.0f, 1.0f, 0.92f } };
 		};
 		shaft_values g_shaft;
 		unsigned int g_shaft_frame = 0;        // the last frame with a LightShaft pass, 0 = none yet
-		unsigned int g_shaft_seen_frame = ~0u; // the frame whose first pass was read
+		unsigned int g_shaft_seen_frame = ~0u; // the frame whose passes are being read
+		int g_shaft_pass = 0;                  // passes seen in that frame
 		shaft_values g_shaft_sent;
 		bool g_shaft_active_sent = false;
 		// Frames without a LightShaft pass before the shafts are switched off (an area without them,
@@ -222,6 +225,10 @@ namespace comp::game::atmosphere
 			for (int i = 0; i < 3; i++)
 				if (std::abs(a.direction[i] - b.direction[i]) > 1e-3f)
 					return true;
+			for (int p = 0; p < 2; p++)
+				for (int i = 0; i < 3; i++)
+					if (a.pass[p][i] != b.pass[p][i])
+						return true;
 			return a.threshold != b.threshold || a.weight != b.weight;
 		}
 
@@ -685,9 +692,19 @@ namespace comp::game::atmosphere
 
 	void observe_light_shaft(const float* ps_const, unsigned int frame)
 	{
-		if (!ps_const || frame == g_shaft_seen_frame)
+		if (!ps_const)
 			return;
-		g_shaft_seen_frame = frame;
+		if (frame != g_shaft_seen_frame)
+		{
+			g_shaft_seen_frame = frame;
+			g_shaft_pass = 0;
+		}
+		const int pass = g_shaft_pass++;
+		if (pass < 2)
+			for (int i = 0; i < 3; i++)
+				g_shaft.pass[pass][i] = ps_const[70 * 4 + i];
+		if (pass != 0)
+			return;
 		const float* rows = shared::common::ffp_state::get().map_viewproj_rows();
 		if (!rows)
 			return;
@@ -955,12 +972,14 @@ namespace comp::game::atmosphere
 				const bool ok = set("rtx.ds1Look.shaftDirection", vec3(g_shaft.direction))
 					& set("rtx.ds1Look.shaftThreshold", num(g_shaft.threshold))
 					& set("rtx.ds1Look.shaftWeight", num(g_shaft.weight))
+					& set("rtx.ds1Look.shaftPass1", vec3(g_shaft.pass[0]))
+					& set("rtx.ds1Look.shaftPass2", vec3(g_shaft.pass[1]))
 					& set("rtx.ds1Look.shaftActive", "True");
 				if (ok)
 				{
 					if (!g_shaft_active_sent)
-						shared::common::log("Atmosphere", std::format("game light shafts sent: towards {}, threshold {}, weight {}",
-							vec3(g_shaft.direction), g_shaft.threshold, g_shaft.weight));
+						shared::common::log("Atmosphere", std::format("game light shafts sent: towards {}, threshold {}, weight {}, passes {} / {}",
+							vec3(g_shaft.direction), g_shaft.threshold, g_shaft.weight, vec3(g_shaft.pass[0]), vec3(g_shaft.pass[1])));
 					g_shaft_sent = g_shaft;
 					g_shaft_active_sent = true;
 				}

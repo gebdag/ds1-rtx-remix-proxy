@@ -10,6 +10,7 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/shaft_source.hpp"
 #include "../game/glass.hpp"
 #include "../game/effect_lights.hpp"
 #include "../game/sun_light.hpp"
@@ -560,7 +561,10 @@ namespace comp
 
 			// The stage-0 constant is inert for shader draws; only the runtime reads it.
 			ffp.disengage(dev);
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, SKY_MARKER);
+			// A layer the game also draws into its light shaft source carries the shaft source marker.
+			const bool shaft_source = game::shaft_source::observe(dev, ffp.cur_ib(), startIndex, primCount,
+				ffp.cur_texture(0), ffp.frame_count());
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, shaft_source ? game::shaft_source::kMarker : SKY_MARKER);
 			hr = dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 			shared::common::ffp_prof::count_passthrough_draw();
