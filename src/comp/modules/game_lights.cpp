@@ -1463,6 +1463,14 @@ namespace comp
 
 		const bool open_all = shared::globals::imgui_open_light_sections;
 		shared::globals::imgui_open_light_sections = false;
+		// Screenshots of every section (proxy.Menu.Tab=Lights+) also show the map's first custom light selected.
+		if (open_all && !game::custom_lights::edit().empty())
+		{
+			custom_selected_ = 0;
+			for (const auto& r : rows_)
+				if (r.kind == kind::custom && r.slot == game::custom_lights::kFirstSlot)
+					selected_ = r.ident();
+		}
 		auto header = [&](const char* label, ImGuiTreeNodeFlags flags = 0)
 		{
 			if (open_all)
@@ -1842,16 +1850,7 @@ namespace comp
 		}
 		tip("A new light 2 m above the player.");
 		ImGui::SameLine();
-		if (ImGui::Button("Save to file"))
-			game::custom_lights::save();
-		tip("Writes this map's custom lights to its file.");
-		ImGui::SameLine();
-		if (ImGui::Button("Reload file"))
-		{
-			game::custom_lights::reload();
-			custom_selected_ = -1;
-		}
-		tip("Throws away unsaved custom light changes and reads the file again.");
+		custom_lights_file_buttons();
 
 		if (lights.empty())
 		{
@@ -1892,6 +1891,25 @@ namespace comp
 		{
 			auto& l = lights[custom_selected_];
 			ImGui::SeparatorText(l.name.c_str());
+			changed |= custom_light_fields_imgui(l);
+			if (ImGui::Button("Delete this light"))
+			{
+				lights.erase(lights.begin() + custom_selected_);
+				custom_selected_ = -1;
+				changed = true;
+			}
+		}
+		if (changed)
+			game::custom_lights::mark_dirty();
+	}
+
+	bool game_lights::custom_light_fields_imgui(game::custom_lights::light& l)
+	{
+		bool changed = false;
+		float cam[3] = {}, right[3] = {}, forward[3] = {};
+		const bool have_cam = shared::common::ffp_state::get().world_offset(cam[0], cam[1], cam[2]);
+		const bool have_axes = shared::common::ffp_state::get().view_axes(right, forward);
+		{
 			char name[64] = {};
 			std::snprintf(name, sizeof(name), "%s", l.name.c_str());
 			form_label("Name", "One word: spaces become underscores in the file.");
@@ -1916,9 +1934,10 @@ namespace comp
 				"On: lit as the game lights its own: full strength out to a distance, then linearly to zero.");
 			if (!l.game_falloff)
 			{
-				form_label("Intensity", "Radiance on top of the colour, in Remix's units (as the Remix toolkit's light Intensity).");
-				changed |= ImGui::DragFloat("##cl_rintensity", &l.remix_intensity, 0.1f, 0.0f, 100000.0f, "%.2f",
-					ImGuiSliderFlags_Logarithmic);
+				form_label("Intensity", "Radiance on top of the colour, in Remix's units (as the Remix toolkit's light Intensity).\n"
+					"Drags in steps of about 1% of the value; Ctrl+click to type one.");
+				changed |= ImGui::DragFloat("##cl_rintensity", &l.remix_intensity, std::max(0.1f, l.remix_intensity * 0.01f),
+					0.0f, 1000000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 				form_label("Exposure", "Radiance x 2^exposure, in stops (as the toolkit's Exposure).");
 				changed |= ImGui::DragFloat("##cl_exposure", &l.exposure, 0.05f, -20.0f, 20.0f, "%.2f EV");
 				form_label("Radius", "The emitting sphere. Bigger = softer shadows; it also sets how bright the light looks up close.");
@@ -1957,15 +1976,27 @@ namespace comp
 					changed |= ImGui::DragFloat("##cl_focus", &l.focus, 0.05f, 0.0f, 100.0f, "%.2f");
 				}
 			}
-			if (ImGui::Button("Delete this light"))
-			{
-				lights.erase(lights.begin() + custom_selected_);
-				custom_selected_ = -1;
-				changed = true;
-			}
 		}
-		if (changed)
-			game::custom_lights::mark_dirty();
+		return changed;
+	}
+
+	void game_lights::custom_lights_file_buttons()
+	{
+		if (ImGui::Button("Save to file"))
+			game::custom_lights::save();
+		tip("Writes this map's custom lights to its file.");
+		ImGui::SameLine();
+		if (ImGui::Button("Reload file"))
+		{
+			game::custom_lights::reload();
+			custom_selected_ = -1;
+		}
+		tip("Throws away unsaved custom light changes and reads the file again.");
+		if (game::custom_lights::dirty())
+		{
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "unsaved changes");
+		}
 	}
 
 	void game_lights::sun_imgui()
@@ -2181,6 +2212,23 @@ namespace comp
 		ImGui::TextColored(state_colour(row.state), "%s", state_text(row.state));
 		ImGui::SameLine();
 		ImGui::TextDisabled("- %s", state_help(row.state));
+
+		// A custom light is set up here in full: its own settings, saved to the map's file.
+		if (row.kind == kind::custom)
+		{
+			auto& lights = game::custom_lights::edit();
+			const int index = row.slot - game::custom_lights::kFirstSlot;
+			if (index < 0 || index >= static_cast<int>(lights.size()))
+				return;
+			form_value("Sent to Remix", std::format("radiance {:.2f} {:.2f} {:.2f}", row.radiance[0], row.radiance[1], row.radiance[2]));
+			ImGui::Spacing();
+			if (custom_light_fields_imgui(lights[index]))
+				game::custom_lights::mark_dirty();
+			solo_flash_imgui(row.key);
+			ImGui::Spacing();
+			custom_lights_file_buttons();
+			return;
+		}
 		form_value("Source", kKindSection[static_cast<int>(row.kind)]);
 		form_value("Comes from", row.origin);
 		form_value("Position", std::format("{:.2f}, {:.2f}, {:.2f}  ({:.1f} m from the player)",

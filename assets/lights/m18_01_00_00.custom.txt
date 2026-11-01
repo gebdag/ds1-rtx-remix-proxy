@@ -1,8 +1,12 @@
 # Custom lights for m18_01_00_00 (Undead Asylum). F4 > Lights > Custom lights edits and saves this file.
-# x y z dwindle_begin dwindle_end r g b intensity% name [spot dir_x dir_y dir_z cone_deg softness] [off]
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
 #
 # Corridor sunbeam: the game bakes this patch of sunlight on the rubble into the lightmap and lights
 # only characters with a map light (slot 15, colour 5.0 4.6 4.2), so Remix gets no light there.
 # Placed in the ceiling hole and aimed along the game's god-ray shaft (m19_bg_shaft_10), cone matched to
-# the lightmap's sunlit patch in lookdev capture frame_20261031_161923; intensity 6 (600%).
--3.20 207.50 19.30 8 12 255 235 215 600 Corridor_sunbeam spot -0.31 -0.88 0.37 16 0.5
+# the lightmap's sunlit patch in lookdev capture frame_20261031_161923. A Remix spot of radius 0.3 m;
+# intensity 12700 matches the game's lit rubble (8.6) and floor (5.5) there. The dwindle 8-12 and 600%
+# are its former game-falloff settings, kept for the 'Use the game's falloff' toggle.
+-3.20 207.50 19.30 8 12 255 235 215 600 Corridor_sunbeam remix 12700.000 0.00 0.300 1.00 spot -0.31 -0.88 0.37 16 0.5

@@ -3,6 +3,7 @@
 #include "shared/common/config.hpp"
 #include <array>
 #include "../game/point_lights.hpp"
+#include "../game/custom_lights.hpp"
 
 namespace comp
 {
@@ -120,6 +121,10 @@ namespace comp
 		bool characters_only(float x, float y, float z) const;
 		bool skip_characters_only_ = true;
 		void custom_lights_imgui();
+		// Every setting of one custom light (the custom section and a custom row's panel); true when one changed.
+		bool custom_light_fields_imgui(game::custom_lights::light& l);
+		// Save / reload of the current map's custom lights file.
+		void custom_lights_file_buttons();
 		int custom_selected_ = -1;
 		bool open_custom_ = false;   // open the Custom lights section on the next frame (a custom row's editor)
 		static inline game_lights* p_this = nullptr;
