@@ -20,6 +20,7 @@
 #include "../game/frustum_culling.hpp"
 #include "../game/input_customizer.hpp"
 #include "../game/vanilla_view.hpp"
+#include "../game/dlss_nr.hpp"
 
 // Allow us to directly call the ImGui WndProc function.
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -83,6 +84,10 @@ namespace comp
 			if (auto* d = diagnostics::get())
 				d->toggle_manual_capture();
 		}
+
+		// DLSS 3D-Guided Neural Rendering on/off.
+		if (message_type == WM_KEYUP && wparam == VK_F1)
+			game::dlss_nr::request_toggle();
 
 		// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.
 		if (message_type == WM_KEYUP && wparam == VK_F8 && !shared::common::config::get().lookdev.enabled)

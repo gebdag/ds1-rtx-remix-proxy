@@ -19,6 +19,7 @@
 #include "game/swamp.hpp"
 #include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
+#include "game/dlss_nr.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
 #include "game/effect_lights.hpp"
@@ -53,6 +54,8 @@ namespace comp
 
 		// Vanilla graphics on/off (F8 / F4 menu) switches here, before the frame's draws.
 		game::vanilla_view::frame_update();
+		// DLSS 3D-Guided Neural Rendering on/off (F1).
+		game::dlss_nr::frame_update();
 
 		// Update game lights each frame
 		if (auto* gl = game_lights::get())
