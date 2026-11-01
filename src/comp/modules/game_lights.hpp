@@ -111,8 +111,8 @@ namespace comp
 		void set_emitter_radius(float r) { emitter_radius_ = r; }
 		void set_kind_enabled(int k, bool on) { if (k >= 0 && k < static_cast<int>(light_kind::count)) kind_enabled_[k] = on; }
 
-		// A path traced menu view's light (proxy.MenuScene.Key): where it comes from (front left and above), radiance, angular diameter.
-		float menu_key[7] = { -1.5f, 2.5f, -1.8f, 1.4f, 1.3f, 1.17f, 45.0f };
+		// A path traced menu view's light (proxy.MenuScene.Key): position, radiance, radius. Off-screen, front left and above.
+		float menu_key[7] = { -1.5f, 2.5f, -1.8f, 120.0f, 112.0f, 100.0f, 0.3f };
 
 	private:
 		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).
@@ -254,7 +254,9 @@ namespace comp
 		float player_anchor_sent_[3] = {}; // rtx.ds1Lights.playerAnchor as last sent
 
 		remixapi_LightHandle menu_key_handle_ = nullptr;
+		remixapi_LightInfoSphereEXT menu_key_sphere_ = {};
 		remixapi_LightInfoDistantEXT menu_key_distant_ = {};
+		bool menu_key_row_ = false;
 		remixapi_LightInfo menu_key_info_ = {};
 		remixapi_LightHandle sun_handle_ = nullptr;
 		remixapi_LightInfoDistantEXT sun_distant_ = {};

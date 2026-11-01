@@ -863,7 +863,8 @@ namespace comp
 	void game_lights::sync_menu_key()
 	{
 		const bool lit = menu_key[3] > 0.0f || menu_key[4] > 0.0f || menu_key[5] > 0.0f;
-		if (!shared::common::ffp_state::get().menu_is_path_traced() || !lit)
+		const bool row = shared::common::ffp_state::get().menu_row_active();
+		if (!shared::common::ffp_state::get().menu_is_path_traced() || !lit || (menu_key_handle_ && row != menu_key_row_))
 		{
 			if (menu_key_handle_)
 			{
@@ -873,24 +874,44 @@ namespace comp
 			}
 			return;
 		}
-		// From the key's position toward a character (taken at 1 m up). Distant, so that every view of a row gets it alike and
-		// no light can come into view. Wide, because the character bodies are low-poly: a small light's shadow draws their
-		// polygons on the skin as hard-edged patches near the lit side's edge (their normals are smooth).
-		const float dx = -menu_key[0], dy = 1.0f - menu_key[1], dz = -menu_key[2];
-		const float d = std::max(std::sqrt(dx * dx + dy * dy + dz * dz), 1e-3f);
-		const remixapi_Float3D direction = { dx / d, dy / d, dz / d };
-		const remixapi_Float3D radiance = { menu_key[3], menu_key[4], menu_key[5] };
-		if (menu_key_handle_ && !std::memcmp(&menu_key_distant_.direction, &direction, sizeof(direction)) &&
-			!std::memcmp(&menu_key_info_.radiance, &radiance, sizeof(radiance)) &&
-			menu_key_distant_.angularDiameterDegrees == menu_key[6])
+		menu_key_row_ = row;
+		// The same light on a character (taken at 1 m up) from a 5 degree distant light: every one of a row gets it alike.
+		// A distant light's radiance scales a facing surface's albedo directly (as the sun's does); the sphere's is r^2 / d^2 of it.
+		if (row)
+		{
+			const float dx = -menu_key[0], dy = 1.0f - menu_key[1], dz = -menu_key[2];
+			const float d2 = std::max(dx * dx + dy * dy + dz * dz, 1e-3f), d = std::sqrt(d2);
+			const float scale = menu_key[6] * menu_key[6] / d2;
+			const remixapi_Float3D direction = { dx / d, dy / d, dz / d };
+			const remixapi_Float3D row_radiance = { menu_key[3] * scale, menu_key[4] * scale, menu_key[5] * scale };
+			if (menu_key_handle_ && !std::memcmp(&menu_key_distant_.direction, &direction, sizeof(direction)) &&
+				!std::memcmp(&menu_key_info_.radiance, &row_radiance, sizeof(row_radiance)))
+				return;
+			menu_key_distant_ = {};
+			menu_key_distant_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
+			menu_key_distant_.direction = direction;
+			menu_key_distant_.angularDiameterDegrees = 5.0f;
+			menu_key_info_ = {};
+			menu_key_info_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
+			menu_key_info_.pNext = &menu_key_distant_;
+			menu_key_info_.hash = string_hash64("ds1_menu_key_row");
+			menu_key_info_.radiance = row_radiance;
+			submit_light(menu_key_info_, menu_key_handle_);
 			return;
-		menu_key_distant_ = {};
-		menu_key_distant_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
-		menu_key_distant_.direction = direction;
-		menu_key_distant_.angularDiameterDegrees = menu_key[6];
+		}
+		const remixapi_Float3D position = { menu_key[0], menu_key[1], menu_key[2] };
+		const remixapi_Float3D radiance = { menu_key[3], menu_key[4], menu_key[5] };
+		if (menu_key_handle_ && !std::memcmp(&menu_key_sphere_.position, &position, sizeof(position)) &&
+			!std::memcmp(&menu_key_info_.radiance, &radiance, sizeof(radiance)) && menu_key_sphere_.radius == menu_key[6])
+			return;
+		menu_key_sphere_ = {};
+		menu_key_sphere_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
+		menu_key_sphere_.position = position;
+		menu_key_sphere_.radius = std::max(0.001f, menu_key[6]);
+		menu_key_sphere_.volumetricRadianceScale = 0.0f;
 		menu_key_info_ = {};
 		menu_key_info_.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
-		menu_key_info_.pNext = &menu_key_distant_;
+		menu_key_info_.pNext = &menu_key_sphere_;
 		menu_key_info_.hash = string_hash64("ds1_menu_key");
 		menu_key_info_.radiance = radiance;
 		submit_light(menu_key_info_, menu_key_handle_);
