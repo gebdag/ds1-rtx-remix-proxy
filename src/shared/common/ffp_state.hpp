@@ -706,6 +706,7 @@ namespace shared::common
 		// Solid-color fallback albedo for water draws with no stable static
 		// texture bound. Gives Remix a constant texture hash to remap.
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
+		IDirect3DTexture9* white_sprite_tex_ = nullptr;
 
 		// Vertex declaration tracking
 		IDirect3DVertexDeclaration9* last_decl_ = nullptr;

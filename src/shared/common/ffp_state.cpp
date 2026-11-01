@@ -1245,6 +1245,7 @@ namespace shared::common
 		if (skinned_exp_decl_) { skinned_exp_decl_->Release(); skinned_exp_decl_ = nullptr; }
 
 		if (water_fallback_tex_) { water_fallback_tex_->Release(); water_fallback_tex_ = nullptr; }
+		if (white_sprite_tex_) { white_sprite_tex_->Release(); white_sprite_tex_ = nullptr; }
 		cur_ps_is_water_surface_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		cur_ps_light_flags_ = 0;
@@ -2464,7 +2465,21 @@ namespace shared::common
 		// Like converted geometry: the sprite texture on stage 0, nothing else bound
 		// (the sprite shaders also sample the scene depth copy and leftovers, which
 		// Remix would read as the draw's textures).
-		dev->SetTexture(0, cur_texture_[0]);
+		// FRPG_Sfx_LineType0 samples nothing: what is on stage 0 is left from an earlier draw, and at its uv of
+		// (0, 0) usually black, which took the sparks' streaks away. A white texture stands in: Remix reads the
+		// draw's markers only from a draw with a texture.
+		if (!(cur_ps_sampler_mask_ & 1u) && !white_sprite_tex_ &&
+			SUCCEEDED(dev->CreateTexture(8, 8, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &white_sprite_tex_, nullptr)))
+		{
+			D3DLOCKED_RECT lr{};
+			if (SUCCEEDED(white_sprite_tex_->LockRect(0, &lr, nullptr, 0)))
+			{
+				for (int y = 0; y < 8; y++)
+					std::fill_n(reinterpret_cast<DWORD*>(static_cast<unsigned char*>(lr.pBits) + y * lr.Pitch), 8, 0xFFFFFFFFu);
+				white_sprite_tex_->UnlockRect(0);
+			}
+		}
+		dev->SetTexture(0, (cur_ps_sampler_mask_ & 1u) ? cur_texture_[0] : white_sprite_tex_);
 		for (DWORD ts = 1; ts < 8; ts++)
 			dev->SetTexture(ts, nullptr);
 		dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(world));
@@ -2582,7 +2597,7 @@ namespace shared::common
 
 		dev->SetVertexDeclaration(game_decl);
 		if (game_decl) game_decl->Release();
-		for (DWORD ts = 1; ts < 8; ts++)
+		for (DWORD ts = 0; ts < 8; ts++)
 			dev->SetTexture(ts, cur_texture_[ts]);
 		if (transforms_cached_)
 			dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(cached_world_));
