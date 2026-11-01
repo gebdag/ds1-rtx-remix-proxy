@@ -186,6 +186,15 @@ namespace comp
 		void tab_ffp();
 		void tab_postfx();
 		
+		// The UI scale: Ctrl + mouse wheel while the menu has the input, saved as [Menu] Scale (apply_menu_scale).
+		void apply_menu_scale();
+		float m_menu_scale = 0.0f;           // what the wheel asks for; 0 = not read from the ini yet
+		float m_menu_scale_applied = 1.0f;
+		unsigned int m_menu_scale_event_id = 0; // the newest input event already in scaled coordinates
+		int m_menu_scale_save_frames = 0;    // frames until the changed scale is saved
+		float m_menu_pos[2] = { 0.0f, 0.0f };
+		float m_menu_pos_scale = 1.0f;       // on the next frame, m_menu_pos times this keeps its place on screen
+
 		bool m_im_window_focused = false;
 		bool m_im_window_hovered = false;
 		std::string m_devgui_custom_footer_content;

@@ -85,6 +85,15 @@ namespace comp
 				d->toggle_manual_capture();
 		}
 
+		// Ctrl + mouse wheel scales the UI (apply_menu_scale) and scrolls nothing.
+		if (message_type == WM_MOUSEWHEEL && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass &&
+			(GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) && m_menu_scale > 0.0f)
+		{
+			const float notches = static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) / WHEEL_DELTA;
+			m_menu_scale = std::clamp(std::round((m_menu_scale + notches * 0.1f) * 10.0f) / 10.0f, 0.5f, 3.0f);
+			return true;
+		}
+
 		// DLSS 3D-Guided Neural Rendering on/off.
 		if (message_type == WM_KEYUP && wparam == VK_F1)
 			game::dlss_nr::request_toggle();
@@ -906,12 +915,19 @@ namespace comp
 	void imgui::devgui()
 	{
 		ImGui::SetNextWindowSize(ImVec2(900, 800), ImGuiCond_FirstUseEver);
+		if (m_menu_pos_scale != 1.0f)
+		{
+			ImGui::SetNextWindowPos(ImVec2(m_menu_pos[0] * m_menu_pos_scale, m_menu_pos[1] * m_menu_pos_scale));
+			m_menu_pos_scale = 1.0f;
+		}
 		if (!ImGui::Begin("Remix Comp - FFP Proxy", &shared::globals::imgui_menu_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollWithMouse))
 		{
 			ImGui::End();
 			return;
 		}
 
+		m_menu_pos[0] = ImGui::GetWindowPos().x;
+		m_menu_pos[1] = ImGui::GetWindowPos().y;
 		m_im_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
 		m_im_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
 
@@ -967,7 +983,9 @@ namespace comp
 
 		{
 			ImGui::Separator();
-			const char* movement_hint_str = "Hold Right Mouse to enable Game Input ";
+			const std::string movement_hint = std::format("Ctrl + Mouse Wheel: menu scale ({:.0f}%)   |   Hold Right Mouse to enable Game Input ",
+				m_menu_scale_applied * 100.0f);
+			const char* movement_hint_str = movement_hint.c_str();
 
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 			{
@@ -1035,6 +1053,50 @@ namespace comp
 		}
 	}
 
+	// Scales everything ImGui draws: it lays out on a display smaller or larger than the window, and the
+	// back buffer's framebuffer scale (on_present) stretches that over the window. The menu's many fixed
+	// pixel sizes scale with it, which font and style scaling would leave behind. Between the Win32 backend's
+	// NewFrame (DisplaySize, queued mouse positions in window pixels) and ImGui::NewFrame.
+	void imgui::apply_menu_scale()
+	{
+		const auto& cfg = shared::common::config::get();
+		if (m_menu_scale <= 0.0f)
+			m_menu_scale = m_menu_scale_applied = std::clamp(cfg.get_float("Menu", "Scale", 1.0f), 0.5f, 3.0f);
+
+		auto& io = ImGui::GetIO();
+		const float old_scale = m_menu_scale_applied;
+		const float scale = m_menu_scale;
+		io.DisplaySize = ImVec2(io.DisplaySize.x / scale, io.DisplaySize.y / scale);
+
+		// Events ImGui trickles over to the next frame stay in the queue: each is scaled only once.
+		auto& g = *ImGui::GetCurrentContext();
+		bool moved = false;
+		for (auto& e : g.InputEventsQueue)
+		{
+			if (e.EventId > m_menu_scale_event_id && e.Type == ImGuiInputEventType_MousePos)
+			{
+				e.MousePos.PosX /= scale;
+				e.MousePos.PosY /= scale;
+				moved = true;
+			}
+		}
+
+		if (scale != old_scale)
+		{
+			// The mouse and the menu stay where they are on screen.
+			if (!moved && ImGui::IsMousePosValid(&io.MousePos))
+				io.AddMousePosEvent(io.MousePos.x * old_scale / scale, io.MousePos.y * old_scale / scale);
+			m_menu_pos_scale *= old_scale / scale;
+			m_menu_scale_applied = scale;
+			m_menu_scale_save_frames = 60;
+		}
+		m_menu_scale_event_id = g.InputEventsNextEventId - 1;
+
+		// Once the wheel has settled.
+		if (m_menu_scale_save_frames > 0 && --m_menu_scale_save_frames == 0)
+			cfg.set_string("Menu", "Scale", std::format("{:.1f}", scale));
+	}
+
 	void imgui::on_present()
 	{
 		// A capture file's reference image holds only what the game and the proxy
@@ -1067,6 +1129,7 @@ namespace comp
 
 					ImGui_ImplDX9_NewFrame();
 					ImGui_ImplWin32_NewFrame();
+					im->apply_menu_scale();
 
 					// ImGui lays out in window pixels (the Win32 backend's DisplaySize, and
 					// the mouse), but the game may render a larger back buffer than its
