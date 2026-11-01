@@ -77,7 +77,8 @@ def deploy_file(src, dst):
     try:
         shutil.copy2(src, dst)
         return "deployed"
-    except PermissionError:
+    except OSError:
+        # A loaded DLL refuses the write as access denied or, for an image section, as an invalid argument.
         dst.rename(dst.with_name(f"{dst.name}.old-{int(time.time())}"))
         shutil.copy2(src, dst)
         return "deployed; a running game keeps the old one until it restarts"
@@ -257,7 +258,8 @@ def cmd_host(args):
             sys.exit(f"missing {exe}: run build_lookdev.bat and ..\\build.bat release --name DarkSouls --no-deploy")
     if running(HOST_IN_GAME.name):
         stop_host()
-    if running("NvRemixBridge.exe"):
+    # A bridge without a host is the last host's, still shutting Remix down (saving its caches): wait for it.
+    if running("NvRemixBridge.exe") and not _wait_gone("NvRemixBridge.exe", 45.0):
         sys.exit("NvRemixBridge.exe is running: the normal game (or another Remix client) owns the bridge. Close it first.")
     require_deploy_switch()
     import shutil
