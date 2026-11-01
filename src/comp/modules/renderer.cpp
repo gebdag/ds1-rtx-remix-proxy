@@ -38,6 +38,9 @@ namespace comp
 		// game's cull mode, though it is blended. Anor Londo builds many windows twice, an outer pane
 		// facing out and an inner one facing in, and the game shows each view only its own pane.
 		constexpr DWORD kSingleSidedGlassMarker = 0xD4000002;
+		// Stage 4's D3DTSS_CONSTANT on a thin wall (game/thin_walls.hpp): the runtime lets lighting rays through
+		// its faces where they face the surface the ray left (Surface::isDs1ThinWall).
+		constexpr DWORD kThinWallMarker = 0xD4000003;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
 		// are blended over) in a pass whose camera is the main one: no user clip
@@ -708,7 +711,7 @@ namespace comp
 					return S_OK;
 				}
 
-				// A wall of two single-sided faces turned towards each other goes to Remix double-sided (game/thin_walls.hpp).
+				// A wall of two single-sided faces turned towards each other goes to Remix tagged (game/thin_walls.hpp).
 				// Map meshes come from the offline table, which pairs faces across a model's meshes; the rest are
 				// measured on the game's own buffers, before the expansion replaces stream 0.
 				const bool inside_out = !water_draw &&
@@ -757,10 +760,7 @@ namespace comp
 					const bool tinted = ffp.apply_draw_tint(dev);
 					const bool effect = ffp.apply_sp_effect(dev);
 					if (inside_out)
-					{
-						ctx.save_rs(dev, D3DRS_CULLMODE);
-						dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-					}
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
 					game::effect_lights::observe_draw(dev,
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
@@ -844,6 +844,8 @@ namespace comp
 						ffp.clear_draw_tint(dev);
 					if (effect)
 						ffp.clear_sp_effect(dev);
+					if (inside_out)
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				}
 				else
 				{

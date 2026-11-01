@@ -8,9 +8,10 @@ namespace comp::game::thin_walls
 	// shadows, so the wall looks right from both sides. Ray traced, the face seen from behind still
 	// shadows the one in front of it from every light, and both sides of the wall go black.
 	//
-	// Such a mesh is drawn double-sided: from either side the near face is then the one hit (from
-	// behind, its normal turned towards the viewer), and nothing lies between it and the lights on that
-	// side, while the far face still shadows the lights on the other side.
+	// Such a mesh stays single-sided, so each view shows the face the game shows it (drawn double-sided,
+	// a view hit the near face from behind: the other side's texture and uvs, stretched on Firelink's
+	// wall). It is tagged instead: lighting rays leaving a face pass a tagged face turned towards it
+	// (Surface::isDs1ThinWall in the runtime), while rays arriving from outside still stop at the wall.
 
 	// True when the indexed draw's mesh has such facing pairs over a sizeable share of its area. The
 	// first call for a mesh queues its measurement (a few meshes per frame read their buffers); until

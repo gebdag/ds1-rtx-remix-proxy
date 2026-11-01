@@ -16,7 +16,7 @@ namespace comp::game::thin_walls
 		constexpr float kMinGap = 0.01f;
 		// Fronts anti-parallel within this cosine, and a face's vertex normals along its plane within it.
 		constexpr float kFacing = 0.95f;
-		// A mesh is drawn double-sided when facing pairs cover this share of its area and at least this many m^2.
+		// A mesh is tagged when facing pairs cover this share of its area and at least this many m^2.
 		constexpr float kMinShare = 0.1f;
 		constexpr float kMinPairedArea = 1.0f;
 		constexpr float kMinTriangleArea = 1e-4f;
@@ -279,7 +279,7 @@ namespace comp::game::thin_walls
 			const float paired = facing_pair_area(faces);
 			const bool inside_out = paired >= kMinPairedArea && paired >= kMinShare * total_area;
 			if (inside_out)
-				shared::common::log("ThinWalls", std::format("double-sided: {} triangles, {:.1f} of {:.1f} m^2 in facing pairs",
+				shared::common::log("ThinWalls", std::format("thin wall: {} triangles, {:.1f} of {:.1f} m^2 in facing pairs",
 					k.prim_count, paired, total_area));
 			return inside_out;
 		}
