@@ -29,9 +29,10 @@ namespace comp
 		// reads as "this draw is sky", like the UI (0xD15D0011) and decal
 		// (0xD15DECA1) markers.
 		constexpr DWORD SKY_MARKER = 0xD15D05C1;
-		// Stage 4's D3DTSS_CONSTANT on a blended shell drawn as a cutout ([Sky] ShellMode 2): the
-		// runtime renders it alpha-tested at rtx.ds1ShellCutoutAlpha (AlphaBlendToCutout).
-		constexpr DWORD kShellCutoutMarker = 0xD4000001;
+		// A blended shell drawn as a cutout ([Sky] ShellMode 2) is alpha-tested at this reference (0.25 of the
+		// texture alpha times the fade): the game fades the giant trees' tops into the mist, and there the cut sits
+		// where Ash Lake's trunks reach in the game's frame.
+		constexpr DWORD kShellCutoutAlphaRef = 64;
 		// Stage 4's D3DTSS_CONSTANT on a window glass pass: the runtime keeps it single-sided by the
 		// game's cull mode, though it is blended. Anor Londo builds many windows twice, an outer pane
 		// facing out and an inner one facing in, and the game shows each view only its own pane.
@@ -733,7 +734,17 @@ namespace comp
 					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
 						ffp.apply_unlit_layer_marker(dev);
 					if (shell && shell_mode == 2)
-						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kShellCutoutMarker);
+					{
+						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).
+						save_overlay_render_states(ctx, dev);
+						ctx.save_rs(dev, D3DRS_ALPHAFUNC);
+						ctx.save_rs(dev, D3DRS_ALPHAREF);
+						dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+						dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+						dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+						dev->SetRenderState(D3DRS_ALPHAREF, kShellCutoutAlphaRef);
+						dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+					}
 					const bool tinted = ffp.apply_draw_tint(dev);
 					if (inside_out)
 					{
@@ -771,8 +782,6 @@ namespace comp
 						game::texture_scroll::clear(dev);
 					if (swamp)
 						dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
-					if (shell && shell_mode == 2)
-						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal || unlit_layer)
 						ffp.clear_decal_marker(dev);

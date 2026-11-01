@@ -347,8 +347,7 @@ namespace shared::common
 			// game shades them: tint, fog, light scattering, scrolling, blending.
 			bool mark_sky_draws = true;
 			// Blended shells (rtx_comp\sky\shell_meshes.txt): 0 = decals like the other blended map
-			// draws (the old behaviour), 1 = plain blended geometry, 2 = cutouts at the runtime's
-			// rtx.ds1ShellCutoutAlpha (stage-4 D3DTSS_CONSTANT marker 0xD4000001, AlphaBlendToCutout).
+			// draws (the old behaviour), 1 = plain blended geometry, 2 = alpha-tested cutouts.
 			int shell_mode = 2;
 			// Window glass (rtx_comp\sky\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
