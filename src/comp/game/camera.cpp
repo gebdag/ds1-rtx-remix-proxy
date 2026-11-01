@@ -31,6 +31,12 @@ namespace comp::game::camera
 	// Resolved static address of the WorldChrMan pointer slot (0 = not found)
 	static DWORD world_chr_man_addr = 0;
 
+	// WorldChrMan as the game's code loads it: `mov edx, [slot]; mov eax, [edx+3C]` (+0x3C = the local
+	// PlayerIns). Resolved static address of that slot (0 = not found).
+	static constexpr const char* PLAYER_CHR_MAN_AOB = "8B 15 ?? ?? ?? ?? 8B 42 3C 33 C9";
+	static constexpr DWORD PLAYER_CHR_MAN_AOB_OFFSET = 2;
+	static DWORD player_chr_man_addr = 0;
+
 	// Legacy AOBs (kept for diagnostics; positions now read via WorldChrMan chain)
 	static DWORD cam_base_addr = 0;
 	static DWORD char_base_addr = 0;
@@ -245,8 +251,18 @@ namespace comp::game::camera
 		return entity ? reinterpret_cast<const void*>(entity + 0x150) : nullptr;
 	}
 
+	// The local player's position block: {X, Z, Y} at +0x10, heading at +0x04. Reached from the local
+	// PlayerIns (WorldChrMan +0x3C) -> +0x28 -> +0x1C. The other
+	// WorldChrMan slot's +0x18 points at it only in some areas (null all through Blighttown, 2026-10-31,
+	// which left the player light, water ripples and capture player positions without a player), so it
+	// is only the fallback.
 	static DWORD get_char_object_ptr()
 	{
+		if (const DWORD w = safe_read_ptr(player_chr_man_addr))
+			if (const DWORD chr = safe_read_ptr(w + 0x3C))
+				if (const DWORD ctrl = safe_read_ptr(chr + 0x28))
+					if (const DWORD block = safe_read_ptr(ctrl + 0x1C))
+						return block;
 		DWORD wcm = safe_read_ptr(world_chr_man_addr);
 		if (!wcm) return 0;
 		return safe_read_ptr(wcm + 0x18);
@@ -265,23 +281,27 @@ namespace comp::game::camera
 		{
 			log("Camera", "WorldChrMan AOB not found", LOG_TYPE::LOG_TYPE_ERROR, true);
 		}
+		if (const DWORD hit = shared::utils::mem::find_pattern(PLAYER_CHR_MAN_AOB, PLAYER_CHR_MAN_AOB_OFFSET, "WorldChrMan (PlayerIns)", true, 0))
+		{
+			player_chr_man_addr = *reinterpret_cast<DWORD*>(hit);
+			log("Camera", std::format("WorldChrMan (PlayerIns) slot: 0x{:08X}", player_chr_man_addr));
+		}
+		else
+		{
+			log("Camera", "WorldChrMan (PlayerIns) AOB not found; player position from the older slot only", LOG_TYPE::LOG_TYPE_WARN, true);
+		}
 	}
 
 	bool is_available()
 	{
-		return world_chr_man_addr != 0;
+		return world_chr_man_addr != 0 || player_chr_man_addr != 0;
 	}
 
 	// Read player world position via WorldChrMan → player entity → position block.
 	// DS1 stores position as {X, Z, Y} at +0x10 from the player entity (Y-up, Z = depth).
 	static bool read_player_pos(float& x, float& y, float& z)
 	{
-		if (!world_chr_man_addr) return false;
-
-		DWORD wcm = safe_read_ptr(world_chr_man_addr);
-		if (!wcm) return false;
-
-		DWORD player_entity = safe_read_ptr(wcm + 0x18);
+		const DWORD player_entity = get_char_object_ptr();
 		if (!player_entity) return false;
 
 		// Position block layout (3 × float32 at +0x10): X_world, Z_world, Y_world
@@ -415,9 +435,7 @@ namespace comp::game::camera
 			radians = host_feed::frame().heading;
 			return host_feed::frame().heading_valid;
 		}
-		if (!world_chr_man_addr) return false;
-		const DWORD wcm = safe_read_ptr(world_chr_man_addr);
-		const DWORD player_entity = wcm ? safe_read_ptr(wcm + 0x18) : 0;
+		const DWORD player_entity = get_char_object_ptr();
 		if (!player_entity) return false;
 		radians = safe_read_float(player_entity + 0x04);
 		return std::isfinite(radians) && std::fabs(radians) <= 7.0f;
@@ -440,7 +458,8 @@ namespace comp::game::camera
 		{
 			DWORD wcm = safe_read_ptr(world_chr_man_addr);
 			DWORD player = wcm ? safe_read_ptr(wcm + 0x18) : 0;
-			ImGui::TextDisabled("  WCM ptr: 0x%08X  player entity: 0x%08X", wcm, player);
+			ImGui::TextDisabled("  WCM ptr: 0x%08X  player entity: 0x%08X  (PlayerIns chain: 0x%08X)", wcm, player,
+				get_char_object_ptr());
 		}
 
 		ImGui::Separator();
