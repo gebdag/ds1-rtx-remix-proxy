@@ -560,6 +560,27 @@ namespace shared::common
 		// Average colour (rgba, 0-1) of textures used as sprite masks, from their smallest mip.
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
 		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);
+		// A sprite texture's texels (rgba, 0-1) from its largest mip at most kMaskTexelSize wide, for sampling
+		// the Multi sprites' textures per vertex (a small mip: the vertices of a subdivided sprite are several
+		// top-level texels apart); empty when the format cannot be read. full_* is its top level's size, flat
+		// whether every texel is the same colour.
+		struct mask_texels
+		{
+			UINT width = 0, height = 0, full_width = 0, full_height = 0;
+			bool flat = false;
+			std::vector<std::array<float, 4>> texels;
+		};
+		std::unordered_map<IDirect3DBaseTexture9*, mask_texels> mask_texels_;
+		const mask_texels* texture_texels(IDirect3DBaseTexture9* texture);
+		// A Multi sprite draw as a subdivided triangle list in masked_sprite_vertices_: the textures other than
+		// carrier_sampler's (the largest, which Remix samples at its uv) sampled per vertex into the colour (then
+		// x colour_scale). The triangle count, 0 when the draw cannot be split so.
+		UINT multi_sprite_triangles(D3DPRIMITIVETYPE prim, UINT prim_count, const void* indices, D3DFORMAT index_format,
+			const void* vertices, UINT stride, UINT count, float colour_scale, DWORD& carrier_sampler);
+		// The Multi sprites subdivided, their masks sampled per vertex (draw_sprite_up).
+		std::vector<unsigned char> masked_sprite_vertices_;
+		// A soft sprite draw's per-particle feathers (draw_sprite_up).
+		std::vector<float> sprite_feathers_;
 
 
 		// Pixel shaders that read c139 (see cur_ps_reads_draw_tint).
@@ -597,6 +618,10 @@ namespace shared::common
 		bool cur_decl_has_pos_t_ = false;
 		int cur_decl_texcoord_type_ = -1;
 		int cur_decl_texcoord_off_ = 0;
+		// TEXCOORD2: the soft sprite shaders' per-vertex feather distance, its last component (-1 = none).
+		int cur_decl_feather_off_ = -1;
+		// TEXCOORD1 as float2: the Multi sprite shaders' s3 mask uv (-1 = none).
+		int cur_decl_texcoord1_off_ = -1;
 
 		// Skinning-related declaration data
 		int cur_decl_num_weights_ = 0;

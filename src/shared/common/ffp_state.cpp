@@ -677,6 +677,8 @@ namespace shared::common
 		cur_decl_has_pos_t_ = false;
 		cur_decl_texcoord_type_ = -1;
 		cur_decl_texcoord_off_ = 0;
+		cur_decl_feather_off_ = -1;
+		cur_decl_texcoord1_off_ = -1;
 		cur_decl_num_weights_ = 0;
 		cur_decl_blend_weight_off_ = 0;
 		cur_decl_blend_weight_type_ = 0;
@@ -748,6 +750,16 @@ namespace shared::common
 					cur_decl_has_texcoord_ = true;
 					cur_decl_texcoord_type_ = el.Type;
 					cur_decl_texcoord_off_ = el.Offset;
+				}
+				// The soft sprite vertex shaders read their feather from TEXCOORD2's last component:
+				// .x of a float1 (SimpleSpriteType2), .y of a float2 (the Multi sprites, DepthType6).
+				else if (el.UsageIndex == 2 && el.Stream == 0 && (el.Type == D3DDECLTYPE_FLOAT1 || el.Type == D3DDECLTYPE_FLOAT2))
+				{
+					cur_decl_feather_off_ = el.Offset + (el.Type == D3DDECLTYPE_FLOAT2 ? 4 : 0);
+				}
+				else if (el.UsageIndex == 1 && el.Stream == 0 && el.Type == D3DDECLTYPE_FLOAT2)
+				{
+					cur_decl_texcoord1_off_ = el.Offset;
 				}
 				break;
 
@@ -973,6 +985,8 @@ namespace shared::common
 		cur_decl_has_pos_t_ = false;
 		cur_decl_texcoord_type_ = -1;
 		cur_decl_texcoord_off_ = 0;
+		cur_decl_feather_off_ = -1;
+		cur_decl_texcoord1_off_ = -1;
 		cur_decl_num_weights_ = 0;
 		cur_decl_blend_weight_off_ = 0;
 		cur_decl_blend_weight_type_ = 0;
@@ -1881,8 +1895,10 @@ namespace shared::common
 		const bool uv_float = cur_decl_has_texcoord_ &&
 			(cur_decl_texcoord_type_ == D3DDECLTYPE_FLOAT2 || cur_decl_texcoord_type_ == D3DDECLTYPE_FLOAT4);
 
-		// The Multi sprite shaders multiply the diffuse by masks on s1 and s3 with their
-		// own (scrolling) uvs; only their average survives the trip to Remix.
+		// The Multi sprite shaders multiply the diffuse by masks on s1 (TEXCOORD0.zw) and s3 (TEXCOORD1)
+		// with their own scrolling uvs. Remix takes one texture, so those draws are subdivided: the most detailed
+		// texture goes to Remix, the others are sampled per vertex (multi_sprite_triangles below). The masks'
+		// average stands in where that cannot be done, and for the sprite observer.
 		std::array<float, 4> mask = { 1.0f, 1.0f, 1.0f, 1.0f };
 		if (unlit)
 			for (DWORD s : { 1u, 3u })
@@ -1894,16 +1910,32 @@ namespace shared::common
 				}
 		const bool masked = mask[0] != 1.0f || mask[1] != 1.0f || mask[2] != 1.0f || mask[3] != 1.0f;
 
-		// The scale the sprite shaders' fog step puts on tex * vcolor (CalcGetFogCol's 0.5, from
-		// sfx_shaders.inc). Their fog and scattering are not folded in: the DS1 look's scene pass
+		// A soft sprite's alpha fades by the scene depth: x saturate(0.5 + (scene depth - sprite depth) / feather),
+		// the feather a per-vertex distance (FRPG_Sfx_SimpleSprite_Base.fxh ZFeather). Remix fades a particle
+		// per surface, so the draw's mean feather goes to the runtime (kFeatherMarker below).
+		const bool soft = unlit && cur_ps_sfx_class_ == sfx_class::SoftSprite && cur_decl_feather_off_ >= 0;
+		std::vector<float>& feathers = sprite_feathers_;
+		feathers.clear();
+
+		// The sprite shaders' colour is tex * vcolor times the scale of their fog step (CalcGetFogCol's
+		// 0.5, from sfx_shaders.inc) and the game's exposure: c135.x / c135.y in a pixel shader that
+		// reads c135, once more c159.z / c159.w in a vertex shader that scales by it. That is the
+		// sprite's display value, which the runtime shows as it is (kUnlitMarker below), whatever
+		// exposure Remix runs at. Their fog and scattering are not folded in: the DS1 look's scene pass
 		// already hazes the composite, sprites included (with the haze of the surface behind them,
-		// not the sprite's own: still open). The exposure goes to the runtime as a power (see
-		// kUnlitMarker below), so Remix applies its own metered exposure to the sprite.
-		const bool game_colour = unlit && cur_ps_sfx_colour_scale_ != 1.0f;
+		// not the sprite's own: still open).
+		auto ratio = [](float num, float den) { return den > 0.0f && num > 0.0f ? num / den : 1.0f; };
+		const float colour_scale = cur_ps_sfx_colour_scale_ *
+			(cur_ps_reads_exposure_ ? ratio(ps_const_[135 * 4 + 0], ps_const_[135 * 4 + 1]) : 1.0f) *
+			(cur_vs_exposure_ ? ratio(vs_const_[159 * 4 + 2], vs_const_[159 * 4 + 3]) : 1.0f);
+		const bool game_colour = unlit && colour_scale != 1.0f;
 		auto vertex_colour = [&](DWORD colour)
 		{
 			// D3DCOLOR is ARGB: alpha in 24-31, red 16-23, green 8-15, blue 0-7.
-			auto channel = [&](int shift) { return static_cast<DWORD>(((colour >> shift) & 0xFF) * cur_ps_sfx_colour_scale_ + 0.5f) << shift; };
+			auto channel = [&](int shift)
+			{
+				return static_cast<DWORD>(std::min(((colour >> shift) & 0xFF) * colour_scale + 0.5f, 255.0f)) << shift;
+			};
 			return (colour & 0xFF000000u) | channel(16) | channel(8) | channel(0);
 		};
 
@@ -1929,6 +1961,14 @@ namespace shared::common
 			else
 			{
 				out[v].u = 0.0f; out[v].v = 0.0f;
+			}
+			if (soft)
+			{
+				const float feather = *reinterpret_cast<const float*>(sv + cur_decl_feather_off_);
+				if (feather > 0.0f && std::isfinite(feather))
+				{
+					feathers.push_back(feather);
+				}
 			}
 		}
 		if (sprite_observer_fn_ && count)
@@ -2002,15 +2042,25 @@ namespace shared::common
 			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 			dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 		}
-		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled). Stage 0's constant is
-		// inert in rasterization: no stage argument references D3DTA_CONSTANT.
-		// 0xD15D0E21 / 0xD15D0E22 also tell how many times the game's shaders apply the exposure
-		// c135.x / c135.y to the sprite colour: once in a pixel shader that reads c135, once more in
-		// a vertex shader that scales by c159.z / c159.w. Remix applies its own exposure that often.
+		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled): the sprite's colour is its display
+		// value (the game's exposure is in it, vertex_colour above). Stage 0's constant is inert in
+		// rasterization: no stage argument references D3DTA_CONSTANT.
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
-		const int exposure_power = game_colour ? (cur_ps_reads_exposure_ ? 1 : 0) + (cur_vs_exposure_ ? 1 : 0) : 0;
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, exposure_power ? 0xD15D0E20u + exposure_power : kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnlitMarker);
+		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
+		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
+		constexpr DWORD kFeatherMarker = 0xD8000000u;
+		DWORD stage2_constant = 0;
+		// The median: a draw's particles each have their own feather, often several times apart.
+		const bool feathered = !feathers.empty();
+		if (feathered)
+		{
+			dev->GetTextureStageState(2, D3DTSS_CONSTANT, &stage2_constant);
+			std::nth_element(feathers.begin(), feathers.begin() + feathers.size() / 2, feathers.end());
+			const double mm = std::min(static_cast<double>(feathers[feathers.size() / 2]) * 1000.0, static_cast<double>(0xFFFFFF));
+			dev->SetTextureStageState(2, D3DTSS_CONSTANT, kFeatherMarker | std::max(static_cast<DWORD>(std::lround(mm)), DWORD { 1 }));
+		}
 		// Some particle layers (the Crystal Cave fog) are drawn into a reduced-resolution
 		// buffer that a filter pass later upsamples onto the frame. Remix ray-traces only
 		// draws aimed at a back-buffer-sized target, and the upsample is a shader draw it
@@ -2036,9 +2086,36 @@ namespace shared::common
 				retarget = true;
 			}
 		}
-		hr = indices
+		DWORD carrier = 0;
+		const UINT masked_triangles = masked ? multi_sprite_triangles(prim, prim_count, indices, index_format, vertices, stride,
+			count, colour_scale, carrier) : 0;
+		// A Multi sprite whose detail is on a mask: that mask goes to Remix on stage 0, with its sampler state.
+		constexpr D3DSAMPLERSTATETYPE kCarrierStates[] = { D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_MAGFILTER,
+			D3DSAMP_MINFILTER, D3DSAMP_MIPFILTER };
+		DWORD stage0_states[std::size(kCarrierStates)] = {};
+		const bool carried = masked_triangles && carrier != 0;
+		if (carried)
+		{
+			for (size_t i = 0; i < std::size(kCarrierStates); i++)
+			{
+				DWORD state = 0;
+				dev->GetSamplerState(0, kCarrierStates[i], &stage0_states[i]);
+				dev->GetSamplerState(carrier, kCarrierStates[i], &state);
+				dev->SetSamplerState(0, kCarrierStates[i], state);
+			}
+			dev->SetTexture(0, cur_texture_[carrier]);
+		}
+		hr = masked_triangles
+			? dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, masked_triangles, masked_sprite_vertices_.data(), sizeof(sprite_vertex))
+			: indices
 			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
+		if (carried)
+		{
+			for (size_t i = 0; i < std::size(kCarrierStates); i++)
+				dev->SetSamplerState(0, kCarrierStates[i], stage0_states[i]);
+			dev->SetTexture(0, cur_texture_[0]);
+		}
 		if (retarget)
 		{
 			dev->SetRenderTarget(0, game_rt);
@@ -2050,6 +2127,8 @@ namespace shared::common
 		if (game_rt) game_rt->Release();
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+		if (feathered)
+			dev->SetTextureStageState(2, D3DTSS_CONSTANT, stage2_constant);
 		if (debug_opaque)
 		{
 			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, blend);
@@ -2137,6 +2216,293 @@ namespace shared::common
 		}
 		texture_average_[texture] = avg;
 		return avg;
+	}
+
+	const ffp_state::mask_texels* ffp_state::texture_texels(IDirect3DBaseTexture9* texture)
+	{
+		if (auto it = mask_texels_.find(texture); it != mask_texels_.end())
+			return it->second.texels.empty() ? nullptr : &it->second;
+
+		// A subdivided sprite's vertices are several top-level texels apart: a mip this small is what they can
+		// carry without aliasing (and crawling as the uvs scroll).
+		constexpr UINT kMaskTexelSize = 16;
+		mask_texels result;
+		if (texture && texture->GetType() == D3DRTYPE_TEXTURE)
+		{
+			auto* t2d = static_cast<IDirect3DTexture9*>(texture);
+			DWORD level = 0;
+			D3DSURFACE_DESC desc {};
+			if (SUCCEEDED(t2d->GetLevelDesc(0, &desc)))
+			{
+				result.full_width = desc.Width;
+				result.full_height = desc.Height;
+			}
+			while (SUCCEEDED(t2d->GetLevelDesc(level, &desc)) && desc.Width > kMaskTexelSize && level + 1 < t2d->GetLevelCount())
+				++level;
+			D3DLOCKED_RECT lr {};
+			if (SUCCEEDED(t2d->GetLevelDesc(level, &desc)) && SUCCEEDED(t2d->LockRect(level, &lr, nullptr, D3DLOCK_READONLY)) && lr.pBits)
+			{
+				const auto* p = static_cast<const unsigned char*>(lr.pBits);
+				const UINT w = desc.Width, h = desc.Height;
+				auto& t = result.texels;
+				auto rgb565 = [](uint16_t c, float* out)
+				{
+					out[0] = ((c >> 11) & 31) / 31.0f;
+					out[1] = ((c >> 5) & 63) / 63.0f;
+					out[2] = (c & 31) / 31.0f;
+				};
+				switch (desc.Format)
+				{
+				case D3DFMT_DXT1:
+				case D3DFMT_DXT3:
+				case D3DFMT_DXT5:
+				{
+					t.assign(static_cast<size_t>(w) * h, { 0.0f, 0.0f, 0.0f, 1.0f });
+					const size_t block = desc.Format == D3DFMT_DXT1 ? 8 : 16;
+					const size_t colour = desc.Format == D3DFMT_DXT1 ? 0 : 8;
+					for (UINT by = 0; by < (h + 3) / 4; by++)
+						for (UINT bx = 0; bx < (w + 3) / 4; bx++)
+						{
+							const unsigned char* b = p + static_cast<size_t>(by) * lr.Pitch + bx * block;
+							const uint16_t e0 = *reinterpret_cast<const uint16_t*>(b + colour);
+							const uint16_t e1 = *reinterpret_cast<const uint16_t*>(b + colour + 2);
+							float pal[4][4] = {};
+							rgb565(e0, pal[0]);
+							rgb565(e1, pal[1]);
+							// DXT1 with e0 <= e1: a three-colour block whose fourth entry is transparent black.
+							const bool three = desc.Format == D3DFMT_DXT1 && e0 <= e1;
+							for (int c = 0; c < 3; c++)
+							{
+								pal[2][c] = three ? 0.5f * (pal[0][c] + pal[1][c]) : (2.0f * pal[0][c] + pal[1][c]) / 3.0f;
+								pal[3][c] = three ? 0.0f : (pal[0][c] + 2.0f * pal[1][c]) / 3.0f;
+							}
+							pal[0][3] = pal[1][3] = pal[2][3] = 1.0f;
+							pal[3][3] = three ? 0.0f : 1.0f;
+							const uint32_t bits = *reinterpret_cast<const uint32_t*>(b + colour + 4);
+							// DXT5 alpha: two endpoints and 3-bit indices (8 or 6 interpolated steps).
+							float alpha5[8] = {};
+							uint64_t alpha_bits = 0;
+							if (desc.Format == D3DFMT_DXT5)
+							{
+								const float a0 = b[0] / 255.0f, a1 = b[1] / 255.0f;
+								alpha5[0] = a0; alpha5[1] = a1;
+								for (int i = 1; i < 7; i++)
+									alpha5[i + 1] = b[0] > b[1] ? ((7 - i) * a0 + i * a1) / 7.0f
+										: i < 5 ? ((5 - i) * a0 + i * a1) / 5.0f : (i == 5 ? 0.0f : 1.0f);
+								for (int i = 0; i < 6; i++)
+									alpha_bits |= static_cast<uint64_t>(b[2 + i]) << (8 * i);
+							}
+							for (UINT y = 0; y < 4; y++)
+								for (UINT x = 0; x < 4; x++)
+								{
+									const UINT px = bx * 4 + x, py = by * 4 + y;
+									if (px >= w || py >= h)
+										continue;
+									const UINT i = y * 4 + x;
+									auto& out = t[static_cast<size_t>(py) * w + px];
+									const float* e = pal[(bits >> (2 * i)) & 3];
+									out = { e[0], e[1], e[2], e[3] };
+									if (desc.Format == D3DFMT_DXT3)
+										out[3] = ((b[i / 2] >> (4 * (i & 1))) & 0xF) / 15.0f;
+									else if (desc.Format == D3DFMT_DXT5)
+										out[3] = alpha5[(alpha_bits >> (3 * i)) & 7];
+								}
+						}
+					break;
+				}
+				case D3DFMT_A8R8G8B8:
+				case D3DFMT_X8R8G8B8:
+					t.resize(static_cast<size_t>(w) * h);
+					for (UINT y = 0; y < h; y++)
+						for (UINT x = 0; x < w; x++)
+						{
+							const unsigned char* s = p + static_cast<size_t>(y) * lr.Pitch + x * 4;
+							t[static_cast<size_t>(y) * w + x] = { s[2] / 255.0f, s[1] / 255.0f, s[0] / 255.0f,
+								desc.Format == D3DFMT_A8R8G8B8 ? s[3] / 255.0f : 1.0f };
+						}
+					break;
+				default:
+					break;
+				}
+				if (!t.empty())
+				{
+					result.width = w;
+					result.height = h;
+					result.flat = std::all_of(t.begin(), t.end(), [&](const std::array<float, 4>& texel)
+					{
+						for (int k = 0; k < 4; k++)
+							if (std::abs(texel[k] - t[0][k]) > 2.0f / 255.0f)
+								return false;
+						return true;
+					});
+				}
+				t2d->UnlockRect(level);
+			}
+		}
+		auto& stored = mask_texels_[texture] = std::move(result);
+		return stored.texels.empty() ? nullptr : &stored;
+	}
+
+	namespace
+	{
+		// Bilinear, wrapping (the masks' sampler state).
+		std::array<float, 4> sample_wrap(const std::vector<std::array<float, 4>>& texels, UINT width, UINT height, float u, float v)
+		{
+			const float fx = u * width - 0.5f, fy = v * height - 0.5f;
+			const float x0f = std::floor(fx), y0f = std::floor(fy);
+			const float tx = fx - x0f, ty = fy - y0f;
+			auto wrap = [](long long i, UINT n) { return static_cast<UINT>(((i % static_cast<long long>(n)) + n) % n); };
+			const UINT x0 = wrap(static_cast<long long>(x0f), width), x1 = wrap(static_cast<long long>(x0f) + 1, width);
+			const UINT y0 = wrap(static_cast<long long>(y0f), height), y1 = wrap(static_cast<long long>(y0f) + 1, height);
+			const auto& a = texels[static_cast<size_t>(y0) * width + x0];
+			const auto& b = texels[static_cast<size_t>(y0) * width + x1];
+			const auto& c = texels[static_cast<size_t>(y1) * width + x0];
+			const auto& d = texels[static_cast<size_t>(y1) * width + x1];
+			std::array<float, 4> r {};
+			for (int k = 0; k < 4; k++)
+				r[k] = (a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (c[k] * (1 - tx) + d[k] * tx) * ty;
+			return r;
+		}
+	}
+
+	UINT ffp_state::multi_sprite_triangles(D3DPRIMITIVETYPE prim, UINT prim_count, const void* indices, D3DFORMAT index_format,
+		const void* vertices, UINT stride, UINT count, float colour_scale, DWORD& carrier_sampler)
+	{
+		// The Multi shaders' colour is s0 (TEXCOORD0.xy) x s1 (TEXCOORD0.zw) x s3 (TEXCOORD1) x vcolor
+		// (FRPG_Sfx_SimpleSprite_Base.fxh, PS_Multi). Remix takes one texture: the largest of them carries the
+		// detail (the item glow's smoke wisps, s1 s00139, over a fuzzy disc on s0) and goes to Remix at its own
+		// uv, the others are sampled per vertex of a subdivided draw. One the CPU cannot read must be the one
+		// Remix takes; with two of those, the draw is left to the averaged path.
+		struct layer { DWORD sampler; int uv_off; const mask_texels* texels; UINT size; };
+		layer layers[3] = {
+			{ 0, cur_decl_has_texcoord_ ? cur_decl_texcoord_off_ : -1 },
+			{ 1, cur_decl_has_texcoord_ && cur_decl_texcoord_type_ == D3DDECLTYPE_FLOAT4 ? cur_decl_texcoord_off_ + 8 : -1 },
+			{ 3, cur_decl_texcoord1_off_ },
+		};
+		int carrier = -1, unreadable = -1, used = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			layer& l = layers[i];
+			if (!(cur_ps_sampler_mask_ & (1u << l.sampler)) || !cur_texture_[l.sampler])
+				continue;
+			if (l.uv_off < 0)
+				return 0;
+			++used;
+			l.texels = texture_texels(cur_texture_[l.sampler]);
+			if (!l.texels)
+			{
+				if (unreadable >= 0)
+					return 0;
+				unreadable = i;
+				continue;
+			}
+			l.size = l.texels->full_width * l.texels->full_height;
+			if (carrier < 0 || l.size > layers[carrier].size)
+				carrier = i;
+		}
+		if (used < 2)
+			return 0;
+		if (unreadable >= 0)
+			carrier = unreadable;
+		// With s0 carrying and every other layer one colour, the averaged path is already exact.
+		if (carrier == 0 && std::all_of(layers + 1, layers + 3, [](const layer& l) { return !l.texels || l.texels->flat; }))
+			return 0;
+		carrier_sampler = layers[carrier].sampler;
+
+		// Sprite quads are a few metres across at most: 6 x 6 cells per triangle follow the smooth layers.
+		constexpr int kCells = 6;
+		struct vertex { float p[3]; float c[4]; float uv[3][2]; };
+		struct sprite_vertex { float x, y, z; DWORD color; float u, v; };
+		const auto* src = static_cast<const unsigned char*>(vertices);
+		auto read = [&](UINT i)
+		{
+			const unsigned char* sv = src + static_cast<size_t>(i) * stride;
+			vertex v {};
+			std::memcpy(v.p, sv + cur_decl_pos_off_, sizeof(v.p));
+			const DWORD c = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
+			v.c[0] = ((c >> 16) & 0xFF) / 255.0f; v.c[1] = ((c >> 8) & 0xFF) / 255.0f; v.c[2] = (c & 0xFF) / 255.0f; v.c[3] = (c >> 24) / 255.0f;
+			for (int l = 0; l < 3; l++)
+				if (layers[l].uv_off >= 0)
+					std::memcpy(v.uv[l], sv + layers[l].uv_off, sizeof(v.uv[l]));
+			return v;
+		};
+		auto vertex_of = [&](UINT i) -> UINT
+		{
+			if (!indices) return i;
+			return index_format == D3DFMT_INDEX32 ? static_cast<const uint32_t*>(indices)[i] : static_cast<const uint16_t*>(indices)[i];
+		};
+		auto pack = [&](const vertex& v)
+		{
+			float c[4] = { v.c[0], v.c[1], v.c[2], v.c[3] };
+			for (int l = 0; l < 3; l++)
+				if (l != carrier && layers[l].texels)
+				{
+					const auto s = sample_wrap(layers[l].texels->texels, layers[l].texels->width, layers[l].texels->height, v.uv[l][0], v.uv[l][1]);
+					for (int k = 0; k < 4; k++)
+						c[k] *= s[k];
+				}
+			auto byte = [](float x) { return static_cast<DWORD>(std::clamp(x * 255.0f + 0.5f, 0.0f, 255.0f)); };
+			return sprite_vertex { v.p[0], v.p[1], v.p[2],
+				byte(c[3]) << 24 | byte(c[0] * colour_scale) << 16 | byte(c[1] * colour_scale) << 8 | byte(c[2] * colour_scale),
+				v.uv[carrier][0], v.uv[carrier][1] };
+		};
+
+		masked_sprite_vertices_.clear();
+		UINT triangles = 0;
+		constexpr int kGridPoints = (kCells + 1) * (kCells + 2) / 2;
+		vertex grid[kGridPoints];
+		sprite_vertex packed[kGridPoints];
+		auto at = [&](int i, int j) -> const sprite_vertex& { return packed[i * (2 * kCells + 3 - i) / 2 + j]; };
+		auto emit = [&](const sprite_vertex& a, const sprite_vertex& b, const sprite_vertex& c)
+		{
+			for (const sprite_vertex* v : { &a, &b, &c })
+			{
+				const auto* bytes = reinterpret_cast<const unsigned char*>(v);
+				masked_sprite_vertices_.insert(masked_sprite_vertices_.end(), bytes, bytes + sizeof(*v));
+			}
+			++triangles;
+		};
+		for (UINT t = 0; t < prim_count; t++)
+		{
+			UINT idx[3];
+			if (prim == D3DPT_TRIANGLELIST) { idx[0] = vertex_of(3 * t); idx[1] = vertex_of(3 * t + 1); idx[2] = vertex_of(3 * t + 2); }
+			else if (prim == D3DPT_TRIANGLESTRIP)
+			{
+				// Every other strip triangle is wound the other way round.
+				idx[0] = vertex_of(t); idx[1] = vertex_of(t + 1 + (t & 1)); idx[2] = vertex_of(t + 2 - (t & 1));
+			}
+			else { idx[0] = vertex_of(0); idx[1] = vertex_of(t + 1); idx[2] = vertex_of(t + 2); }
+			if (idx[0] >= count || idx[1] >= count || idx[2] >= count)
+				continue;
+			const vertex corner[3] = { read(idx[0]), read(idx[1]), read(idx[2]) };
+			// Barycentric grid: point (i, j) = corner0 + i/n (corner1 - corner0) + j/n (corner2 - corner0).
+			for (int i = 0; i <= kCells; i++)
+				for (int j = 0; i + j <= kCells; j++)
+				{
+					const float w1 = static_cast<float>(i) / kCells, w2 = static_cast<float>(j) / kCells, w0 = 1.0f - w1 - w2;
+					vertex& g = grid[i * (2 * kCells + 3 - i) / 2 + j];
+					auto mix = [&](auto member, int n)
+					{
+						for (int k = 0; k < n; k++)
+							(g.*member)[k] = w0 * (corner[0].*member)[k] + w1 * (corner[1].*member)[k] + w2 * (corner[2].*member)[k];
+					};
+					mix(&vertex::p, 3);
+					mix(&vertex::c, 4);
+					for (int l = 0; l < 3; l++)
+						for (int k = 0; k < 2; k++)
+							g.uv[l][k] = w0 * corner[0].uv[l][k] + w1 * corner[1].uv[l][k] + w2 * corner[2].uv[l][k];
+				}
+			for (int p = 0; p < kGridPoints; p++)
+				packed[p] = pack(grid[p]);
+			for (int i = 0; i < kCells; i++)
+				for (int j = 0; i + j < kCells; j++)
+				{
+					emit(at(i, j), at(i + 1, j), at(i, j + 1));
+					if (i + j + 1 < kCells)
+						emit(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
+				}
+		}
+		return triangles;
 	}
 
 	bool ffp_state::cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces)
