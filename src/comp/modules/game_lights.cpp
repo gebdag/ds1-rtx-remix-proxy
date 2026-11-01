@@ -690,11 +690,24 @@ namespace comp
 			// the wall and lights it as a bright disc. The light's intensity (radiance x
 			// emitter area) stays what it was with dwindle begin as the emitter.
 			const float range = std::max(0.01f, src.dwindle_end * radius_scale);
-			const float emitter = emitter_radius_;
+			// A custom light set up as a Remix light keeps its own sphere, cone focus and volumetric scale.
+			const bool physical = row.kind == kind::custom && src.physical;
+			const float emitter = physical ? src.emitter_radius : emitter_radius_;
+			const float focus = physical && src.spot_cone_deg > 0.0f ? src.spot_focus : 0.0f;
+			const float volumetric = physical ? src.volumetric_scale : 1.0f;
 			const auto* o = find_override(row.key);
 			const float* colour = o && o->recolour ? o->colour : row.colour;
 			remixapi_Float3D radiance;
-			if (const bool game_falloff = game_falloff_ && kind_game_falloff_[static_cast<int>(row.kind)])
+			// Custom lights choose the game's falloff per light; the other sources by the switches.
+			const bool game_falloff = row.kind == kind::custom ? !physical
+				: game_falloff_ && kind_game_falloff_[static_cast<int>(row.kind)];
+			if (physical)
+			{
+				// Remix's own units: the radiance the light was given (colour x intensity x 2^exposure), only
+				// the list's per-light edits (brightness, solo) on top.
+				radiance = { colour[0] * mult, colour[1] * mult, colour[2] * mult };
+			}
+			else if (game_falloff)
 			{
 				// The game's falloff (rtx.ds1Lights.falloffTable): Remix lights the surface with irradiance
 				// pi * radiance * att(d)^2.2, and a diffuse surface returns albedo / pi of that, so
@@ -746,7 +759,9 @@ namespace comp
 				light.sphere.position.x == position.x &&
 				light.sphere.position.y == position.y &&
 				light.sphere.position.z == position.z &&
-				light.sphere.radius == std::max(0.01f, emitter) &&
+				light.sphere.radius == std::max(0.001f, emitter) &&
+				light.sphere.volumetricRadianceScale == volumetric &&
+				light.sphere.shaping_value.focusExponent == focus &&
 				light.info.radiance.x == radiance.x &&
 				light.info.radiance.y == radiance.y &&
 				light.info.radiance.z == radiance.z &&
@@ -764,8 +779,8 @@ namespace comp
 				light.sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
 				light.sphere.pNext = nullptr;
 				light.sphere.position = position;
-				light.sphere.radius = std::max(0.01f, emitter);
-				// A spotlight (custom lights): its cone, with no focus beyond the cone's softness.
+				light.sphere.radius = std::max(0.001f, emitter);
+				// A spotlight (custom lights): its cone, and for a Remix light its focus exponent.
 				light.sphere.shaping_hasvalue = src.spot_cone_deg > 0.0f ? TRUE : FALSE;
 				light.sphere.shaping_value = {};
 				if (light.sphere.shaping_hasvalue)
@@ -773,9 +788,9 @@ namespace comp
 					light.sphere.shaping_value.direction = { src.spot_dir[0], src.spot_dir[1], src.spot_dir[2] };
 					light.sphere.shaping_value.coneAngleDegrees = src.spot_cone_deg;
 					light.sphere.shaping_value.coneSoftness = src.spot_softness;
-					light.sphere.shaping_value.focusExponent = 0.0f;
+					light.sphere.shaping_value.focusExponent = focus;
 				}
-				light.sphere.volumetricRadianceScale = 1.0f;
+				light.sphere.volumetricRadianceScale = volumetric;
 
 				light.info.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
 				light.info.pNext = &light.sphere;
@@ -1546,6 +1561,11 @@ namespace comp
 				ImGui::TableNextColumn();
 				if (lk == kind::sun || lk == kind::unresolved)
 					ImGui::TextDisabled("-");
+				else if (lk == kind::custom)
+				{
+					ImGui::TextDisabled("per light");
+					tip("Each custom light is a Remix light unless its 'Use the game's falloff' is ticked (Custom lights).");
+				}
 				else
 				{
 					ImGui::BeginDisabled(!game_falloff_);
@@ -1582,16 +1602,18 @@ namespace comp
 	void game_lights::scales_imgui()
 	{
 		ImGui::TextDisabled("For every light in the list. The sun and the player light have their own settings (select them).");
-		form_label("Brightness", "Every point light. 1 = the tuned default. Saved as [Lights] IntensityScale.");
+		form_label("Brightness", "Every point light but the custom Remix lights, which keep their own units.\n"
+			"1 = the tuned default. Saved as [Lights] IntensityScale.");
 		ImGui::SliderFloat("##intensity", &intensity_scale, 0.01f, 50.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
 		form_label("Fire stand-in brightness",
 			"Lights stood in for fire effects the game gives no light (fire breath, fire spells).\n"
 			"1 = torch to bonfire strength. Saved as [Lights] FireLightScale.");
 		ImGui::SliderFloat("##fire", &fire_light_scale, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
-		form_label("Reach", "How far every point light reaches: its dwindle begin and end times this. Saved as [Lights] RadiusScale.");
+		form_label("Reach", "How far every point light reaches: its dwindle begin and end times this (not the custom Remix\n"
+			"lights). Saved as [Lights] RadiusScale.");
 		ImGui::SliderFloat("##reach", &radius_scale, 0.1f, 10.0f, "x %.2f");
-		form_label("Emitter size", "Radius of the sphere Remix shines each point light from. Bigger = softer shadows,\n"
-			"and a big sphere next to a wall lights it as a bright disc. This session.");
+		form_label("Emitter size", "Radius of the sphere Remix shines each point light from (custom Remix lights have their\n"
+			"own). Bigger = softer shadows, and a big sphere next to a wall lights it as a bright disc. This session.");
 		ImGui::SliderFloat("##emitter", &emitter_radius_, 0.01f, 2.0f, "%.2f m");
 		form_label("Most lights drawn", "Lights past this count are listed as 'over the limit'. This session.");
 		ImGui::SliderInt("##max", &max_active_lights_, 0, 512, max_active_lights_ == 0 ? "no limit" : "%d");
@@ -1858,7 +1880,8 @@ namespace comp
 				ImGui::TableNextColumn();
 				changed |= ImGui::Checkbox(std::format("##custom_on{}", i).c_str(), &l.enabled);
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(l.spot ? "spotlight" : "point");
+				ImGui::TextUnformatted(l.spot ? (l.game_falloff ? "spotlight, game falloff" : "spotlight")
+					: (l.game_falloff ? "point, game falloff" : "point"));
 				ImGui::TableNextColumn();
 				ImGui::Text("%.1f, %.1f, %.1f", l.pos[0], l.pos[1], l.pos[2]);
 			}
@@ -1888,12 +1911,31 @@ namespace comp
 			}
 			form_label("Colour", nullptr);
 			changed |= ImGui::ColorEdit3("##cl_colour", l.colour);
-			form_label("Intensity", "Brightness on top of the colour: 1 = the colour as is (the file stores it as a percentage).");
-			changed |= ImGui::DragFloat("##cl_intensity", &l.intensity, 0.01f, 0.0f, 50.0f, "%.2f");
-			form_label("Full strength out to", "Dwindle begin: the light is at full strength out to here...");
-			changed |= ImGui::DragFloat("##cl_begin", &l.dwindle_begin, 0.05f, 0.0f, l.dwindle_end, "%.2f m");
-			form_label("Fades to zero at", "... and fades linearly to nothing at this distance (dwindle end).");
-			changed |= ImGui::DragFloat("##cl_end", &l.dwindle_end, 0.05f, 0.05f, 200.0f, "%.2f m");
+			changed |= form_checkbox("Use the game's falloff", "##cl_game", &l.game_falloff,
+				"Off: a plain Remix sphere light (physical inverse-square falloff, Remix's units).\n"
+				"On: lit as the game lights its own: full strength out to a distance, then linearly to zero.");
+			if (!l.game_falloff)
+			{
+				form_label("Intensity", "Radiance on top of the colour, in Remix's units (as the Remix toolkit's light Intensity).");
+				changed |= ImGui::DragFloat("##cl_rintensity", &l.remix_intensity, 0.1f, 0.0f, 100000.0f, "%.2f",
+					ImGuiSliderFlags_Logarithmic);
+				form_label("Exposure", "Radiance x 2^exposure, in stops (as the toolkit's Exposure).");
+				changed |= ImGui::DragFloat("##cl_exposure", &l.exposure, 0.05f, -20.0f, 20.0f, "%.2f EV");
+				form_label("Radius", "The emitting sphere. Bigger = softer shadows; it also sets how bright the light looks up close.");
+				changed |= ImGui::DragFloat("##cl_radius", &l.radius, 0.005f, 0.001f, 10.0f, "%.3f m");
+				form_label("Volumetric scale", "How strongly it lights Remix's volumetric fog (1 = as bright as on surfaces).");
+				changed |= ImGui::DragFloat("##cl_volumetric", &l.volumetric, 0.01f, 0.0f, 10.0f, "%.2f");
+			}
+			else
+			{
+				form_label("Intensity", "Brightness on top of the colour, as the game's light rows give it: 1 = the colour as is\n"
+					"(the file stores it as a percentage).");
+				changed |= ImGui::DragFloat("##cl_intensity", &l.intensity, 0.01f, 0.0f, 50.0f, "%.2f");
+				form_label("Full strength out to", "Dwindle begin: the light is at full strength out to here...");
+				changed |= ImGui::DragFloat("##cl_begin", &l.dwindle_begin, 0.05f, 0.0f, l.dwindle_end, "%.2f m");
+				form_label("Fades to zero at", "... and fades linearly to nothing at this distance (dwindle end).");
+				changed |= ImGui::DragFloat("##cl_end", &l.dwindle_end, 0.05f, 0.05f, 200.0f, "%.2f m");
+			}
 			changed |= form_checkbox("Spotlight", "##cl_spot", &l.spot, "Shines in a cone instead of all around.");
 			if (l.spot)
 			{
@@ -1909,6 +1951,11 @@ namespace comp
 				changed |= ImGui::SliderFloat("##cl_cone", &l.cone_deg, 1.0f, 89.0f, "%.1f deg");
 				form_label("Cone edge softness", "0 = a hard edge, 1 = fades over the whole cone.");
 				changed |= ImGui::SliderFloat("##cl_soft", &l.softness, 0.0f, 1.0f, "%.2f");
+				if (!l.game_falloff)
+				{
+					form_label("Focus", "Concentrates the light towards the aim within the cone (the toolkit's focus exponent; 0 = even).");
+					changed |= ImGui::DragFloat("##cl_focus", &l.focus, 0.05f, 0.0f, 100.0f, "%.2f");
+				}
 			}
 			if (ImGui::Button("Delete this light"))
 			{

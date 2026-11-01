@@ -32,12 +32,26 @@ namespace comp::game::custom_lights
 			l.colour[1] = std::clamp(g, 0, 255) / 255.0f;
 			l.colour[2] = std::clamp(b, 0, 255) / 255.0f;
 			l.intensity = pct * 0.01f;
+			// A line without the remix tail predates Remix lights here: it keeps the game's falloff.
+			l.game_falloff = true;
 			std::string word;
 			while (in >> word)
 			{
-				if (word == "spot")
+				if (word == "remix")
+				{
+					l.game_falloff = !(in >> l.remix_intensity >> l.exposure >> l.radius >> l.volumetric);
+				}
+				else if (word == "game")
+				{
+					l.game_falloff = true;
+				}
+				else if (word == "spot")
 				{
 					l.spot = static_cast<bool>(in >> l.dir[0] >> l.dir[1] >> l.dir[2] >> l.cone_deg >> l.softness);
+				}
+				else if (word == "focus")
+				{
+					in >> l.focus;
 				}
 				else if (word == "off")
 				{
@@ -110,11 +124,16 @@ namespace comp::game::custom_lights
 			point_lights::light p {};
 			p.slot = kFirstSlot + static_cast<int>(i);
 			p.x = l.pos[0]; p.y = l.pos[1]; p.z = l.pos[2];
-			p.r = l.colour[0] * l.intensity;
-			p.g = l.colour[1] * l.intensity;
-			p.b = l.colour[2] * l.intensity;
+			const float scale = l.game_falloff ? l.intensity : l.remix_intensity * std::exp2(l.exposure);
+			p.r = l.colour[0] * scale;
+			p.g = l.colour[1] * scale;
+			p.b = l.colour[2] * scale;
 			p.dwindle_begin = l.dwindle_begin;
 			p.dwindle_end = l.dwindle_end;
+			p.physical = !l.game_falloff;
+			p.emitter_radius = std::max(0.001f, l.radius);
+			p.spot_focus = std::max(0.0f, l.focus);
+			p.volumetric_scale = std::max(0.0f, l.volumetric);
 			p.has_params = true;
 			p.source = point_lights::param_source::custom;
 			if (l.spot)
@@ -145,7 +164,9 @@ namespace comp::game::custom_lights
 			return false;
 		}
 		file << "# Hand-placed lights for " << g_map << " (F4 > Lights > Custom lights writes this file).\n"
-			<< "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [spot dx dy dz coneDeg softness]  [off]\n";
+			<< "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]\n"
+			<< "#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]\n"
+			<< "# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).\n";
 		for (const auto& l : g_lights)
 		{
 			auto byte = [](float v) { return static_cast<int>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
@@ -153,8 +174,12 @@ namespace comp::game::custom_lights
 			std::replace(name.begin(), name.end(), ' ', '_');
 			file << std::format("{:.3f} {:.3f} {:.3f}  {:.3f} {:.3f}  {} {} {}  {:.0f}  {}", l.pos[0], l.pos[1], l.pos[2],
 				l.dwindle_begin, l.dwindle_end, byte(l.colour[0]), byte(l.colour[1]), byte(l.colour[2]), l.intensity * 100.0f, name);
+			if (!l.game_falloff)
+				file << std::format("  remix {:.3f} {:.2f} {:.3f} {:.2f}", l.remix_intensity, l.exposure, l.radius, l.volumetric);
 			if (l.spot)
 				file << std::format("  spot {:.4f} {:.4f} {:.4f} {:.1f} {:.2f}", l.dir[0], l.dir[1], l.dir[2], l.cone_deg, l.softness);
+			if (l.spot && !l.game_falloff && l.focus > 0.0f)
+				file << std::format("  focus {:.2f}", l.focus);
 			if (!l.enabled)
 				file << "  off";
 			file << '\n';

@@ -11,22 +11,37 @@ namespace comp::game::custom_lights
 	// write the same file.
 	//
 	// One light per line:
-	//   x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [spot dx dy dz coneDeg softness]
-	// colour 0-255 times intensityPct / 100 as in the game's POINT_LIGHT_BANK rows; the optional spot
-	// tail aims the light along (dx, dy, dz) with a cone of coneDeg (half angle) and an edge softness 0-1.
+	//   x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+	//   [spot dx dy dz coneDeg softness] [focus exponent] [off]
+	// With the remix tail the light is a plain Remix sphere light: radiance = colour 0-255 / 255 x intensity
+	// x 2^exposure, from a sphere of that radius (metres). Without it, it is lit as the game lights its own:
+	// colour times intensityPct / 100 as in the game's POINT_LIGHT_BANK rows, full strength out to
+	// dwindleBegin and fading linearly to nothing at dwindleEnd. Both sets are kept, so a light can be
+	// switched between them. The optional spot tail aims the light along (dx, dy, dz) with a cone of coneDeg
+	// (half angle), an edge softness 0-1 and, for Remix lights, a focus exponent.
 	struct light
 	{
 		std::string name = "light";
 		float pos[3] = {};
+		float colour[3] = { 1.0f, 0.85f, 0.6f };   // 0-1
+		bool enabled = true;
+		// Lit with the game's falloff instead of as a Remix light.
+		bool game_falloff = false;
+		// Remix sphere light.
+		float remix_intensity = 50.0f;
+		float exposure = 0.0f;                      // EV: radiance x 2^exposure
+		float radius = 0.1f;                        // metres
+		float volumetric = 1.0f;                    // volumetric radiance scale
+		// The game's falloff.
 		float dwindle_begin = 0.5f;
 		float dwindle_end = 4.0f;
-		float colour[3] = { 1.0f, 0.85f, 0.6f };   // 0-1
 		float intensity = 1.0f;                     // intensityPct / 100
-		bool enabled = true;
+		// Spotlight.
 		bool spot = false;
 		float dir[3] = { 0.0f, -1.0f, 0.0f };
 		float cone_deg = 30.0f;
 		float softness = 0.2f;
+		float focus = 0.0f;                         // Remix lights only
 	};
 
 	// Slot ids of the lights get() hands out, kFirstSlot + their index in edit(): past the engine's slots,

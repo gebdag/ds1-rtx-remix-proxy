@@ -43,6 +43,13 @@ namespace comp::game::point_lights
 		float spot_dir[3];
 		float spot_cone_deg;
 		float spot_softness;
+		// A custom light set up as a plain Remix light (custom_lights): r, g, b are then its radiance as is,
+		// and these its sphere radius, cone focus exponent and volumetric radiance scale. Only read for
+		// source custom.
+		bool physical;
+		float emitter_radius;
+		float spot_focus;
+		float volumetric_scale;
 	};
 
 	// Human-readable class of a resolved entity ("Bank", "Direct", "LerpBank", "?").
