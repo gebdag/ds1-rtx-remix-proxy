@@ -761,6 +761,10 @@ namespace comp
 						dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
 						dev->SetRenderState(D3DRS_ALPHAREF, kShellCutoutAlphaRef);
 						dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+						// The flask has no holes. And it must be fully opaque for its subsurface scattering: the sample rays
+						// are a ray query that commits no non-opaque hit, so they miss a cutout and its diffuse goes black.
+						if (flask)
+							dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 					}
 					const bool tinted = ffp.apply_draw_tint(dev);
 					const bool effect = ffp.apply_sp_effect(dev);
