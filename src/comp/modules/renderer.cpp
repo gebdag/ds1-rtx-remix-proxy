@@ -240,7 +240,7 @@ namespace comp
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
-			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT));
+			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -462,7 +462,7 @@ namespace comp
 		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
-			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT));
+			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());

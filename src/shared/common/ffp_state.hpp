@@ -385,6 +385,13 @@ namespace shared::common
 		//                   haze tail. c100 is its glow (Bed of Chaos's glyph shells: 10). See
 		//                   game/atmosphere.hpp tag_self_lit.
 		static constexpr uint32_t PS_UNLIT = 1u << 7;
+
+		// A rigid mesh lit by three directional lights and a hemisphere with no probe (FRPG_Phn_*_HemDir3*). Among
+		// blended draws, every one in 177 captures is an effect model (s####), never a surface of the map.
+		bool cur_is_lit_effect_mesh() const
+		{
+			return (cur_ps_light_flags_ & PS_LIGHT_DIR3) && !(cur_ps_light_flags_ & PS_AMBIENT) && !cur_decl_is_skinned();
+		}
 		//   PS_SP_EFFECT    c136, c137 and c138: the FRPG_Gst_* family the game switches a character to while a
 		//                   SpEffect colours it (phantoms, Iron Flesh). It adds a colour by view angle, from c136
 		//                   (rim) to c137 (facing the camera) times c138.x, and overrides c101 / c102.

@@ -3179,6 +3179,9 @@ namespace shared::common
 		// where they came near one.
 		if (cur_ps_light_flags_ & PS_UNLIT)
 			return false;
+		// Nor an effect mesh the game lights itself (Quelaag's lava crust). Remix had it dark on the ground.
+		if (cur_is_lit_effect_mesh())
+			return false;
 
 		// Its own marker: unlike the coplanar overlay layer of a two-layer material, a skirt can hang a
 		// little above what it covers, and the runtime lights it there (SKIRT_DECAL_MARKER).
@@ -3199,7 +3202,8 @@ namespace shared::common
 		// marker, so Remix composites it as the game does (alpha-blended in gamma space, lighting nothing),
 		// with its exposure count. Its colour is c100 times the texture, which the self-lit tag carries
 		// (atmosphere.hpp tag_self_lit). Additive ones (the bonfire and torch flames) keep their own path.
-		if (!dev || !(cur_ps_light_flags_ & PS_UNLIT) || cur_decl_is_skinned())
+		// So is a lit effect mesh, whose light goes in that tag too.
+		if (!dev || !((cur_ps_light_flags_ & PS_UNLIT) || cur_is_lit_effect_mesh()) || cur_decl_is_skinned())
 			return false;
 		DWORD blend_enabled = FALSE, src = 0, dst = 0;
 		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_enabled);

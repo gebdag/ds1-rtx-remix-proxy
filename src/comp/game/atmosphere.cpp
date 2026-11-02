@@ -586,7 +586,22 @@ namespace comp::game::atmosphere
 		}
 	}
 
-	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit)
+	namespace
+	{
+		// FRPG_Phn_*_HemDir3*'s light on a surface tilted 45 degrees from up, one value for its waves: three directional
+		// lights (c92-c94, colours c95-c97), a hemisphere (lerp(c99, c98, N.y / 2 + 1 / 2)). Its point lights are small.
+		float lit_effect_light(const float* ps_const, int channel)
+		{
+			constexpr float kUp = 0.7071f;
+			float light = 0.0f;
+			for (int i = 0; i < 3; i++)
+				light += std::max(-ps_const[(92 + i) * 4 + 1] * kUp, 0.0f) * ps_const[(95 + i) * 4 + channel];
+			const float t = kUp * 0.5f + 0.5f;
+			return light + ps_const[99 * 4 + channel] + (ps_const[98 * 4 + channel] - ps_const[99 * 4 + channel]) * t;
+		}
+	}
+
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect)
 	{
 		DWORD tag = 0;
 		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
@@ -595,22 +610,19 @@ namespace comp::game::atmosphere
 		// flame layers, each (1, 0.39, 0.2) * texture, clip red and climb through orange to yellow there, while a
 		// linear sum stays red (frame_20261101_135237).
 		DWORD blended = FALSE, dst_blend = 0;
-		if (unlit && dev)
+		if ((unlit || lit_effect) && dev)
 		{
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
 			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
 		}
-		if (unlit && blended && ps_const)
+		if ((unlit || lit_effect) && blended && ps_const)
 		{
-			// The game's light for it is c100 alone. At least 1 per channel, as for additive draws below.
-			// An additive layer has no exposure count like the alpha-blended ones' unlit marker
-			// (ffp_state::apply_unlit_layer_marker): its colour carries the game's c135.x / c135.y.
+			// The game's light for it is c100 alone, or c100 * the lit effect mesh's light. At least 1 per channel, as for
+			// additive draws below.
 			const float* diffuse = &ps_const[100 * 4];
-			const float* exposure = &ps_const[135 * 4];
-			const float scale = dst_blend == D3DBLEND_ONE && exposure[1] > 0.0f ? exposure[0] / exposure[1] : 1.0f;
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
-				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c] * scale, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c] * (lit_effect ? lit_effect_light(ps_const, c) : 1.0f), 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 		}
 		else if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
 		{
