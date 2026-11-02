@@ -27,6 +27,7 @@ using comp::tracer;
 #include "../game/atmosphere.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/lightmap_sun.hpp"
+#include "../game/hud_scale.hpp"
 #include "lookdev_capture.hpp"
 
 namespace {
@@ -1283,6 +1284,7 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		draw_split_scope split_scope;
+		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		// UP draws (sprites, UI, post passes) carry no haze set, self-lit ambient or lightmap of their own.
@@ -1371,6 +1373,7 @@ namespace comp
 			m_pIDirect3DDevice9->SetRenderState(D3DRS_SRCBLEND, src_blend);
 			return hr;
 		}
+		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);

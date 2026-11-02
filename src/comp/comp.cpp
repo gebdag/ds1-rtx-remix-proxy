@@ -17,6 +17,7 @@
 #include "game/atmosphere.hpp"
 #include "game/map_lights.hpp"
 #include "game/swamp.hpp"
+#include "game/hud_scale.hpp"
 #include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/dlss_nr.hpp"
@@ -175,6 +176,7 @@ namespace comp
 			shared::common::loader::module_loader::register_module(std::make_unique<lookdev_capture>());
 
 		game::d3dx_texture_watch::install();
+		game::hud_scale::install();
 
 		MH_EnableHook(MH_ALL_HOOKS);
 	}

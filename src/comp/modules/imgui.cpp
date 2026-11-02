@@ -16,6 +16,7 @@
 #include "../game/fps_unlock.hpp"
 #include "../game/camera.hpp"
 #include "../game/cheats.hpp"
+#include "../game/hud_scale.hpp"
 #include "../game/debug_tools.hpp"
 #include "../game/frustum_culling.hpp"
 #include "../game/input_customizer.hpp"
@@ -970,6 +971,7 @@ namespace comp
 			ADD_TAB("Cheats", game::cheats::tab_imgui);
 			ADD_TAB("Debug", game::debug_tools::tab_imgui);
 			ADD_TAB("Lights", tab_lights);
+			ADD_TAB("HUD", game::hud_scale::tab_imgui);
 			ADD_TAB("Dev", tab_dev);
 			ADD_TAB("About", tab_about);
 			shared::globals::imgui_select_tab.clear();
