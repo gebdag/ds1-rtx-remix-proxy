@@ -232,7 +232,11 @@ namespace
 
 	// ---- one captured frame ----
 
-	int run_file(proxy_api& proxy, const std::filesystem::path& capture_path, const std::unordered_set<uint32_t>& drop_draws)
+	// A replayed frame never changes, so running flat out only heats the GPU. Enough for the denoiser and
+	// exposure to settle and the menus to stay usable; --fps 0 runs uncapped.
+	constexpr int kReplayFps = 30;
+
+	int run_file(proxy_api& proxy, const std::filesystem::path& capture_path, const std::unordered_set<uint32_t>& drop_draws, int max_fps)
 	{
 		capture_file cap;
 		if (!cap.open(capture_path.wstring()))
@@ -274,6 +278,13 @@ namespace
 				swprintf_s(title, L"DS1 lookdev - Remix - %ls - %.1f fps - F4 proxy, Alt+X Remix",
 					capture_path.filename().c_str(), fps.fps);
 				SetWindowTextW(hwnd, title);
+			}
+			if (max_fps > 0)
+			{
+				const auto spent = GetTickCount64() - t0;
+				const auto frame_ms = static_cast<uint64_t>(1000 / max_fps);
+				if (spent < frame_ms)
+					Sleep(static_cast<DWORD>(frame_ms - spent));
 			}
 		}
 
@@ -619,12 +630,14 @@ int wmain(int argc, wchar_t** argv)
 	std::filesystem::path capture_path;
 	std::filesystem::path proxy_path = L"d3d9_lookdev.dll";
 	bool live = false;
+	int max_fps = kReplayFps;
 	std::unordered_set<uint32_t> drop_draws;
 	for (int i = 1; i < argc; i++)
 	{
 		const std::wstring a = argv[i];
 		if (a == L"--proxy" && i + 1 < argc) proxy_path = argv[++i];
 		else if (a == L"--live") live = true;
+		else if (a == L"--fps" && i + 1 < argc) max_fps = _wtoi(argv[++i]);
 		else if (a == L"--drop" && i + 1 < argc)
 		{
 			// Comma-separated draw indices, e.g. --drop 240,343
@@ -641,7 +654,7 @@ int wmain(int argc, wchar_t** argv)
 	}
 	if (capture_path.empty() && !live)
 	{
-		std::printf("usage: ds1_lookdev_host (<capture.ds1cap> [--drop i,j,...] | --live) [--proxy <dll>] -lookdev-host\n");
+		std::printf("usage: ds1_lookdev_host (<capture.ds1cap> [--drop i,j,...] [--fps n] | --live) [--proxy <dll>] -lookdev-host\n");
 		return 2;
 	}
 	if (!std::wstring(GetCommandLineW()).contains(L"-lookdev-host"))
@@ -654,7 +667,7 @@ int wmain(int argc, wchar_t** argv)
 	if (!proxy.load(proxy_path))
 		return 2;
 
-	const int rc = live ? run_live(proxy) : run_file(proxy, capture_path, drop_draws);
+	const int rc = live ? run_live(proxy) : run_file(proxy, capture_path, drop_draws, max_fps);
 	proxy.d3d->Release();
 	return rc;
 }
