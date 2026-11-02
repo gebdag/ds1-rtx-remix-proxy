@@ -9,7 +9,7 @@ namespace comp::game::ffx_lights
 	// every FFX without a light node). Every live instance of a listed effect (ffx_instances) gets its
 	// light at the instance's position. An instance can far outlive what it shows (Moonlight Butterfly's
 	// attack effect, 0.5 s of visuals, at age 300 s and more), so a brief effect is lit only for its visual
-	// lifetime, or while its emitters run, and then fades out; a persistent one as long as it lives.
+	// lifetime, or while its emitters run, and then fades out; a persistent one until only leftovers remain.
 	// game_lights draws them as the "Unlit effects" kind.
 	struct entry
 	{

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace comp::game::ffx_lights
 {
@@ -27,6 +28,9 @@ namespace comp::game::ffx_lights
 		// time constant and goes when it is too faint to matter.
 		constexpr float kFadeSeconds = 0.25f;
 		constexpr float kFadeOff = 0.01f;
+		// Seconds past its visual life after which what keeps a brief effect lit is logged, once per effect.
+		constexpr float kLingerLog = 5.0f;
+		std::unordered_set<int> g_lingering, g_ended;
 
 		std::unordered_map<int, entry> g_table;
 		bool g_loaded = false;
@@ -134,8 +138,22 @@ namespace comp::game::ffx_lights
 			if (fresh_fade || f->second.ffx_id != inst.ffx_id)
 				f->second = { inst.ffx_id, 1.0f, frame, now };
 			f->second.seen = frame;
-			if (!c.e->persistent && std::max(ffx_instances::age(inst.address), now - f->second.first_seen) >= c.e->visual_life)
-				f->second.level = f->second.level >= kFadeOff && ffx_instances::still_running(inst.address) ? 1.0f : f->second.level * decay;
+			if (const float age = std::max(ffx_instances::age(inst.address), now - f->second.first_seen); age >= c.e->visual_life)
+			{
+				// "Persistent" is inferred for many effects (a character's event effects), which then play once and
+				// stay behind like the brief ones. One with no children at all draws by itself: it stays lit.
+				int working = 0;
+				const auto children = ffx_instances::child_state(inst.address, &working);
+				const bool lit = c.e->persistent ? children != ffx_instances::children::leftover
+					: f->second.level >= kFadeOff && children == ffx_instances::children::running;
+				f->second.level = lit ? 1.0f : f->second.level * decay;
+				if (lit && !c.e->persistent && age > c.e->visual_life + kLingerLog && g_lingering.insert(inst.ffx_id).second)
+					shared::common::log("FfxLights", std::format("effect {} (under {}) lit {:.0f} s past its visual life {:.2f} s, kept on by child {}",
+						inst.ffx_id, ffx_instances::top_effect_id(inst.address), age - c.e->visual_life, c.e->visual_life, working));
+				if (!lit && c.e->persistent && f->second.level >= kFadeOff && g_ended.insert(inst.ffx_id).second)
+					shared::common::log("FfxLights", std::format("persistent effect {} (under {}) ends at age {:.1f} s: only leftovers remain",
+						inst.ffx_id, ffx_instances::top_effect_id(inst.address), age));
+			}
 			c.level = f->second.level;
 			if (c.level < kFadeOff)
 				continue;

@@ -26,9 +26,12 @@ namespace comp::game::ffx_instances
 	// How long an instance has run, in seconds (scaled by its group's time scale, as its draw host sees it).
 	float age(unsigned address);
 
-	// Whether an instance still has child effects at work. Its emitters are its child instances, removed as
-	// they finish, so an instance can outlive what it shows by minutes.
-	bool still_running(unsigned address);
+	// What an instance's child effects are doing. Its emitters are its child instances, removed as they finish,
+	// and what stays behind is one dormant library effect, so an instance can outlive what it shows by minutes.
+	enum class children { none, leftover, running };
+
+	// working: the first child at work, for running.
+	children child_state(unsigned address, int* working = nullptr);
 
 	// How many instances the last walk visited.
 	int last_walk_count();

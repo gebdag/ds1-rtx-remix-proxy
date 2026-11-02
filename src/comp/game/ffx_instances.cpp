@@ -157,23 +157,29 @@ namespace comp::game::ffx_instances
 		return *reinterpret_cast<const float*>(&bits);
 	}
 
-	bool still_running(unsigned address)
+	children child_state(unsigned address, int* working)
 	{
 		DWORD stack[kMaxTreeNodes];
 		int depth = 0;
 		if (const DWORD child = read_dword(address + kInstanceChild))
 			stack[depth++] = child;
+		else
+			return children::none;
 		for (int visited = 0; depth > 0 && visited < kMaxTreeNodes; ++visited)
 		{
 			const DWORD node = stack[--depth];
-			if (effect_id(node) != kLeftoverEffect)
-				return true;
+			if (const int id = effect_id(node); id != kLeftoverEffect)
+			{
+				if (working)
+					*working = id;
+				return children::running;
+			}
 			if (const DWORD next = read_dword(node + kInstanceNext); next && depth < kMaxTreeNodes)
 				stack[depth++] = next;
 			if (const DWORD child = read_dword(node + kInstanceChild); child && depth < kMaxTreeNodes)
 				stack[depth++] = child;
 		}
-		return false;
+		return children::leftover;
 	}
 
 	int last_walk_count() { return static_cast<int>(g_instances.size()); }
