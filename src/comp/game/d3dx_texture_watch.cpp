@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "d3dx_texture_watch.hpp"
+#include "tex_override.hpp"
 #include "texture_names.hpp"
 #include "../modules/crash_context.hpp"
 
@@ -62,6 +63,20 @@ namespace comp::game::d3dx_texture_watch
 			const auto dds = dds_format_tag(src, src_size);
 			note_first_use(dds);
 
+			// A texture pack's texture, at the size and format of its file. The names come from the game's own
+			// data: it holds the TPF header the file has not got.
+			if (std::vector<char> file; tex_override::read_replacement(src, src_size, file))
+			{
+				const auto replaced = o_create_texture(device, file.data(), static_cast<UINT>(file.size()), D3DX_DEFAULT, D3DX_DEFAULT,
+					mip_levels, usage, D3DFMT_FROM_FILE, pool, filter, mip_filter, color_key, src_info, palette, out);
+				if (SUCCEEDED(replaced) && out && *out)
+				{
+					texture_names::on_d3dx_created(*out, src, src_size);
+					return replaced;
+				}
+				tex_override::note_failed(src, src_size, replaced);
+			}
+
 			const crash_context::stopwatch sw;
 			const auto hr = o_create_texture(device, src, src_size, width, height, mip_levels, usage,
 				format, pool, filter, mip_filter, color_key, src_info, palette, out);
@@ -100,6 +115,8 @@ namespace comp::game::d3dx_texture_watch
 
 	void install()
 	{
+		tex_override::init();
+
 		// Hooking the exports covers every call site without touching the IAT.
 		const auto module = GetModuleHandleA("d3dx9_43.dll");
 		if (!module)
