@@ -9,6 +9,46 @@ namespace shared::common
 		return instance;
 	}
 
+	void config::resolution_settings::follow_game(UINT& back_buffer_width, UINT& back_buffer_height)
+	{
+		// The game can hand back the parameters this wrote into: that size is not its choice.
+		const bool ours = present_width && back_buffer_width == present_width && back_buffer_height == present_height;
+		if (!ours)
+		{
+			game_width = back_buffer_width;
+			game_height = back_buffer_height;
+		}
+		auto remember = [](std::vector<uint32_t>& sizes, UINT width, UINT height)
+		{
+			const uint32_t size = (width << 16) | height;
+			if (width && height && std::find(sizes.begin(), sizes.end(), size) == sizes.end())
+				sizes.push_back(size);
+		};
+		remember(earlier_render, render_width, render_height);
+		remember(earlier_present, present_width, present_height);
+		const bool manual_render = ini_render_width && ini_render_height;
+		const bool manual_present = ini_present_width && ini_present_height;
+		render_width = manual_render ? ini_render_width : game_width;
+		render_height = manual_render ? ini_render_height : game_height;
+		present_width = manual_present ? ini_present_width : render_width;
+		present_height = manual_present ? ini_present_height : render_height;
+		if (render_width && render_height)
+		{
+			back_buffer_width = present_width;
+			back_buffer_height = present_height;
+		}
+	}
+
+	bool config::resolution_settings::was_render_size(UINT width, UINT height) const
+	{
+		return std::find(earlier_render.begin(), earlier_render.end(), (width << 16) | height) != earlier_render.end();
+	}
+
+	bool config::resolution_settings::was_present_size(UINT width, UINT height) const
+	{
+		return std::find(earlier_present.begin(), earlier_present.end(), (width << 16) | height) != earlier_present.end();
+	}
+
 	void config::load(const std::string& path)
 	{
 		ini_path_ = path;
@@ -238,12 +278,10 @@ namespace shared::common
 		sky.glass_split = get_bool("Sky", "GlassSplit", true);
 
 		// [Resolution]
-		resolution.render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));
-		resolution.render_height = static_cast<UINT>(get_int("Resolution", "RenderHeight", 0));
-		resolution.present_width = static_cast<UINT>(get_int("Resolution", "PresentWidth", 0));
-		resolution.present_height = static_cast<UINT>(get_int("Resolution", "PresentHeight", 0));
-		if (resolution.present_width == 0) resolution.present_width = resolution.render_width;
-		if (resolution.present_height == 0) resolution.present_height = resolution.render_height;
+		resolution.ini_render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));
+		resolution.ini_render_height = static_cast<UINT>(get_int("Resolution", "RenderHeight", 0));
+		resolution.ini_present_width = static_cast<UINT>(get_int("Resolution", "PresentWidth", 0));
+		resolution.ini_present_height = static_cast<UINT>(get_int("Resolution", "PresentHeight", 0));
 
 		// [Benchmark]
 		benchmark.settle_frames = get_int("Benchmark", "SettleFrames", 90);

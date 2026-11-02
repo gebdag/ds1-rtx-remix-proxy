@@ -358,10 +358,31 @@ namespace shared::common
 
 		struct resolution_settings
 		{
-			UINT render_width = 0;   // 0 = no override (use game default)
+			// The sizes in use, from follow_game. 0 until the game has asked for a device.
+			UINT render_width = 0;
 			UINT render_height = 0;
-			UINT present_width = 0;  // 0 = same as render_width
-			UINT present_height = 0; // 0 = same as render_height
+			UINT present_width = 0;
+			UINT present_height = 0;
+			// [Resolution] as the ini has it.
+			UINT ini_render_width = 0;   // 0 = the game's resolution
+			UINT ini_render_height = 0;
+			UINT ini_present_width = 0;  // 0 = same as the render size
+			UINT ini_present_height = 0;
+			// What the game last asked for.
+			UINT game_width = 0;
+			UINT game_height = 0;
+			// Sizes handed out before, encoded width << 16 | height.
+			std::vector<uint32_t> earlier_render;
+			std::vector<uint32_t> earlier_present;
+
+			// From the game's back buffer request at CreateDevice and Reset: works out the sizes in use and
+			// replaces the request with the present size. A size of 0 (the window's) leaves it all alone.
+			void follow_game(UINT& back_buffer_width, UINT& back_buffer_height);
+
+			// After a Reset the game remakes its render textures at the size it was given, not the 1024x720 and
+			// 1280x720 it first asked for: a request of that size is one of those.
+			bool was_render_size(UINT width, UINT height) const;
+			bool was_present_size(UINT width, UINT height) const;
 		} resolution;
 
 		struct benchmark_settings

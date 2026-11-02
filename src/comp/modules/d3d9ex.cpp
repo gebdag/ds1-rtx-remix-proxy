@@ -267,6 +267,38 @@ namespace {
 	// Lookdev mode is the vanilla reference: draws and render targets go to the
 	// device untouched, past every Remix-oriented route (prepass drop, UV
 	// expansion, sky/HUD markers, post-FX skip, category filters, RT redirects).
+	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
+	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
+	{
+		if (!pp)
+			return;
+		const UINT asked_width = pp->BackBufferWidth, asked_height = pp->BackBufferHeight;
+		auto& res = shared::common::config::get().resolution;
+		res.follow_game(pp->BackBufferWidth, pp->BackBufferHeight);
+		shared::common::log("Resolution", std::format("{}: BackBuffer {}x{} -> {}x{}, render {}x{}", where, asked_width, asked_height,
+			pp->BackBufferWidth, pp->BackBufferHeight, res.render_width, res.render_height));
+	}
+
+	// After a Reset the game sets viewports and scissors at the full size it remembers. True when (width, height) is
+	// such a size and the current target is another: this gives the target's.
+	bool remembered_size(IDirect3DDevice9* dev, UINT width, UINT height, UINT& target_width, UINT& target_height)
+	{
+		const auto& res = shared::common::config::get().resolution;
+		if (!res.was_render_size(width, height) && !res.was_present_size(width, height))
+			return false;
+		IDirect3DSurface9* target = nullptr;
+		if (FAILED(dev->GetRenderTarget(0, &target)) || !target)
+			return false;
+		D3DSURFACE_DESC desc {};
+		const bool known = SUCCEEDED(target->GetDesc(&desc));
+		target->Release();
+		if (!known || (desc.Width == width && desc.Height == height))
+			return false;
+		target_width = desc.Width;
+		target_height = desc.Height;
+		return true;
+	}
+
 	bool lookdev_passthrough()
 	{
 		return shared::common::config::get().lookdev.enabled;
@@ -645,16 +677,9 @@ namespace comp
 		perf::on_reset();
 		if (lookdev_passthrough())
 			lookdev_capture::on_reset();
-		const auto& res_cfg = shared::common::config::get().resolution;
-		if (res_cfg.render_width > 0 && res_cfg.render_height > 0)
-		{
-			shared::common::log("Resolution", std::format("Reset: BackBuffer {}x{} -> {}x{}",
-				pPresentationParameters->BackBufferWidth, pPresentationParameters->BackBufferHeight,
-				res_cfg.present_width, res_cfg.present_height));
-			pPresentationParameters->BackBufferWidth = res_cfg.present_width;
-			pPresentationParameters->BackBufferHeight = res_cfg.present_height;
-		}
+		follow_game_resolution(pPresentationParameters, "Reset");
 		const auto hr = m_pIDirect3DDevice9->Reset(pPresentationParameters);
+		shared::common::log("Resolution", std::format("Reset result {:#x}", static_cast<uint32_t>(hr)));
 		if (FAILED(hr))
 		{
 			// The game polls TestCooperativeLevel and retries; nothing DEFAULT-pool can be
@@ -730,17 +755,19 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_CreateTexture, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
-		if (res.render_width > 0 && res.render_height > 0)
+		// Only render and depth textures: the game fills the others (the 1280x720 video frames) itself at the size it
+		// asked for, and writes past the end of a smaller one.
+		if (res.render_width > 0 && res.render_height > 0 && Pool == D3DPOOL_DEFAULT && (Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
 		{
-			if (Width == 1024 && Height == 720)
+			if ((Width == 1024 && Height == 720) || res.was_render_size(Width, Height))
 			{
-				shared::common::log("Resolution", std::format("CreateTexture override 1024x720 -> {}x{} (render)", res.render_width, res.render_height));
+				shared::common::log("Resolution", std::format("CreateTexture override {}x{} -> {}x{} (render)", Width, Height, res.render_width, res.render_height));
 				Width = res.render_width;
 				Height = res.render_height;
 			}
-			else if (Width == 1280 && Height == 720)
+			else if ((Width == 1280 && Height == 720) || res.was_present_size(Width, Height))
 			{
-				shared::common::log("Resolution", std::format("CreateTexture override 1280x720 -> {}x{} (present)", res.present_width, res.present_height));
+				shared::common::log("Resolution", std::format("CreateTexture override {}x{} -> {}x{} (present)", Width, Height, res.present_width, res.present_height));
 				Width = res.present_width;
 				Height = res.present_height;
 			}
@@ -980,6 +1007,15 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::SetViewport(CONST D3DVIEWPORT9* pViewport)
 	{
 		TRACE_IF_ACTIVE(trace_SetViewport, pViewport);
+		UINT target_width, target_height;
+		if (pViewport && !pViewport->X && !pViewport->Y &&
+			remembered_size(m_pIDirect3DDevice9, pViewport->Width, pViewport->Height, target_width, target_height))
+		{
+			D3DVIEWPORT9 viewport = *pViewport;
+			viewport.Width = target_width;
+			viewport.Height = target_height;
+			return m_pIDirect3DDevice9->SetViewport(&viewport);
+		}
 		return m_pIDirect3DDevice9->SetViewport(pViewport);
 	}
 
@@ -1156,6 +1192,13 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::SetScissorRect(CONST RECT* pRect)
 	{
 		TRACE_IF_ACTIVE(trace_SetScissorRect, pRect);
+		UINT target_width, target_height;
+		if (pRect && !pRect->left && !pRect->top && pRect->right > 0 && pRect->bottom > 0 &&
+			remembered_size(m_pIDirect3DDevice9, static_cast<UINT>(pRect->right), static_cast<UINT>(pRect->bottom), target_width, target_height))
+		{
+			const RECT rect { 0, 0, static_cast<LONG>(target_width), static_cast<LONG>(target_height) };
+			return m_pIDirect3DDevice9->SetScissorRect(&rect);
+		}
 		return m_pIDirect3DDevice9->SetScissorRect(pRect);
 	}
 
@@ -1634,8 +1677,8 @@ namespace comp
 		class native_scale_query final : public IDirect3DQuery9
 		{
 		public:
-			native_scale_query(IDirect3DQuery9* query, IDirect3DDevice9* device, double scale)
-				: query_(query), device_(device), scale_(scale) {}
+			native_scale_query(IDirect3DQuery9* query, IDirect3DDevice9* device)
+				: query_(query), device_(device) {}
 
 			HRESULT __stdcall QueryInterface(REFIID riid, void** ppv) override
 			{
@@ -1683,7 +1726,11 @@ namespace comp
 				{
 					DWORD& samples = *static_cast<DWORD*>(data);
 					const DWORD raw = samples;
-					samples = static_cast<DWORD>(raw * scale_ + 0.5);
+					// Now's, not the size when the query was made: a Reset can change it.
+					const auto& res = shared::common::config::get().resolution;
+					const double scale = res.render_width && res.render_height
+						? (1024.0 * 720.0) / (double(res.render_width) * double(res.render_height)) : 1.0;
+					samples = static_cast<DWORD>(raw * scale + 0.5);
 					// A few results for the log: a visible sun reads ~461 here, a hidden one 0.
 					static std::atomic<int> logged{ 0 };
 					if (raw && logged.fetch_add(1) < 8)
@@ -1695,7 +1742,6 @@ namespace comp
 		private:
 			IDirect3DQuery9* query_;
 			IDirect3DDevice9* device_;
-			double scale_;
 			std::atomic<ULONG> refs_{ 1 };
 		};
 	}
@@ -1706,13 +1752,8 @@ namespace comp
 		const HRESULT hr = m_pIDirect3DDevice9->CreateQuery(Type, ppQuery);
 
 		// ppQuery null only asks whether the type is supported.
-		const auto& res = shared::common::config::get().resolution;
-		if (SUCCEEDED(hr) && Type == D3DQUERYTYPE_OCCLUSION && ppQuery && *ppQuery &&
-			res.render_width > 0 && res.render_height > 0)
-		{
-			const double scale = (1024.0 * 720.0) / (double(res.render_width) * double(res.render_height));
-			*ppQuery = new native_scale_query(*ppQuery, this, scale);
-		}
+		if (SUCCEEDED(hr) && Type == D3DQUERYTYPE_OCCLUSION && ppQuery && *ppQuery)
+			*ppQuery = new native_scale_query(*ppQuery, this);
 		return hr;
 	}
 
@@ -1815,15 +1856,7 @@ namespace comp
 
 	HRESULT __stdcall d3d9ex::_d3d9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface)
 	{
-		const auto& res_cfg = shared::common::config::get().resolution;
-		if (pPresentationParameters && res_cfg.render_width > 0 && res_cfg.render_height > 0)
-		{
-			shared::common::log("Resolution", std::format("CreateDevice: BackBuffer {}x{} -> {}x{}",
-				pPresentationParameters->BackBufferWidth, pPresentationParameters->BackBufferHeight,
-				res_cfg.present_width, res_cfg.present_height));
-			pPresentationParameters->BackBufferWidth = res_cfg.present_width;
-			pPresentationParameters->BackBufferHeight = res_cfg.present_height;
-		}
+		follow_game_resolution(pPresentationParameters, "CreateDevice");
 		HRESULT hres = m_pIDirect3D9->CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
 		shared::common::log("d3d9", "m_pIDirect3D9->CreateDevice", shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, false);
 		if (SUCCEEDED(hres) && *ppReturnedDeviceInterface) {
@@ -1934,15 +1967,7 @@ namespace comp
 
 	HRESULT __stdcall d3d9ex::_d3d9ex::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface)
 	{
-		const auto& res_cfg = shared::common::config::get().resolution;
-		if (pPresentationParameters && res_cfg.render_width > 0 && res_cfg.render_height > 0)
-		{
-			shared::common::log("Resolution", std::format("CreateDeviceEx: BackBuffer {}x{} -> {}x{}",
-				pPresentationParameters->BackBufferWidth, pPresentationParameters->BackBufferHeight,
-				res_cfg.present_width, res_cfg.present_height));
-			pPresentationParameters->BackBufferWidth = res_cfg.present_width;
-			pPresentationParameters->BackBufferHeight = res_cfg.present_height;
-		}
+		follow_game_resolution(pPresentationParameters, "CreateDeviceEx");
 		HRESULT hres = m_pIDirect3D9Ex->CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
 		shared::common::log("d3d9", "m_pIDirect3D9Ex->CreateDevice", shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, false);
 
