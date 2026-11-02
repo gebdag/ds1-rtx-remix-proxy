@@ -3484,7 +3484,9 @@ namespace shared::common
 		if (use_palette_indices)
 		{
 			use_palette_indices = load_palette_world(0, base_world);
-			if (use_palette_indices)
+			// Effect models scale their bones as they play (Quelaag's flame shells, 0.3 to 0.6). A rigid inverse
+			// leaves that scale in, and vertices of the other bones shrank to specks.
+			if (use_palette_indices && !mat4_invert_affine(base_world_inv, base_world))
 				mat4_invert_rigid(base_world_inv, base_world);
 		}
 
