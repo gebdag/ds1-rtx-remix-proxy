@@ -54,7 +54,8 @@ EXTRA_FFX = {
     512: "catacombs_brazier",     # m13_00, 110 placements, flame sheet s00016
     180000: "kiln_embers",        # m18_00, 14, flame sheet s00009
     110003: "painted_bonfire",    # m11_00, 6
-    120059: "oolacile_lantern",   # m12_01, 11, glow sprite s01045
+    # Not 120059 (Oolacile lantern): it has its own game light at the flame, and a stand-in at the effect's spot, on the
+    # ground under it, was a warm 12 m light that the game does not have.
 }
 
 # Effects that are not torches carry their own colour, which wins over the map's torch row:

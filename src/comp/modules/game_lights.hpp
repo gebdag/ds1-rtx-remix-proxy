@@ -165,6 +165,11 @@ namespace comp
 			// rows: every instance of an unlit effect is edited as one. 0 = the key.
 			uint64_t id = 0;
 			uint64_t ident() const { return id ? id : key; }
+			// An effect's lights are edited as one (group_key). own_key is this light's own, by position, which it
+			// edits under instead when decoupled. 0: not part of a group.
+			uint64_t group_key = 0;
+			uint64_t own_key = 0;
+			bool decoupled = false;
 			light_kind kind = light_kind::unresolved;
 			row_state state = row_state::on;
 			int slot = -1;
@@ -217,6 +222,7 @@ namespace comp
 		void scales_imgui();
 		void table_imgui();
 		void selected_imgui();
+		void multi_imgui(const std::vector<const light_row*>& rows, int pinned);
 		void solo_flash_imgui(uint64_t key);
 		void sun_imgui();
 		void player_light_imgui();
@@ -271,6 +277,7 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
+		std::unordered_set<uint64_t> decoupled_;   // own_key of the lights edited apart from their group, saved
 		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true, true, true };
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
 		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
@@ -279,7 +286,10 @@ namespace comp
 		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, true, true, false };
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
-		uint64_t selected_ = KEY_SUN;
+		uint64_t selected_ = KEY_SUN;              // the last row clicked
+		std::unordered_set<uint64_t> selection_;   // every selected row (Shift / Ctrl); empty: just selected_
+		uint64_t selection_anchor_ = KEY_SUN;      // where a Shift range starts
+		std::vector<uint64_t> row_order_, row_order_next_;   // the rows as listed, top to bottom, for a Shift range
 		uint64_t solo_ = 0;
 		bool flash_selected_ = false;
 		bool group_rows_ = true;          // sections by source (stand-ins by category), else one flat list

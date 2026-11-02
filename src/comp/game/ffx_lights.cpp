@@ -4,6 +4,7 @@
 #include "shared/common/ffp_state.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -22,6 +23,10 @@ namespace comp::game::ffx_lights
 		constexpr size_t kMaxLights = 64;
 		// A map light this close to a persistent effect stands for it (a wall torch's MSB light).
 		constexpr float kCoverRadius = 3.0f;
+		// A brief effect past its visual lifetime stays lit while its emitters run, then fades with this
+		// time constant and goes when it is too faint to matter.
+		constexpr float kFadeSeconds = 0.25f;
+		constexpr float kFadeOff = 0.01f;
 
 		std::unordered_map<int, entry> g_table;
 		bool g_loaded = false;
@@ -35,6 +40,18 @@ namespace comp::game::ffx_lights
 		};
 		std::unordered_map<unsigned, tracked> g_slots;
 		std::vector<point_lights::light> g_out;
+
+		// An instance's brightness: 1 while it shows, fading after.
+		struct fade
+		{
+			int ffx_id;
+			float level;
+			UINT seen;
+			float first_seen;   // seconds since g_origin: an instance's own age can stand at 0 (seen with state 0xFFFFFFFE)
+		};
+		std::unordered_map<unsigned, fade> g_fades;
+		std::chrono::steady_clock::time_point g_fade_time = std::chrono::steady_clock::now();
+		const std::chrono::steady_clock::time_point g_origin = g_fade_time;
 
 		void load()
 		{
@@ -51,7 +68,7 @@ namespace comp::game::ffx_lights
 				int id = 0, planar = 0, persistent = 0;
 				entry e {};
 				std::string confidence;
-				in >> id >> e.r >> e.g >> e.b >> e.dwindle_begin >> e.dwindle_end >> planar >> persistent >> confidence;
+				in >> id >> e.r >> e.g >> e.b >> e.dwindle_begin >> e.dwindle_end >> planar >> persistent >> confidence >> e.visual_life;
 				if (!in || id <= 0)
 					continue;
 				in >> std::ws;
@@ -97,7 +114,12 @@ namespace comp::game::ffx_lights
 			return g_out;
 
 		const UINT frame = shared::common::ffp_state::get().frame_count();
-		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; };
+		const auto time_now = std::chrono::steady_clock::now();
+		const float dt = std::clamp(std::chrono::duration<float>(time_now - g_fade_time).count(), 0.0f, 0.5f);
+		g_fade_time = time_now;
+		const float decay = std::exp(-dt / kFadeSeconds);
+		const float now = std::chrono::duration<float>(time_now - g_origin).count();
+		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; float level; };
 		std::vector<candidate> candidates;
 		for (const auto& inst : ffx_instances::current())
 		{
@@ -106,6 +128,16 @@ namespace comp::game::ffx_lights
 				continue;
 			candidate c { &inst, &it->second };
 			if (!ffx_instances::world_position(inst.address, c.pos))
+				continue;
+			// How bright it is now: it ends with what it shows, not with the instance.
+			auto [f, fresh_fade] = g_fades.try_emplace(inst.address, fade { inst.ffx_id, 1.0f, frame, now });
+			if (fresh_fade || f->second.ffx_id != inst.ffx_id)
+				f->second = { inst.ffx_id, 1.0f, frame, now };
+			f->second.seen = frame;
+			if (!c.e->persistent && std::max(ffx_instances::age(inst.address), now - f->second.first_seen) >= c.e->visual_life)
+				f->second.level = f->second.level >= kFadeOff && ffx_instances::still_running(inst.address) ? 1.0f : f->second.level * decay;
+			c.level = f->second.level;
+			if (c.level < kFadeOff)
 				continue;
 			if (c.e->persistent && std::any_of(covers.begin(), covers.end(), [&](const point_lights::light* l)
 				{
@@ -118,6 +150,7 @@ namespace comp::game::ffx_lights
 			if (c.distance - c.e->dwindle_end <= kReach)
 				candidates.push_back(c);
 		}
+		std::erase_if(g_fades, [&](const auto& t) { return t.second.seen != frame; });
 		if (candidates.size() > kMaxLights)
 		{
 			std::nth_element(candidates.begin(), candidates.begin() + kMaxLights, candidates.end(),
@@ -135,7 +168,7 @@ namespace comp::game::ffx_lights
 			point_lights::light l {};
 			l.slot = it->second.slot;
 			l.x = c.pos[0]; l.y = c.pos[1]; l.z = c.pos[2];
-			l.r = c.e->r; l.g = c.e->g; l.b = c.e->b;
+			l.r = c.e->r * c.level; l.g = c.e->g * c.level; l.b = c.e->b * c.level;
 			l.dwindle_begin = c.e->dwindle_begin;
 			l.dwindle_end = c.e->dwindle_end;
 			l.has_params = true;

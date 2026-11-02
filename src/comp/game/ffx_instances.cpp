@@ -33,13 +33,18 @@ namespace comp::game::ffx_instances
 		constexpr DWORD kInstanceTranslation[] = { 0x3C, 0x4C, 0x5C };
 		constexpr DWORD kInstanceState = 0x68;
 		constexpr DWORD kStateValid = 0x40000000;
+		constexpr DWORD kInstanceAge = 0x7C;
 		// The FXR1 root object {133, effectId}, its type word replaced by this vtable on load.
 		constexpr DWORD kRootVtable = 0x011309CC;
 		constexpr DWORD kRootId = 0x04;
+		// Library effect 2101 has no appearance of its own, and stays in the tree after the effect has ended:
+		// the Moonlight Butterfly's spear impacts (13237) keep one until the area unloads.
+		constexpr int kLeftoverEffect = 2101;
 
 		// Effect trees are small; the caps guard against a list changing under the walk.
 		constexpr int kMaxInstances = 8192;
 		constexpr int kMaxParents = 32;
+		constexpr int kMaxTreeNodes = 256;
 
 		std::vector<instance> g_instances;
 		UINT g_walk_frame = 0;
@@ -144,6 +149,31 @@ namespace comp::game::ffx_instances
 			return false;
 		}
 		return std::isfinite(out[0]) && std::isfinite(out[1]) && std::isfinite(out[2]);
+	}
+
+	float age(unsigned address)
+	{
+		const DWORD bits = read_dword(address + kInstanceAge);
+		return *reinterpret_cast<const float*>(&bits);
+	}
+
+	bool still_running(unsigned address)
+	{
+		DWORD stack[kMaxTreeNodes];
+		int depth = 0;
+		if (const DWORD child = read_dword(address + kInstanceChild))
+			stack[depth++] = child;
+		for (int visited = 0; depth > 0 && visited < kMaxTreeNodes; ++visited)
+		{
+			const DWORD node = stack[--depth];
+			if (effect_id(node) != kLeftoverEffect)
+				return true;
+			if (const DWORD next = read_dword(node + kInstanceNext); next && depth < kMaxTreeNodes)
+				stack[depth++] = next;
+			if (const DWORD child = read_dword(node + kInstanceChild); child && depth < kMaxTreeNodes)
+				stack[depth++] = child;
+		}
+		return false;
 	}
 
 	int last_walk_count() { return static_cast<int>(g_instances.size()); }

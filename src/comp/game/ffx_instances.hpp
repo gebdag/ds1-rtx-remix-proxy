@@ -23,6 +23,13 @@ namespace comp::game::ffx_instances
 	// point (findings.db rows 279-285). False when the instance is no longer valid.
 	bool world_position(unsigned address, float* out);
 
+	// How long an instance has run, in seconds (scaled by its group's time scale, as its draw host sees it).
+	float age(unsigned address);
+
+	// Whether an instance still has child effects at work. Its emitters are its child instances, removed as
+	// they finish, so an instance can outlive what it shows by minutes.
+	bool still_running(unsigned address);
+
 	// How many instances the last walk visited.
 	int last_walk_count();
 }

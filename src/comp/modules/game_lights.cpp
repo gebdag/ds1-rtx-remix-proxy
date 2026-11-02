@@ -372,7 +372,7 @@ namespace comp
 				return 0.0f;
 			m = o->multiplier;
 		}
-		if (flash_selected_ && (ident ? ident : key) == selected_)
+		if (flash_selected_ && ((ident ? ident : key) == selected_ || selection_.count(ident ? ident : key)))
 			m *= kFlashMultiplier;
 		return m;
 	}
@@ -466,6 +466,26 @@ namespace comp
 		row.key = row_key(row.kind, l);
 		if (row.kind == kind::ffx_table)
 			row.id = string_hash64(va("ffx_slot:%d", l.slot)) | 0x8000000000000000ull | kSessionKeyBit;
+		// The lights of one effect are one group: an edit applies to all of them and is saved. A game light's own
+		// FFX is mostly a shared light node (2101), so the effect that called it is what tells them apart.
+		const int group_effect = row.kind == kind::ffx_table ? l.ffx_id
+			: row.kind == kind::fx_direct ? (l.ffx_top_id ? l.ffx_top_id : l.ffx_id) : 0;
+		if (group_effect)
+		{
+			if (row.kind == kind::fx_direct)
+			{
+				row.id = row.key;
+				row.key = string_hash64(va("ffx_group:%d", group_effect)) | 0x8000000000000000ull;
+			}
+			row.group_key = row.key;
+			row.own_key = string_hash64(va("ffx_own:%d:%ld:%ld:%ld", group_effect,
+				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))) | 0x8000000000000000ull;
+			if (decoupled_.count(row.own_key))
+			{
+				row.key = row.own_key;
+				row.decoupled = true;
+			}
+		}
 		row.slot = l.slot;
 		row.pos[0] = l.x; row.pos[1] = l.y; row.pos[2] = l.z;
 		if (player)
@@ -504,6 +524,11 @@ namespace comp
 			if (l.ffx_id)
 				row.origin += std::format("; light node of FFX {}{}", l.ffx_id,
 					l.ffx_top_id && l.ffx_top_id != l.ffx_id ? std::format(", called by FFX {}", l.ffx_top_id) : std::string());
+			if (group_effect)
+			{
+				const char* group_name = game::ffx_names::name(group_effect);
+				row.group = std::format("{} (FFX {})", group_name ? group_name : "Effect light", group_effect);
+			}
 			break;
 		}
 		case kind::synthetic:
@@ -546,7 +571,7 @@ namespace comp
 			row.origin = std::format("ffx_lights.tsv: the developers' effect-light rule on FFX {}", l.ffx_id);
 			if (const auto* e = game::ffx_lights::find(l.ffx_id))
 			{
-				row.group = pretty_category(e->category);
+				row.group = std::format("{}: {} (FFX {})", pretty_category(e->category), effect ? effect : "Effect", l.ffx_id);
 				row.origin += std::format(" ({} confidence{}{})", e->confidence == 'h' ? "high" : e->confidence == 'm' ? "medium" : "low",
 					e->planar ? ", planar sprite" : "", e->persistent ? ", persistent" : "");
 			}
@@ -1240,6 +1265,7 @@ namespace comp
 	bool game_lights::load_overrides()
 	{
 		overrides_.clear();
+		decoupled_.clear();
 		std::ifstream file(overrides_path());
 		if (!file)
 			return false;
@@ -1249,6 +1275,11 @@ namespace comp
 		{
 			if (line.empty() || line[0] == '#')
 				continue;
+			if (line.rfind("decoupled ", 0) == 0)
+			{
+				decoupled_.insert(std::stoull(line.substr(10), nullptr, 16));
+				continue;
+			}
 			std::istringstream in(line);
 			std::string key_text;
 			light_override o;
@@ -1287,6 +1318,10 @@ namespace comp
 		for (const auto& [key, o] : saved)
 			s += std::format("{:016x} {} {:.3f} {} {} {}\n", key, o->disabled ? 1 : 0, o->multiplier,
 				o->recolour ? 1 : 0, format_float3(o->colour), o->include_map ? 1 : 0);
+		std::vector<uint64_t> decoupled(decoupled_.begin(), decoupled_.end());
+		std::sort(decoupled.begin(), decoupled.end());
+		for (const uint64_t key : decoupled)
+			s += std::format("decoupled {:016x}\n", key);
 		return s;
 	}
 
@@ -1343,6 +1378,8 @@ namespace comp
 					file << std::format("{:016x} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {}  {}\n", key, o.disabled ? 1 : 0,
 						o.multiplier, o.recolour ? 1 : 0, o.colour[0], o.colour[1], o.colour[2], o.include_map ? 1 : 0, name);
 				}
+				for (const uint64_t key : decoupled_)
+					file << std::format("decoupled {:016x}\n", key);
 			}
 			else
 			{
@@ -1510,6 +1547,7 @@ namespace comp
 		if (ImGui::Button("Reset per-light edits"))
 		{
 			overrides_.clear();
+			decoupled_.clear();
 			solo_ = 0;
 			flash_selected_ = false;
 		}
@@ -1529,7 +1567,10 @@ namespace comp
 			custom_selected_ = 0;
 			for (const auto& r : rows_)
 				if (r.kind == kind::custom && r.slot == game::custom_lights::kFirstSlot)
+				{
 					selected_ = r.ident();
+					selection_.clear();
+				}
 		}
 		auto header = [&](const char* label, ImGuiTreeNodeFlags flags = 0)
 		{
@@ -1689,8 +1730,11 @@ namespace comp
 
 	void game_lights::table_imgui()
 	{
+		row_order_next_.clear();
 		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
 		ImGui::InputTextWithHint("##filter", "Filter by name or details", filter_, sizeof(filter_));
+		tip("Click a light to edit it. Ctrl+click adds or removes one, Shift+click selects a range;\n"
+			"the panel below then changes all of them.");
 		ImGui::SameLine();
 		ImGui::Checkbox("Group by source", &group_rows_);
 		ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
@@ -1829,11 +1873,21 @@ namespace comp
 			}
 			ImGui::EndTable();
 		}
+		row_order_.swap(row_order_next_);
 	}
 
 	void game_lights::selected_imgui()
 	{
 		ImGui::Spacing();
+		if (selection_.size() > 1)
+		{
+			std::vector<const light_row*> rows;
+			for (const auto& r : rows_)
+				if (selection_.count(r.ident()))
+					rows.push_back(&r);
+			multi_imgui(rows, static_cast<int>(selection_.count(KEY_SUN) + selection_.count(KEY_PLAYER)));
+			return;
+		}
 		if (selected_ == KEY_SUN)
 		{
 			sun_imgui();
@@ -1851,6 +1905,64 @@ namespace comp
 			point_light_imgui(*sel);
 		else
 			ImGui::TextDisabled("Select a light in the list to see and change its settings.");
+	}
+
+	// Several lights selected: a change here goes to all of them, and only the setting changed.
+	void game_lights::multi_imgui(const std::vector<const light_row*>& rows, int pinned)
+	{
+		ImGui::SeparatorText(std::format("{} lights selected", rows.size() + pinned).c_str());
+		if (pinned)
+			ImGui::TextDisabled("The sun and the player light have their own settings: select one alone to change it.");
+		if (rows.empty())
+			return;
+		std::vector<uint64_t> keys;
+		for (const auto* r : rows)
+			if (std::find(keys.begin(), keys.end(), r->key) == keys.end())
+				keys.push_back(r->key);
+		if (keys.size() < rows.size())
+			ImGui::TextDisabled("Lights of one effect share their settings, so changes also reach the rest of their group.");
+
+		light_override first;
+		bool mixed = false;
+		if (const auto* o = find_override(keys[0]))
+			first = *o;
+		for (const uint64_t key : keys)
+		{
+			const auto* o = find_override(key);
+			mixed |= (o ? o->disabled : false) != first.disabled || (o ? o->multiplier : 1.0f) != first.multiplier ||
+				(o ? o->recolour : false) != first.recolour;
+		}
+		if (mixed)
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "These differ: the values below are the first light's.");
+
+		bool draw = !first.disabled;
+		if (form_checkbox("Draw these lights", "##multi_draw", &draw, "Switches all of them off or on."))
+			for (const uint64_t key : keys)
+				overrides_[key].disabled = !draw;
+		form_label("Brightness", "Set on all of them, on top of the source brightness. 0 = off.");
+		if (ImGui::SliderFloat("##multi_mult", &first.multiplier, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic))
+			for (const uint64_t key : keys)
+				overrides_[key].multiplier = first.multiplier;
+		if (form_checkbox("Own colour", "##multi_recolour", &first.recolour, "Replace the game's colour with your own on all of them."))
+			for (const auto* r : rows)
+			{
+				auto& o = overrides_[r->key];
+				if (first.recolour && !o.recolour)
+					std::memcpy(o.colour, r->colour, sizeof(o.colour));
+				o.recolour = first.recolour;
+			}
+		if (first.recolour)
+		{
+			form_label("Colour", nullptr);
+			if (ImGui::ColorEdit3("##multi_colour", first.colour, ImGuiColorEditFlags_Float))
+				for (const uint64_t key : keys)
+					std::memcpy(overrides_[key].colour, first.colour, sizeof(first.colour));
+		}
+		form_checkbox("Flash to find them", "##multi_flash", &flash_selected_, "Makes the selected lights 20 times brighter while ticked.");
+		if (ImGui::Button("Reset these"))
+			for (const uint64_t key : keys)
+				overrides_.erase(key);
+		tip("Clears their own switch, brightness and colour. Saved only with Save.");
 	}
 
 	// Solo and flash work on every light, the pinned ones included.
@@ -2234,9 +2346,50 @@ namespace comp
 		const bool pinned = r.kind == kind::sun || r.kind == kind::player;
 		if (pinned)
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.4f, 1.0f));
-		if (ImGui::Selectable(std::format("{}{}##{:016x}", r.name, solo_ == r.key ? "  [solo]" : "", r.ident()).c_str(),
-			selected_ == r.ident(), ImGuiSelectableFlags_SpanAllColumns))
-			selected_ = r.ident();
+		const uint64_t ident = r.ident();
+		row_order_next_.push_back(ident);
+		const bool is_selected = selection_.empty() ? selected_ == ident : selection_.count(ident) != 0;
+		if (ImGui::Selectable(std::format("{}{}##{:016x}", r.name, solo_ == r.key ? "  [solo]" : "", ident).c_str(),
+			is_selected, ImGuiSelectableFlags_SpanAllColumns))
+		{
+			const auto& io = ImGui::GetIO();
+			if (selection_.empty())
+				selection_.insert(selected_);
+			if (io.KeyShift)
+			{
+				// From the anchor to this row, as listed last frame; Ctrl keeps what was selected.
+				if (!io.KeyCtrl)
+					selection_.clear();
+				const auto a = std::find(row_order_.begin(), row_order_.end(), selection_anchor_);
+				const auto b = std::find(row_order_.begin(), row_order_.end(), ident);
+				if (a != row_order_.end() && b != row_order_.end())
+					selection_.insert(a < b ? a : b, (a < b ? b : a) + 1);
+				selection_.insert(ident);
+				selected_ = ident;
+			}
+			else if (io.KeyCtrl)
+			{
+				if (selection_.count(ident) && selection_.size() > 1)
+				{
+					selection_.erase(ident);
+					if (selected_ == ident)
+						selected_ = *selection_.begin();
+				}
+				else
+				{
+					selection_.insert(ident);
+					selected_ = ident;
+				}
+				selection_anchor_ = ident;
+			}
+			else
+			{
+				selection_.clear();
+				selection_.insert(ident);
+				selected_ = ident;
+				selection_anchor_ = ident;
+			}
+		}
 		if (pinned)
 			ImGui::PopStyleColor();
 
@@ -2296,9 +2449,34 @@ namespace comp
 		form_value("Game colour", std::format("{:.3f} {:.3f} {:.3f}", row.colour[0], row.colour[1], row.colour[2]));
 		form_value("Game reach", std::format("full to {:.2f} m, zero at {:.2f} m", row.range_begin, row.range_end));
 		form_value("Sent to Remix", std::format("radiance {:.2f} {:.2f} {:.2f}", row.radiance[0], row.radiance[1], row.radiance[2]));
-		if (row.kind == kind::ffx_table)
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-				"Unlit effect: changes apply to every instance of this effect and are saved.");
+		if (row.own_key)
+		{
+			const auto members = std::count_if(rows_.begin(), rows_.end(), [&](const light_row& r) { return r.group_key == row.group_key; });
+			if (row.decoupled)
+				ImGui::TextColored(ImVec4(0.5f, 0.85f, 1.0f, 1.0f), "This light has its own settings, apart from its group. Saved.");
+			else
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+					"Group '%s': changes apply to all of this effect's lights (%d here now, and any others) and are saved.",
+					row.group.c_str(), static_cast<int>(members));
+			bool own = row.decoupled;
+			if (form_checkbox("Edit this light on its own", "##pt_own", &own,
+				"Ticked: this light keeps its own settings, starting from the group's. Unticked: it follows the group again\n"
+				"and its own settings are dropped. Told apart by position, so this is for lights that stay put."))
+			{
+				if (own)
+				{
+					decoupled_.insert(row.own_key);
+					if (const auto* group = find_override(row.group_key))
+						overrides_[row.own_key] = *group;
+				}
+				else
+				{
+					decoupled_.erase(row.own_key);
+					overrides_.erase(row.own_key);
+				}
+				return; // the row's edit key changes with the next frame's list
+			}
+		}
 		else if (!is_static(row.kind))
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
 				"Moving light: changes follow its slot for this session and are not saved.");
