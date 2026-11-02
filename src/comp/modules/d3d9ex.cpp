@@ -27,7 +27,9 @@ using comp::tracer;
 #include "../game/atmosphere.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/lightmap_sun.hpp"
+#include "../game/ffx_instances.hpp"
 #include "../game/hud_scale.hpp"
+#include "game_lights.hpp"
 #include "lookdev_capture.hpp"
 
 namespace {
@@ -196,11 +198,47 @@ namespace {
 		}
 	};
 
+	// The same split every half second, with [FFPSteps] Profile on: a dip of a second or two (an attack's
+	// effects) disappears in the 600 frame totals. The worst frame of the window shows single hitches.
+	struct frame_timeline
+	{
+		long long start = 0, draw = 0, present = 0, seen_draw = 0, worst = 0;
+		unsigned int draws = 0, seen_draws = 0, frames = 0;
+	};
+	frame_timeline s_timeline;
+
+	void timeline_on_present(long long now, long long frame_ticks, long long present_ticks)
+	{
+		auto& t = s_timeline;
+		t.draw += s_split.draw_ticks - t.seen_draw;
+		t.draws += s_split.draws - t.seen_draws;
+		t.seen_draw = s_split.draw_ticks;
+		t.seen_draws = s_split.draws;
+		t.present += present_ticks;
+		t.worst = std::max(t.worst, frame_ticks);
+		++t.frames;
+		if (!t.start)
+			t.start = now;
+		const double span = split_ms(now - t.start);
+		if (span < 500.0)
+			return;
+		const double n = static_cast<double>(t.frames), draw = split_ms(t.draw) / n, present = split_ms(t.present) / n;
+		const auto* lights = comp::game_lights::get();
+		shared::common::log("FrameTimeline", std::format(
+			"{:.1f} ms/frame (worst {:.1f}) = draw calls {:.1f} ms ({:.0f} draws) + Present {:.1f} ms + game and other calls {:.1f} ms | FFX instances {}, lights {}/{}",
+			span / n, split_ms(t.worst), draw, t.draws / n, present, span / n - draw - present,
+			comp::game::ffx_instances::last_walk_count(), lights ? lights->active_light_count() : 0, lights ? lights->total_light_count() : 0));
+		t.start = now;
+		t.draw = t.present = t.worst = 0;
+		t.draws = t.frames = 0;
+	}
+
 	void split_on_present(long long present_ticks)
 	{
 		if (!shared::common::ffp_prof::profiling())
 		{
 			s_split = {};
+			s_timeline = {};
 			return;
 		}
 		const long long now = split_now();
@@ -209,6 +247,8 @@ namespace {
 			s_split.tsc_start = __rdtsc();
 			s_split.qpc_start = now;
 		}
+		if (s_split.last_present)
+			timeline_on_present(now, now - s_split.last_present, present_ticks);
 		if (s_split.last_present)
 			s_split.frame_ticks += now - s_split.last_present;
 		s_split.last_present = now;
@@ -263,6 +303,8 @@ namespace {
 		const long long last = s_split.last_present;
 		s_split = {};
 		s_split.last_present = last;
+		s_timeline.seen_draw = 0;
+		s_timeline.seen_draws = 0;
 	}
 
 	// Lookdev mode is the vanilla reference: draws and render targets go to the
