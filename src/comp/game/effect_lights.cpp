@@ -37,9 +37,6 @@ namespace comp::game::effect_lights
 		// came out at 17: that sum swings 10x between frames of one fire and is huge for big soft
 		// sprites. Only fire: white, blue and green particles (item pickups, souls, motes, fog,
 		// magic) are lit by no game light, and none is stood in for them.
-		// A blue bonfire's light: its tint c139 (0.2, 0.39, 1), at twice the peak of a bonfire's (0.72, 0.52, 0.21) to
-		// a bonfire's 4.8 m. It has no game light to match, and a bonfire's strength hardly showed in blue.
-		constexpr float kBlueFlameLight[3] = { 0.3f, 0.6f, 1.5f };
 		// A crystal lizard's light: faint, in the blue of its gem, about as far as the lizard is long.
 		constexpr float kEmitterLight[3] = { 0.25f, 0.45f, 0.75f };
 		constexpr float kEmitterReach = 3.5f;
@@ -83,7 +80,7 @@ namespace comp::game::effect_lights
 		constexpr float kOff = 0.01f;
 		constexpr int kFirstSlot = 0x20000;
 
-		enum class kind { bolt, sprite, blue_flame, emitter };
+		enum class kind { bolt, sprite, emitter };
 
 		// A bolt: its origin, fade (c139.w) and tint (c139.rgb). A particle triangle: its centre,
 		// weight 1, and the light it adds (rgb).
@@ -140,14 +137,18 @@ namespace comp::game::effect_lights
 		}
 
 		float cluster_radius(kind k) { return k == kind::bolt ? kClusterRadius : kSpriteClusterRadius; }
+
+		bool fire_coloured(double r, double g, double b)
+		{
+			return r >= g && g >= b && b <= kWarmBlueShare * r && g >= kFireGreenShare * r;
+		}
 	}
 
 	void observe_draw(IDirect3DDevice9* dev, IDirect3DBaseTexture9* diffuse, const float* vs_const, const float* ps_const)
 	{
 		if (!dev || !diffuse || !vs_const || !ps_const || s_samples.size() >= kMaxSamples)
 			return;
-		const bool blue_flame = texture_names::is_blue_flame(diffuse);
-		if (!blue_flame && !texture_names::is_lit_effect(diffuse))
+		if (!texture_names::is_lit_effect(diffuse))
 			return;
 		DWORD blend = FALSE, src = 0, dst = 0;
 		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
@@ -161,10 +162,8 @@ namespace comp::game::effect_lights
 		if (!shared::common::ffp_state::get().world_offset(ox, oy, oz))
 			return;
 		const float* tint = &ps_const[139 * 4];
-		if (blue_flame && !(tint[2] > tint[0]))
-			return;
 		const sample b { vs_const[8 * 4 + 3] + ox, vs_const[9 * 4 + 3] + oy, vs_const[10 * 4 + 3] + oz,
-			blue_flame ? 1.0f : std::clamp(tint[3], 0.0f, 1.0f), tint[0], tint[1], tint[2], blue_flame ? kind::blue_flame : kind::bolt };
+			std::clamp(tint[3], 0.0f, 1.0f), tint[0], tint[1], tint[2], kind::bolt };
 		if (!(b.fade > 0.0f) || !std::isfinite(b.x) || !std::isfinite(b.y) || !std::isfinite(b.z) ||
 			!std::isfinite(b.r) || !std::isfinite(b.g) || !std::isfinite(b.b))
 			return;
@@ -189,6 +188,18 @@ namespace comp::game::effect_lights
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count)
 	{
 		if (!points)
+			return;
+		// Fire or not by this draw's own light, not a cluster's: a message's red glow beside a ranking board's blue
+		// added up to orange, and lit the air between them (frame_20261101_135358, (0.73, 0.24, 0.08) + (0.18, 0.32, 0.46)).
+		double sum_r = 0.0, sum_g = 0.0, sum_b = 0.0;
+		for (UINT i = 0; i < count; i++)
+			if (points[i].additive && std::isfinite(points[i].area))
+			{
+				sum_r += static_cast<double>(points[i].r) * points[i].area;
+				sum_g += static_cast<double>(points[i].g) * points[i].area;
+				sum_b += static_cast<double>(points[i].b) * points[i].area;
+			}
+		if (!fire_coloured(sum_r, sum_g, sum_b))
 			return;
 		for (UINT i = 0; i < count && s_samples.size() < kMaxSamples; i++)
 		{
@@ -256,14 +267,8 @@ namespace comp::game::effect_lights
 			}
 			it->samples.push_back(&s);
 		}
-		// Particle groups that are not fire get no light. A faint one (sparks, embers) starts none either,
-		// but keeps the light of a fire that dims for a frame or two (weak).
-		std::erase_if(groups, [](const group& g)
-		{
-			if (g.k != kind::sprite)
-				return false;
-			return !(g.r >= g.g && g.g >= g.b && g.b <= kWarmBlueShare * g.r && g.g >= kFireGreenShare * g.r);
-		});
+		// A faint particle group (sparks, embers) starts no light, but keeps the light of a fire that dims for a
+		// frame or two (weak).
 		auto weak = [](const group& g) { return g.k == kind::sprite && std::max({ g.r, g.g, g.b }) < kSpriteMinPower; };
 
 		// Each light follows the nearest group of its kind it can reach; a group no light took starts
@@ -298,14 +303,6 @@ namespace comp::game::effect_lights
 					gg = kEmitterLight[1];
 					b = kEmitterLight[2];
 					range = kEmitterReach;
-					target = 1.0f;
-				}
-				else if (g->k == kind::blue_flame)
-				{
-					r = s_fire_scale * kBlueFlameLight[0];
-					gg = s_fire_scale * kBlueFlameLight[1];
-					b = s_fire_scale * kBlueFlameLight[2];
-					range = kBonfireReach;
 					target = 1.0f;
 				}
 				else
@@ -369,7 +366,7 @@ namespace comp::game::effect_lights
 			{
 				logged = true;
 				shared::common::log("EffectLights", std::format("{}: {} samples, light at ({:.1f}, {:.1f}, {:.1f}), colour ({:.3f}, {:.3f}, {:.3f}), range {:.1f} m",
-					g.k == kind::bolt ? "lightning bolts" : g.k == kind::sprite ? "additive particles" : g.k == kind::emitter ? "crystal lizard" : "blue bonfire", g.samples.size(), t.x, t.y, t.z, t.r, t.g, t.b, t.range));
+					g.k == kind::bolt ? "lightning bolts" : g.k == kind::sprite ? "additive particles" : "crystal lizard", g.samples.size(), t.x, t.y, t.z, t.r, t.g, t.b, t.range));
 			}
 		}
 		s_samples.clear();

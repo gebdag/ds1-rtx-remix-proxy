@@ -11,8 +11,6 @@ namespace comp::game::effect_lights
 	//   bolt draws (additive, the game's shared lightning textures, also lightning miracles and
 	//   weapons) are grouped per effect, each group lit like the game's flash light, reaching 2 m
 	//   past the bolts' spread.
-	// - Blue bonfires (the DLC's): the game's bonfire effect tinted blue, without its light. Each gets a
-	//   bonfire's light in blue.
 	// - Additive particles (fire breath, fireballs, flames): the light their sprites add to the
 	//   frame, summed per cluster, as a point light. game_lights drops a particle light that an
 	//   engine or table light already stands for (a bonfire, a torch).
