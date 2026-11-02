@@ -22,6 +22,7 @@
 #include "../game/thin_walls.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
+#include "../game/vanilla_view.hpp"
 
 namespace comp
 {
@@ -630,7 +631,9 @@ namespace comp
 				ffp.disengage(dev);
 
 				auto& cfg = shared::common::config::get();
-				bool expanded = (cfg.ffp.expand_skinned_uv || cfg.ffp.shader_tex_fix) &&
+				// Vanilla graphics: the game's VS scales the SHORT texcoords by 1/1024 itself, so expanded
+				// ones (already scaled) sample a single texel.
+				bool expanded = !game::vanilla_view::active() && (cfg.ffp.expand_skinned_uv || cfg.ffp.shader_tex_fix) &&
 					ffp.expand_skinned_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);
 
 				// ShaderTexFix in shader mode only changes UV format. Preserve the game's

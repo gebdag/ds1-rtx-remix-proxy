@@ -18,6 +18,7 @@ namespace comp::game::vanilla_view
 		bool g_saved_ffp = true;
 		bool g_saved_skip_postfx = true;
 		bool g_saved_suppress_aux = true;
+		bool g_saved_drop_screen_effects = true;
 
 		bool set_raytracing(bool on)
 		{
@@ -56,9 +57,11 @@ namespace comp::game::vanilla_view
 			g_saved_ffp = ffp.is_enabled();
 			g_saved_skip_postfx = cfg.ffp.skip_postfx;
 			g_saved_suppress_aux = cfg.ffp.suppress_aux_passes;
+			g_saved_drop_screen_effects = cfg.sfx.drop_screen_effects;
 			ffp.set_enabled(false);
 			cfg.ffp.skip_postfx = false;
 			cfg.ffp.suppress_aux_passes = false;
+			cfg.sfx.drop_screen_effects = false;
 			g_active = true;
 			shared::common::log("Vanilla", "vanilla graphics on");
 		}
@@ -67,6 +70,7 @@ namespace comp::game::vanilla_view
 			ffp.set_enabled(g_saved_ffp);
 			cfg.ffp.skip_postfx = g_saved_skip_postfx;
 			cfg.ffp.suppress_aux_passes = g_saved_suppress_aux;
+			cfg.sfx.drop_screen_effects = g_saved_drop_screen_effects;
 			set_raytracing(true);
 			g_active = false;
 			shared::common::log("Vanilla", "vanilla graphics off (Remix)");
