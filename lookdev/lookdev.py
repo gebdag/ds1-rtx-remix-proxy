@@ -29,6 +29,7 @@ GAME_DATA = Path(r"<game dir>\DATA")
 # without touching the live set in DATA.
 GAME_DIR = Path(os.environ.get("DS1_LOOKDEV_GAME_DIR", str(GAME_DATA)))
 CAPTURE_DIR = GAME_DIR / "rtx_comp" / "lookdev"
+HOST_LOGS = GAME_DIR / "rtx_comp" / "host_logs"
 HERE = Path(__file__).resolve().parent
 VIEWER = HERE / "bin" / "ds1_lookdev_viewer.exe"
 HOST = HERE / "bin" / "ds1_lookdev_host.exe"
@@ -251,6 +252,23 @@ def stop_host(timeout=45.0):
             _wait_gone(image, 5.0)
 
 
+def keep_host_logs(keep=8):
+    """Every start overwrites the logs: the last few runs' stay in rtx_comp\\host_logs, so a crash can be read afterwards."""
+    import shutil
+    logs = GAME_DIR / "rtx-remix" / "logs"
+    sources = [logs / "remix-dxvk.log", logs / "bridge32.log", logs / "bridge64.log", GAME_DIR / "rtx_comp" / "console_host.log"]
+    existing = [f for f in sources if f.exists()]
+    if not existing:
+        return
+    stamp = datetime.datetime.fromtimestamp(max(f.stat().st_mtime for f in existing))
+    out = HOST_LOGS / f"{stamp:%Y%m%d_%H%M%S}"
+    out.mkdir(parents=True, exist_ok=True)
+    for f in existing:
+        shutil.copy2(f, out / f.name)
+    for old in sorted(d for d in HOST_LOGS.iterdir() if d.is_dir())[:-keep]:
+        shutil.rmtree(old, ignore_errors=True)
+
+
 def cmd_host(args):
     cap = None if args.live else resolve(args.capture)
     for exe in (HOST, PROXY_BUILD):
@@ -268,8 +286,11 @@ def cmd_host(args):
     print(f"proxy {PROXY_BUILD} ({datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime):%H:%M:%S}) -> {PROXY_IN_GAME.name}")
     deploy_game_proxy()
     source = ["--live"] if args.live else [str(cap)]
+    keep_host_logs()
+    # A GPU crash writes a dump there and logs its reason (a hang, or a page fault and the resource), active shaders included.
+    env = dict(os.environ, DXVK_ENABLE_AFTERMATH="1", DXVK_AFTERMATH_DUMP_PATH=str(HOST_LOGS).replace("\\", "/"))
     subprocess.Popen([str(HOST_IN_GAME), *source, "--proxy", PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
-                     cwd=str(GAME_DIR), creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
+                     cwd=str(GAME_DIR), env=env, creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
     lower_host_priority()
     print("host started, following the game live" if args.live else f"host started on {cap.name}")
     return 0

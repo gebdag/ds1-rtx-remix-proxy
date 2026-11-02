@@ -294,6 +294,7 @@ namespace comp
 			// references (the game frees resources as usual; a reused address is
 			// sent as REC_DESTROY) and keeps its state from frame to frame.
 			bool streaming = false;
+			uint64_t contents = 0; // bytes of textures and buffers sent, which the host holds until the address is reused
 			uint32_t frames = 0;
 			std::string name;
 			std::string part_path;
@@ -455,6 +456,7 @@ namespace comp
 			row_bytes = std::min<uint32_t>(row_bytes, pitch);
 
 			const texture_data td { id, flags, face, level, rows, row_bytes, depth };
+			c.contents += uint64_t(rows) * row_bytes * depth;
 			c.w.begin(type, sizeof(td) + size_t(rows) * row_bytes * depth);
 			c.w.raw(&td, sizeof(td));
 			for (UINT z = 0; z < depth; z++)
@@ -1131,6 +1133,7 @@ namespace comp
 				void* data = nullptr;
 				if (SUCCEEDED(buffer->Lock(0, 0, &data, D3DLOCK_READONLY)) && data)
 				{
+					s_cap->contents += size;
 					s_cap->w.rec(REC_BUFFER_DATA, buffer_data { id, DATA_INITIAL, 0, size }, data, size);
 					buffer->Unlock();
 				}
@@ -1612,6 +1615,11 @@ namespace comp
 			}
 		}
 
+		// The host keeps what it was sent until the address is reused: the game frees a map's resources on a warp, unseen by
+		// a stream that holds no references. The host is a 32-bit process, and Remix keeps its copies too. A new session
+		// costs a few seconds' resync.
+		constexpr uint64_t kMaxSessionContents = 1500ull << 20;
+
 		// ---- back-off ----
 		//
 		// A host too slow for the game overflows the ring now and then. Each new
@@ -1857,6 +1865,8 @@ namespace comp
 			}
 			else if (ring.hdr->consumer_epoch != ring.epoch)
 				end_stream_session("host restarted");
+			else if (c->contents > kMaxSessionContents)
+				end_stream_session(std::format("{:.0f} MB of objects sent: a new session lets the host free what the game no longer has", mb(int64_t(c->contents))));
 			return bytes;
 		}
 

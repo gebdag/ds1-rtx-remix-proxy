@@ -28,7 +28,7 @@ set "CF=/nologo /std:c++latest /W4 /WX /O2 /MT /EHsc /Zi /DUNICODE /D_UNICODE /D
 :: Each architecture in its own environment (vcvarsall cannot be switched in place).
 call :build x64 viewer ds1_lookdev_viewer "user32.lib d3d9.lib"
 if errorlevel 1 goto :fail
-call :build x86 host ds1_lookdev_host "user32.lib"
+call :build x86 host ds1_lookdev_host "user32.lib /LARGEADDRESSAWARE"
 if errorlevel 1 goto :fail
 
 echo === Lookdev build succeeded: %ROOT%bin ===

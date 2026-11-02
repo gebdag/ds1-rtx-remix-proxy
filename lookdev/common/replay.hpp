@@ -462,7 +462,9 @@ namespace lookdev::replay
 			D3DLOCKED_RECT lr;
 			if (SUCCEEDED(staging->LockRect(&lr, nullptr, 0)))
 			{
-				copy_rows(static_cast<uint8_t*>(lr.pBits), static_cast<UINT>(lr.Pitch), bits, td.rows, td.row_bytes);
+				if (td.rows > sd.Height)
+					error("surface data taller than its surface", E_INVALIDARG, td.id);
+				copy_rows(static_cast<uint8_t*>(lr.pBits), static_cast<UINT>(lr.Pitch), bits, std::min<uint32_t>(td.rows, sd.Height), td.row_bytes);
 				staging->UnlockRect();
 			}
 			hr = dev->UpdateSurface(staging, nullptr, dst, nullptr);
@@ -541,10 +543,12 @@ namespace lookdev::replay
 				upload_default_surface(e.surface, td, bits);
 				return;
 			}
+			D3DSURFACE_DESC sd;
+			e.surface->GetDesc(&sd);
 			D3DLOCKED_RECT lr;
 			if (SUCCEEDED(e.surface->LockRect(&lr, nullptr, 0)))
 			{
-				copy_rows(static_cast<uint8_t*>(lr.pBits), static_cast<UINT>(lr.Pitch), bits, td.rows, td.row_bytes);
+				copy_rows(static_cast<uint8_t*>(lr.pBits), static_cast<UINT>(lr.Pitch), bits, std::min<uint32_t>(td.rows, sd.Height), td.row_bytes);
 				e.surface->UnlockRect();
 			}
 		}
