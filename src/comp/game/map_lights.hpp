@@ -86,6 +86,9 @@ namespace comp::game::map_lights
 	// False for any slot that is not a synthesized light on the current map.
 	bool describe(int slot, std::string& name, std::string& category);
 
+	// Whether this map places a flame effect at this spot (rtx_comp\map_flames.tsv, the MSB's SFX events).
+	bool is_flame(float x, float y, float z);
+
 	// Path last read for the map table, and why it produced nothing if it did.
 	const std::string& source_path();
 	const std::string& status();

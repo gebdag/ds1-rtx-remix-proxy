@@ -339,6 +339,33 @@ namespace comp::game::map_lights
 			: std::format("{} light(s), {} malformed line(s) skipped", s_raw.size(), rejected);
 	}
 
+	bool is_flame(float x, float y, float z)
+	{
+		// Every MSB Light is within this of a flame or more than 6 m from any.
+		constexpr float kSame = 0.5f;
+		static std::string s_flames_map;
+		static std::vector<std::array<float, 3>> s_flames;
+		if (const auto map = current_map_name(); map != s_flames_map)
+		{
+			s_flames_map = map;
+			s_flames.clear();
+			std::ifstream file(shared::globals::root_path + "\\rtx_comp\\map_flames.tsv");
+			std::string line;
+			while (std::getline(file, line))
+			{
+				if (line.compare(0, map.size(), map) != 0 || line.size() <= map.size() || line[map.size()] != '\t')
+					continue;
+				std::istringstream in(line.substr(map.size()));
+				int ffx = 0;
+				std::array<float, 3> p;
+				if (in >> ffx >> p[0] >> p[1] >> p[2])
+					s_flames.push_back(p);
+			}
+		}
+		return std::any_of(s_flames.begin(), s_flames.end(), [&](const std::array<float, 3>& p)
+			{ return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) + (p[2] - z) * (p[2] - z) < kSame * kSame; });
+	}
+
 	// Every map change reports what it found, so a wrong id or a missing table is
 	// visible in the log instead of just being zero lights.
 	static void log_load()

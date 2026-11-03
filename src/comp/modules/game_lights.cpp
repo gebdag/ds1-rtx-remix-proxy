@@ -726,7 +726,7 @@ namespace comp
 				: max_active_lights_ > 0 && active >= max_active_lights_ ? row_state::over_limit
 				: skip_characters_only_ && !(edit && edit->include_map) &&
 					(row.kind == kind::map_row || row.kind == kind::bank_entity) &&
-					characters_only(src.x, src.y, src.z) ? row_state::characters
+					characters_only(src.x, src.y, src.z) && !game::map_lights::is_flame(src.x, src.y, src.z) ? row_state::characters
 				: row_state::on;
 			if (row.state != row_state::on)
 			{
@@ -1736,7 +1736,8 @@ namespace comp
 		form_checkbox("Character-only lights start off", "##charonly", &skip_characters_only_,
 			"Map lights the game binds to characters only light none of the map in the game (a light for whoever\n"
 			"stands in a sunbeam baked into the lightmap). As Remix lights they would light the walls around\n"
-			"them, so they start off; each can be switched on in its own settings ('Light the map as well').\n"
+			"them, so they start off, unless the light is a flame's the map places (a torch stays a torch); each can\n"
+			"be switched on in its own settings ('Light the map as well').\n"
 			"Untick to draw them all. Saved as [Lights] SkipCharacterOnly.");
 		bool resolve = game::point_lights::resolve_entities();
 		if (form_checkbox("Read entity light colours", "##resolve", &resolve,
