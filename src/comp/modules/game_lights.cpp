@@ -973,15 +973,17 @@ namespace comp
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(),
 			sun_fallback_colour);
 
+		const float* key_colour = sun_colour_set ? sun_colour : sun.key.colour;
+		const float* key_direction = sun_direction_set ? sun_direction : sun.key.dir;
 		float ambient[3] = {};
-		const float facing_sun[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
+		const float facing_sun[3] = { -key_direction[0], -key_direction[1], -key_direction[2] };
 		game::atmosphere::ambient_toward(facing_sun, ambient);
-		game::atmosphere::set_sun_gamma(ambient, sun.key.colour);
+		game::atmosphere::set_sun_gamma(ambient, key_colour);
 		float linear[3];
 		for (int c = 0; c < 3; ++c)
 		{
 			const float base = std::max(ambient[c], 0.0f);
-			linear[c] = std::pow(base + std::max(sun.key.colour[c], 0.0f), 2.2f) - std::pow(base, 2.2f);
+			linear[c] = std::pow(base + std::max(key_colour[c], 0.0f), 2.2f) - std::pow(base, 2.2f);
 		}
 
 		const float mult = sun_intensity_scale * edit_multiplier(KEY_SUN);
@@ -998,7 +1000,7 @@ namespace comp
 			return;
 		}
 
-		const remixapi_Float3D direction = { sun.key.dir[0], sun.key.dir[1], sun.key.dir[2] };
+		const remixapi_Float3D direction = { key_direction[0], key_direction[1], key_direction[2] };
 		const bool unchanged = sun_handle_ &&
 			sun_distant_.direction.x == direction.x &&
 			sun_distant_.direction.y == direction.y &&
@@ -1452,6 +1454,15 @@ namespace comp
 		sun_intensity_scale = cfg.get_float("Sun", "IntensityScale", 1.0f);
 		sun_angular_diameter = cfg.get_float("Sun", "AngularDiameter", 0.53f);
 		cfg.get_float3("Sun", "FallbackColour", sun_fallback_colour);
+		sun_colour_set = cfg.get_float3("Sun", "Colour", sun_colour);
+		sun_direction_set = cfg.get_float3("Sun", "Direction", sun_direction);
+		if (sun_direction_set)
+		{
+			const float length = std::sqrt(sun_direction[0] * sun_direction[0] + sun_direction[1] * sun_direction[1] + sun_direction[2] * sun_direction[2]);
+			sun_direction_set = length > 0.0f;
+			for (float& d : sun_direction)
+				d /= std::max(length, 1e-6f);
+		}
 
 		auto& p = player_cfg_;
 		p.enabled = cfg.get_bool("PlayerLight", "Enabled", true);
