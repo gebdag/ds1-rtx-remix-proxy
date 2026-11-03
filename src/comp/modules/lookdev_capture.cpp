@@ -561,6 +561,9 @@ namespace comp
 			D3DSURFACE_DESC sd;
 			if (FAILED(surface->GetDesc(&sd)))
 				return false;
+			// The bridge's back buffer keeps the format the game asked for at Reset, which is "unknown" in a window: the display's.
+			if (D3DDISPLAYMODE mode; sd.Format == D3DFMT_UNKNOWN && SUCCEEDED(c.dev->GetDisplayMode(0, &mode)))
+				sd.Format = mode.Format;
 
 			IDirect3DSurface9* source = surface;
 			IDirect3DSurface9* resolved = nullptr;
