@@ -23,6 +23,7 @@
 #include <d3d9.h>
 
 #include <atomic>
+#include <memory>
 #include <thread>
 
 #include "../common/replay.hpp"
@@ -236,24 +237,47 @@ namespace
 	// exposure to settle and the menus to stay usable; --fps 0 runs uncapped.
 	constexpr int kReplayFps = 30;
 
-	int run_file(proxy_api& proxy, const std::filesystem::path& capture_path, const std::unordered_set<uint32_t>& drop_draws, int max_fps)
+	// A capture to change to without restarting Remix: its path in this file, in the game folder (shots.py). A capture
+	// with another back buffer cannot share the device, so it is refused: restart the host for it.
+	constexpr const wchar_t* kNextCaptureFile = L"lookdev_next_capture.txt";
+
+	std::filesystem::path take_next_capture()
 	{
-		capture_file cap;
-		if (!cap.open(capture_path.wstring()))
+		if (GetFileAttributesW(kNextCaptureFile) == INVALID_FILE_ATTRIBUTES)
+			return {};
+		std::string text;
+		if (FILE* f = _wfopen(kNextCaptureFile, L"rb"))
+		{
+			char buffer[1024];
+			const size_t n = fread(buffer, 1, sizeof(buffer), f);
+			fclose(f);
+			text.assign(buffer, n);
+		}
+		DeleteFileW(kNextCaptureFile);
+		while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' '))
+			text.pop_back();
+		return std::filesystem::path(std::u8string(text.begin(), text.end()));
+	}
+
+	int run_file(proxy_api& proxy, const std::filesystem::path& first_capture, const std::unordered_set<uint32_t>& drop_draws, int max_fps)
+	{
+		std::filesystem::path capture_path = first_capture;
+		auto cap = std::make_unique<capture_file>();
+		if (!cap->open(capture_path.wstring()))
 		{
 			std::printf("could not read %ls\n", capture_path.c_str());
 			return 2;
 		}
-		const auto& h = cap.header;
+		const auto h = cap->header;
 		std::printf("%ls: frame %llu, %ux%u, %zu records\n", capture_path.filename().c_str(),
-			static_cast<unsigned long long>(h.frame_index), h.bb_width, h.bb_height, cap.records.size());
+			static_cast<unsigned long long>(h.frame_index), h.bb_width, h.bb_height, cap->records.size());
 
 		HWND hwnd = nullptr;
 		IDirect3DDevice9* dev = create_device(proxy.d3d, h, hwnd);
 		if (!dev)
 			return 2;
 
-		replayer rp(cap);
+		replayer rp(*cap);
 		rp.dev = dev;
 		rp.reapply_gpu_targets = false;
 		rp.drop_draws = drop_draws;
@@ -263,6 +287,25 @@ namespace
 		bool first = true;
 		while (pump())
 		{
+			if (const auto next = take_next_capture(); !next.empty())
+			{
+				auto opened = std::make_unique<capture_file>();
+				if (!opened->open(next.wstring()))
+					std::printf("could not read %ls\n", next.c_str());
+				else if (opened->header.bb_width != h.bb_width || opened->header.bb_height != h.bb_height || opened->header.bb_format != h.bb_format)
+					std::printf("%ls has another back buffer: restart the host for it\n", next.c_str());
+				else
+				{
+					rp.reset();
+					cap = std::move(opened);
+					rp.cap = cap.get();
+					rp.first_pass = true;
+					capture_path = next;
+					first = true;
+					fps = fps_meter {};
+					SetWindowTextW(hwnd, L"DS1 lookdev - Remix - changing capture");
+				}
+			}
 			const auto t0 = GetTickCount64();
 			rp.run();
 			dev->Present(nullptr, nullptr, nullptr, nullptr);
