@@ -11,8 +11,9 @@ namespace comp::game::mesh_lights
 	// changes, since the mesh is not drawn when out of view while the light on its surroundings still shows.
 	//
 	// One texture per line: name  dwindleBegin dwindleEnd  r g b  intensityPct
-	// The light has the game's falloff and sits at the lamp's middle. These meshes are closed boxes, so they carry a marker for
-	// the runtime: lighting rays pass them (Surface::isDs1NoShadow).
+	// The light has the game's falloff and sits at the lamp's middle, or off its wall by `<map>.lamps.txt` (scripts/gen_lamp_offsets.py):
+	// at the wall it meets the wall at a grazing angle and lights only the grooves. These meshes are closed boxes, so they carry a
+	// marker for the runtime: lighting rays pass them (Surface::isDs1NoShadow).
 	// The file is watched, so an edit applies while the game runs.
 	constexpr int kFirstSlot = 0x50000;
 

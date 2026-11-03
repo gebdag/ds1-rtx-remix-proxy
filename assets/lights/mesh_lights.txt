@@ -7,5 +7,6 @@
 # casts no shadow, or a closed lamp would hold its light in.
 #
 # Duke's Archives lanterns. Their glow is baked: lightmap against distance over 110,000 capture vertices, 0.7 under 3 m, 0.34 at 4-5 m,
-# the area's 0.26 by 5.5-6 m, with lit walls past that in the frames. Colour from the game's frames on walls these lanterns light.
-m17_00_light_01  3 7  232 250 238  90
+# the area's 0.26 by 5.5-6 m, with lit walls past that in the frames. The light stands 1.5 m off its wall (m17_00_00_00.lamps.txt).
+# 45%: from 90% down, swept over 13 lantern captures; above it pale stone burns out, and frame error is flat from 90 to 35.
+m17_00_light_01  3 7  232 250 238  45

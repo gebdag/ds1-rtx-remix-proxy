@@ -5,6 +5,7 @@
 
 #include "shared/common/ffp_state.hpp"
 
+#include <array>
 #include <format>
 #include <fstream>
 #include <sstream>
@@ -40,6 +41,9 @@ namespace comp::game::mesh_lights
 		std::unordered_set<uint64_t> g_read_draws;
 		std::vector<lamp> g_lamps;
 		std::vector<point_lights::light> g_out;
+		// This map's lamps that stand off a wall: where the lamp is, then the offset.
+		std::vector<std::array<float, 6>> g_offsets;
+		constexpr float kOffsetMatch = 1.0f;
 		std::string g_map;
 		std::string g_path;
 		FILETIME g_file_time {};
@@ -82,6 +86,24 @@ namespace comp::game::mesh_lights
 			shared::common::log("MeshLights", std::format("{}: {} texture(s)", g_path, g_rules.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
 		}
 
+		void load_offsets()
+		{
+			g_offsets.clear();
+			std::ifstream in(shared::globals::root_path + "\\rtx_comp\\lights\\" + g_map + ".lamps.txt");
+			std::string line;
+			while (std::getline(in, line))
+			{
+				if (line.empty() || line[0] == '#')
+					continue;
+				std::istringstream s(line);
+				std::array<float, 6> o;
+				if (s >> o[0] >> o[1] >> o[2] >> o[3] >> o[4] >> o[5])
+					g_offsets.push_back(o);
+			}
+			if (!g_offsets.empty())
+				shared::common::log("MeshLights", std::format("{}: {} lamps stand off their walls", g_map, g_offsets.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+		}
+
 		void update_state()
 		{
 			const auto map = map_lights::current_map_name();
@@ -89,6 +111,7 @@ namespace comp::game::mesh_lights
 			{
 				g_map = map;
 				forget_lamps();
+				load_offsets();
 			}
 			const DWORD now = GetTickCount();
 			if (g_file_seen && now - g_last_check < kCheckEveryMs)
@@ -128,6 +151,17 @@ namespace comp::game::mesh_lights
 			p.x = at[0];
 			p.y = at[1];
 			p.z = at[2];
+			for (const auto& o : g_offsets)
+			{
+				const float dx = o[0] - at[0], dy = o[1] - at[1], dz = o[2] - at[2];
+				if (dx * dx + dy * dy + dz * dz < kOffsetMatch * kOffsetMatch)
+				{
+					p.x += o[3];
+					p.y += o[4];
+					p.z += o[5];
+					break;
+				}
+			}
 			p.r = r.colour[0];
 			p.g = r.colour[1];
 			p.b = r.colour[2];

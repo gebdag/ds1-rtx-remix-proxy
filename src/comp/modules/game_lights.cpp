@@ -489,6 +489,21 @@ namespace comp
 				row.decoupled = true;
 			}
 		}
+		// The lamps of one texture are one group the same way.
+		if (row.kind == kind::mesh)
+		{
+			const auto texture = game::mesh_lights::texture_of(l.slot);
+			row.id = row.key;
+			row.key = string_hash64(va("mesh_group:%s", texture.c_str())) | 0x8000000000000000ull;
+			row.group_key = row.key;
+			row.own_key = string_hash64(va("mesh_own:%s:%ld:%ld:%ld", texture.c_str(),
+				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))) | 0x8000000000000000ull;
+			if (decoupled_.count(row.own_key))
+			{
+				row.key = row.own_key;
+				row.decoupled = true;
+			}
+		}
 		row.slot = l.slot;
 		row.pos[0] = l.x; row.pos[1] = l.y; row.pos[2] = l.z;
 		if (player)
@@ -568,7 +583,8 @@ namespace comp
 			break;
 		}
 		case kind::mesh:
-			row.name = std::format("{} lamp {}", game::mesh_lights::texture_of(l.slot), l.slot - game::mesh_lights::kFirstSlot + 1);
+			row.group = game::mesh_lights::texture_of(l.slot);
+			row.name = std::format("{} lamp {}", row.group, l.slot - game::mesh_lights::kFirstSlot + 1);
 			row.origin = game::mesh_lights::path();
 			break;
 		case kind::ffx_table:
