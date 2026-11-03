@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 namespace shared::common
 {
 	class config
@@ -14,6 +16,10 @@ namespace shared::common
 		// lookdev host uses remix-comp-proxy.host.ini for experiments that must not
 		// touch the game's own INI.
 		void set_overlay(const std::string& path);
+
+		// Keys ("Section.Key") that win over both INIs while the player is in an area (game/area_overrides), and are
+		// left out when the INI is written. Re-reads the settings: anything changed in the menu and not saved is lost.
+		void set_area_values(std::unordered_map<std::string, std::string> values);
 
 		int get_int(const char* section, const char* key, int default_val) const;
 		std::string get_string(const char* section, const char* key, const char* default_val) const;
@@ -407,6 +413,7 @@ namespace shared::common
 	private:
 		std::string ini_path_;
 		std::string overlay_path_;
+		std::unordered_map<std::string, std::string> area_values_;
 		bool loaded_ = false;
 
 		bool overlay_value(const char* section, const char* key, std::string& out) const;

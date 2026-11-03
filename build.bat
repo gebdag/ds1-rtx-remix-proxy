@@ -260,6 +260,7 @@ if not "!DEPLOY_TARGET!"=="" (
         :: Synthesized map light tables. Only files missing at the destination are
         :: copied: these are hand-tunable in the game folder and a rebuild must not
         :: discard that. Delete one to have the generated table restored.
+        if not exist "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" if exist "%ROOT%assets\area_overrides.ini" copy /y "%ROOT%assets\area_overrides.ini" "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" >nul
         if exist "%ROOT%assets\lights" robocopy "%ROOT%assets\lights" "!DEPLOY_TARGET!\rtx_comp\lights" *.txt /XC /XN /XO >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy light tables
         ver >nul

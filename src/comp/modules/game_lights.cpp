@@ -1396,6 +1396,22 @@ namespace comp
 
 	void game_lights::revert_to_saved()
 	{
+		read_settings();
+		load_overrides();
+		solo_ = 0;
+		flash_selected_ = false;
+		saved_text_ = serialize();
+		save_status_ = "reverted to saved";
+	}
+
+	void game_lights::reread_settings()
+	{
+		read_settings();
+		saved_text_ = serialize();
+	}
+
+	void game_lights::read_settings()
+	{
 		auto& cfg = shared::common::config::get();
 		enabled = cfg.get_bool("Lights", "Enabled", true);
 		intensity_scale = cfg.get_float("Lights", "IntensityScale", 1.0f);
@@ -1426,12 +1442,6 @@ namespace comp
 		p.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0 : _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
 		p.offset[0] = p.offset[1] = p.offset[2] = 0.0f;
 		cfg.get_float3("PlayerLight", "Offset", p.offset);
-
-		load_overrides();
-		solo_ = 0;
-		flash_selected_ = false;
-		saved_text_ = serialize();
-		save_status_ = "reverted to saved";
 	}
 
 	// ------------------------------------------------------------------ UI

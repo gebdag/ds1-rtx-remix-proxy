@@ -18,6 +18,7 @@
 #include "game/map_lights.hpp"
 #include "game/swamp.hpp"
 #include "game/hud_scale.hpp"
+#include "game/area_overrides.hpp"
 #include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/dlss_nr.hpp"
@@ -70,6 +71,9 @@ namespace comp
 
 		// Where the runtime's water ripple field is centred (rtx.ds1Ripple.playerPosition).
 		game::water_ripples::frame_update();
+
+		// Settings that belong to the area the player is in (rtx_comp\\area_overrides.ini).
+		game::area_overrides::frame_update(shared::common::ffp_state::get().frame_count());
 
 		// Sync camera override flags to ffp_state each frame
 		{

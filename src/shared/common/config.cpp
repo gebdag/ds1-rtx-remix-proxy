@@ -77,8 +77,20 @@ namespace shared::common
 		}
 	}
 
+	void config::set_area_values(std::unordered_map<std::string, std::string> values)
+	{
+		area_values_ = std::move(values);
+		if (loaded_) parse_all();
+	}
+
 	bool config::overlay_value(const char* section, const char* key, std::string& out) const
 	{
+		if (!area_values_.empty())
+			if (const auto it = area_values_.find(std::string(section) + "." + key); it != area_values_.end())
+			{
+				out = it->second;
+				return true;
+			}
 		if (overlay_path_.empty()) return false;
 		char buf[512];
 		GetPrivateProfileStringA(section, key, "\x01", buf, sizeof(buf), overlay_path_.c_str());
@@ -134,6 +146,8 @@ namespace shared::common
 	bool config::set_string(const char* section, const char* key, const std::string& value) const
 	{
 		if (!loaded_ || ini_path_.empty()) return false;
+		// An area's value is the area's: the INI keeps what it has.
+		if (area_values_.contains(std::string(section) + "." + key)) return true;
 		return WritePrivateProfileStringA(section, key, value.c_str(), ini_path_.c_str()) != FALSE;
 	}
 

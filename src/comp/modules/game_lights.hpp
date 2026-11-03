@@ -107,6 +107,9 @@ namespace comp
 		// beam of baked sunlight) lights none of the map in the game; drawn
 		// as a Remix light it lights the map around it (row_state::characters).
 		void observe_draw_lights(const float* ps_const, int light_count, bool character);
+		// The INI's values changed under the running game (game/area_overrides): takes them, keeps per-light edits.
+		void reread_settings();
+
 		// Live diagnostics (atmosphere.cpp set_proxy_option).
 		void set_emitter_radius(float r) { emitter_radius_ = r; }
 		void set_kind_enabled(int k, bool on) { if (k >= 0 && k < static_cast<int>(light_kind::count)) kind_enabled_[k] = on; }
@@ -115,6 +118,7 @@ namespace comp
 		float menu_key[7] = { -1.5f, 2.5f, -1.8f, 120.0f, 112.0f, 100.0f, 0.3f };
 
 	private:
+		void read_settings();
 		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).
 		std::vector<std::array<float, 3>> lightmap_bound_;
 		bool bound_to_lightmap(float x, float y, float z) const;

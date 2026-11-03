@@ -10,16 +10,15 @@ the shaft in the open air, each lighting the stretch below it. Chosen greedily f
 with rays against the map's opaque pieces. Each surface wants light by its facing, as the game's probe gives it: all facing
 up, about half sideways, none facing down.
 
-The tunnel entrance at the top, a tube about 5 m across, is lit evenly in the game. Its lights are plain spheres spaced along
-the tube, centred between floor and roof, each only as strong as its distance to the surfaces asks for: a greedy pick with one
-strength leaves it patchy.
+The tunnel entrance at the top, a tube about 5 m across, is lit evenly in the game (largely by the player's head light, reach
+18 m, which moves with the player). Its lights are plain spheres at fixed stops along the tube, their strengths solved together
+so that the light on the tube's surfaces comes out even: strengths set from each light's own surroundings left it patchy.
 
 Needs embreex (pip install embreex).
 
 Usage: py -3.12 scripts/gen_hollow_lights.py [--strength S] [--want E] [--max-lights N] [--deploy]
 """
 import argparse
-import collections
 import os
 import shutil
 import sys
@@ -36,16 +35,20 @@ BOX_MAX = np.array([-300.0, -200.0, 150.0])
 # Where the captures stood, walking down from the tunnel: a walk over the floors starts from each.
 SEEDS = [(-331.4, -207.0, 81.9), (-343.3, -209.7, 96.1), (-351.3, -220.5, 120.3), (-318.4, -237.7, 120.4), (-345.7, -260.5, 106.7),
          (-326.3, -261.3, 121.3), (-331.6, -271.0, 118.0), (-339.4, -287.6, 112.3), (-316.1, -314.0, 122.2), (-317.6, -342.8, 114.7),
-         (-336.6, -343.9, 121.5), (-341.1, -359.0, 121.4), (-320.9, -370.4, 118.7), (-322.5, -392.2, 116.5)]
-# The tunnel entrance, its way down from the first capture, as far as the last capture in it. Blighttown's swamp plane lies over
-# its lower end (y -215) while that map is loaded, so nothing above reaches there. Past this the walk finds the way to where the
-# shaft opens.
-TUNNEL = [(-331.4, -205.0, 78.0), (-343.3, -208.0, 96.1), (-351.3, -219.0, 120.3)]
-SHAFT_OPENS = (-318.4, -237.7, 120.4)
-TUNNEL_NEAR = 14.0
-TUNNEL_SPACING = 5.0
-# The game's probe and hemisphere by normal y: down, sideways, up.
-FACING = ([-1.0, 0.0, 1.0], [0.0, 0.47, 1.0])
+         (-336.6, -343.9, 121.5), (-341.1, -359.0, 121.4), (-320.9, -370.4, 118.7), (-322.5, -392.2, 116.5),
+         (-338.8, -207.8, 90.4), (-348.8, -219.5, 114.8), (-342.4, -224.6, 126.5), (-326.4, -227.7, 130.1), (-318.6, -236.0, 120.7)]
+# The tunnel entrance, its way down to the ladder: the floor under the player in the captures (head light c112 + camera, less
+# the head's height). The cameras ride up to 3.5 m above it. Past this the shaft's lights take over.
+TUNNEL = [(-331.4, -207.0, 78.0), (-338.8, -207.8, 90.4), (-343.3, -210.0, 96.1), (-348.8, -219.5, 114.8), (-342.4, -224.6, 126.5),
+          (-326.4, -227.7, 130.1)]
+TUNNEL_NEAR = 7.0
+TUNNEL_SPACING = 3.0
+TUNNEL_TARGETS = 4000
+# Most light a tunnel stop may give its nearest surface, as a share of what the surfaces want: more is a hot patch.
+TUNNEL_HOT = 1.6
+# Light wanted by normal y: down, sideways, up. The game's probe and hemisphere give 0.47 sideways before its lightmaps mask the
+# probe; at 0.47 the walls and roots beside the first bonfire stood out bright where the game's are dark.
+FACING = ([-1.0, 0.0, 1.0], [0.0, 0.25, 1.0])
 # c98 + probe top * c86 in linear, corrected against the game by the frame colour over ten captures (red 1.09, blue 0.83).
 COLOUR = '213 255 205'
 TOP = (-331.0, -135.0, 118.0)
@@ -67,40 +70,13 @@ REFERENCE_RADIUS = 2.5
 MIN_RADIUS = 0.5
 
 
-g_tunnel = list(TUNNEL)
-
-
-def walk_between(nodes, seen, by_xz, start, end):
-    """The cells of the shortest walk from one point to another, breadth first over the walkable cells."""
-    cells = list(seen)
-    at = np.array([nodes[k] for k in cells])
-    first_cell = cells[int(np.argmin(np.linalg.norm(at - np.array(start), axis=1)))]
-    last_cell = cells[int(np.argmin(np.linalg.norm(at - np.array(end), axis=1)))]
-    parent = {first_cell: None}
-    queue = collections.deque([first_cell])
-    while queue and last_cell not in parent:
-        k = queue.popleft()
-        for dx in (-1, 0, 1):
-            for dz in (-1, 0, 1):
-                for o in by_xz.get((k[0] + dx, k[1] + dz), ()):
-                    if o in seen and o not in parent and abs(nodes[o][1] - nodes[k][1]) < 1.4:
-                        parent[o] = k
-                        queue.append(o)
-    path = []
-    k = last_cell
-    while k is not None:
-        path.append(nodes[k])
-        k = parent.get(k)
-    return path[::-1]
-
-
 def radiance(strength, radius):
     return strength * (REFERENCE_RADIUS / radius) ** 2
 
 
 def distance_to_tunnel(points):
     best = np.full(len(points), np.inf)
-    for a, b in zip(g_tunnel[:-1], g_tunnel[1:]):
+    for a, b in zip(TUNNEL[:-1], TUNNEL[1:]):
         a, b = np.array(a), np.array(b)
         s = np.clip(((points - a) @ (b - a)) / max(((b - a) ** 2).sum(), 1e-9), 0.0, 1.0)
         best = np.minimum(best, np.linalg.norm(points - (a + s[:, None] * (b - a)), axis=1))
@@ -122,7 +98,7 @@ def main():
     ap.add_argument('--strength', type=float, default=56.0, help='each light, in Remix units')
     ap.add_argument('--want', type=float, default=0.48, help='light an up-facing surface should get, strength * cos / d^2')
     ap.add_argument('--top', type=float, default=800.0, help='the light at the top of the shaft')
-    ap.add_argument('--tunnel', type=float, default=0.6, help='light on the tunnel floor, strength / d^2')
+    ap.add_argument('--tunnel', type=float, default=0.8, help='light on the tunnel floor, strength / d^2')
     ap.add_argument('--max-lights', type=int, default=140)
     ap.add_argument('--deploy', action='store_true', help='also into the game\'s rtx_comp\\lights')
     args = ap.parse_args()
@@ -133,7 +109,7 @@ def main():
     no_block = table_sources(os.path.join(sky_dir, 'sky_meshes.txt')) | table_sources(os.path.join(sky_dir, 'glass_meshes.txt'))
     msb = os.path.join(args.data, 'map', 'MapStudio', f'{MAP}.msb')
     area = MAP[1:3]
-    flvers, world_tris, near = {}, [], []
+    flvers, world_tris, near, shell_tris = {}, [], [], []
     for model, at, rot, scale, _light in map_pieces(msb):
         path = os.path.join(args.data, 'map', MAP, f'{model}A{area}.flver')
         if not os.path.exists(path):
@@ -152,15 +128,21 @@ def main():
             if not len(t):
                 continue
             source = f'{MAP}/{model}A{area}/mesh{i}'
-            if f'{source}/lod0' in no_block or not blocks_rays(str(flver.materials[mesh.material_index].mtd)):
+            if f'{source}/lod0' in no_block:
                 continue
             world = p @ r.T + at
+            if (world.max(0) >= BOX_MIN).all() and (world.min(0) <= BOX_MAX).all():
+                shell_tris.append(world[t])
+            if not blocks_rays(str(flver.materials[mesh.material_index].mtd)):
+                continue
             normals = np.asarray(first(mesh.vertices['normal']), np.float64)[:, :3] @ r.T if 'normal' in mesh.vertices else None
             world_tris.append(world[t])
             lo, hi = world.min(0), world.max(0)
             if (hi >= BOX_MIN).all() and (lo <= BOX_MAX).all() and normals is not None:
                 near.append((world, t, normals))
     scene = Scene(np.concatenate(world_tris))
+    # What the tunnel's surfaces are to the eye: the opaque pieces and the alpha-tested shell on them.
+    tube_scene = Scene(np.concatenate(shell_tris))
     print(f'{len(world_tris)} opaque meshes, {len(near)} around the shaft')
 
     # The floors the player can walk, joined from where the captures stood.
@@ -201,9 +183,6 @@ def main():
                         stack.append(o)
     walk = np.array([nodes[k] for k in seen])
     print(f'{len(floors)} floor points, {len(walk)} walkable cells of {len(nodes)}')
-    onward = walk_between(nodes, seen, by_xz, TUNNEL[-1], SHAFT_OPENS)
-    g_tunnel.extend(tuple(q) for q in onward[::4])
-    print(f'tunnel: {len(onward)} cells on from the last capture to where the shaft opens')
 
     # The surfaces to light: what the player sees from those floors, within the shaft.
     origins = np.repeat(walk + np.array([0.0, 1.5, 0.0]), RAYS_PER_CELL, axis=0)
@@ -252,24 +231,72 @@ def main():
     scale = np.concatenate([np.ones(bright.sum()), np.full(len(lowest), DIM)])
     lowest = np.concatenate([lowest[bright], lowest])
 
-    # Along the tunnel: over the walk's cell nearest each stop, halfway to the roof.
+    # Along the tunnel: stops at the middle of the tube, between its walls and halfway from floor to roof.
+    def tube_clearance(points):
+        lowest = np.full(len(points), np.inf)
+        for d in around:
+            lowest = np.minimum(lowest, tube_scene.first_hit(points, np.tile(d, (len(points), 1))))
+        return lowest
+
+    def tube_middle(q):
+        for _ in range(3):
+            hits = []
+            for angle in np.arange(0.0, 2.0 * np.pi, np.pi / 4.0):
+                d = np.array([np.cos(angle), 0.0, np.sin(angle)])
+                hits.append(q + d * min(tube_scene.first_hit(q[None], d[None])[0], 6.0))
+            q = np.array([np.mean(hits, axis=0)[0], q[1], np.mean(hits, axis=0)[2]])
+        return q
+
     tube = []
-    tunnel_walk = walk[distance_to_tunnel(walk) < 6.0]
-    for a, b in zip(g_tunnel[:-1], g_tunnel[1:]):
+    tunnel_walk = walk[distance_to_tunnel(walk) < 4.0]
+    for a, b in zip(TUNNEL[:-1], TUNNEL[1:]):
         a, b = np.array(a), np.array(b)
         for s in np.arange(0.0, np.linalg.norm(b - a), TUNNEL_SPACING):
             stop = a + (b - a) / np.linalg.norm(b - a) * s
             floor = tunnel_walk[int(np.argmin(np.linalg.norm(tunnel_walk - stop, axis=1)))]
-            if tube and np.linalg.norm(floor - tube[-1][0]) < 0.6 * TUNNEL_SPACING:
+            if tube and min(np.linalg.norm(floor - q[0]) for q in tube) < 0.6 * TUNNEL_SPACING:
                 continue
-            ceiling = scene.first_hit((floor + np.array([0.0, 0.1, 0.0]))[None], np.array([[0.0, 1.0, 0.0]]))[0]
-            height = min(0.55 * ceiling, 2.5)
-            c = floor + np.array([0.0, height, 0.0])
-            near = clearance(c[None])[0]
-            # As strong as the nearest surface asks for, or it burns a patch into that wall.
-            if near >= 0.8:
-                tube.append((floor, c, max(min(0.8 * near, 0.8), MIN_RADIUS), args.tunnel * min(height, near) ** 2))
-    print(f'{len(tube)} lights along the tunnel')
+            ceiling = tube_scene.first_hit((floor + np.array([0.0, 0.1, 0.0]))[None], np.array([[0.0, 1.0, 0.0]]))[0]
+            c = tube_middle(floor + np.array([0.0, min(0.55 * ceiling, 2.2), 0.0]))
+            nearest = tube_clearance(c[None])[0]
+            if nearest >= 0.5:
+                tube.append((floor, c, max(min(0.8 * nearest, 0.8), MIN_RADIUS), nearest))
+    print(f'{len(tube)} stops along the tunnel, nearest surface {min(q[3] for q in tube):.1f} to {max(q[3] for q in tube):.1f} m')
+
+    # The tube's surfaces: what the player sees from its floor.
+    origin_t = np.repeat(tunnel_walk + np.array([0.0, 1.5, 0.0]), 40, axis=0)
+    dir_t = rng.normal(size=(len(origin_t), 3))
+    dir_t /= np.linalg.norm(dir_t, axis=1, keepdims=True)
+    r = tube_scene.scene.run(origin_t.astype(np.float32), dir_t.astype(np.float32), output=True)
+    dt = np.asarray(r['tfar']).astype(np.float64)
+    ok = (np.asarray(r['primID']).astype(np.int64) >= 0) & (dt < 12.0)
+    ntube = np.asarray(r['Ng']).astype(np.float64)[ok]
+    ntube /= np.maximum(np.linalg.norm(ntube, axis=1, keepdims=True), 1e-9)
+    ntube[(ntube * dir_t[ok]).sum(1) > 0] *= -1
+    ptube = origin_t[ok] + dir_t[ok] * dt[ok, None]
+    close = distance_to_tunnel(ptube) < TUNNEL_NEAR
+    ptube, ntube = ptube[close], ntube[close]
+    pick = rng.choice(len(ptube), min(TUNNEL_TARGETS, len(ptube)), replace=False)
+    ptube, ntube = ptube[pick], ntube[pick]
+
+    # The light each stop gives each surface at strength 1, then the strengths that bring every surface nearest the same light.
+    gain = np.zeros((len(ptube), len(tube)))
+    for j, (_, c, _, _) in enumerate(tube):
+        to = c - ptube
+        d = np.linalg.norm(to, axis=1)
+        direction = to / d[:, None]
+        cosine = np.maximum((direction * ntube).sum(1), 0.0)
+        seen = scene.first_hit(ptube + ntube * 0.05, direction) >= d - 0.5
+        gain[:, j] = cosine * seen / np.maximum(d, 1.0) ** 2
+    reached = gain.sum(1) > 0
+    a_t = gain[reached]
+    hottest = np.array([args.tunnel * TUNNEL_HOT * max(q[3], 1.0) ** 2 for q in tube])
+    strengths = np.minimum(np.full(len(tube), args.tunnel * 4.0), hottest)
+    step = 1.0 / np.linalg.norm(a_t, 2) ** 2
+    for _ in range(4000):
+        strengths = np.clip(strengths - step * a_t.T @ (a_t @ strengths - args.tunnel), 0.0, hottest)
+    e_t = a_t @ strengths
+    print(f'tunnel: {reached.mean():.2f} of {len(ptube)} surfaces reached; light p10 {np.percentile(e_t, 10):.2f} median {np.median(e_t):.2f} p90 {np.percentile(e_t, 90):.2f}, wanted {args.tunnel:g}')
 
     def reaches(c, spot, strength, radius):
         """(target indices, light) from a light at c."""
@@ -340,8 +367,10 @@ def main():
         radius = max(min(REFERENCE_RADIUS, lowest[i] * 0.8), MIN_RADIUS)
         lines.append(f'{c[0]:.1f} {c[1]:.1f} {c[2]:.1f} 8 12 {COLOUR} 600 Hollow_{n + 1:03d} remix {radiance(args.strength * scale[i], radius):.2f} 0.00 {radius:.3f} 1.00'
                      f' spot 0.0000 -1.0000 0.0000 {CONE:.1f} {SOFTNESS:.2f}')
-    for n, (_, c, radius, strength) in enumerate(tube):
-        lines.append(f'{c[0]:.1f} {c[1]:.1f} {c[2]:.1f} 8 12 {COLOUR} 600 Hollow_tunnel_{n + 1:02d} remix {radiance(strength, radius):.2f} 0.00 {radius:.3f} 1.00')
+    kept = [(c, radius, s) for (_, c, radius, _), s in zip(tube, strengths) if s > 0.02]
+    for n, (c, radius, s) in enumerate(kept):
+        lines.append(f'{c[0]:.1f} {c[1]:.1f} {c[2]:.1f} 8 12 {COLOUR} 600 Hollow_tunnel_{n + 1:02d} remix {radiance(s, radius):.2f} 0.00 {radius:.3f} 1.00')
+    print(f'{len(kept)} of {len(tube)} tunnel stops have a light')
     text = '\n'.join(lines) + '\n'
     out = os.path.join(HERE, '..', 'assets', 'lights', f'{MAP}.custom.txt')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
