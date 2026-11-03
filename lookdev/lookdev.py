@@ -245,7 +245,10 @@ def stop_host(timeout=45.0):
     hwnd = ctypes.windll.user32.FindWindowW(HOST_WINDOW_CLASS, None)
     if hwnd:
         ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-    for image in (HOST_IN_GAME.name, "NvRemixBridge.exe"):
+    # A running game has a bridge of its own, under the same image name.
+    game = "DARKSOULS.exe" in subprocess.run(["tasklist", "/FI", "IMAGENAME eq DARKSOULS.exe", "/FO", "CSV", "/NH"],
+                                             capture_output=True, text=True).stdout
+    for image in (HOST_IN_GAME.name,) if game else (HOST_IN_GAME.name, "NvRemixBridge.exe"):
         if not _wait_gone(image, timeout):
             print(f"{image} did not exit within {timeout:.0f} s; killing it")
             subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True)
