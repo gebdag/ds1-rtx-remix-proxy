@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "lightmap_sun.hpp"
+#include "texture_names.hpp"
 
 #include "shared/common/ffp_state.hpp"
 
@@ -353,7 +354,7 @@ namespace comp::game::lightmap_sun
 			const bool fading = ps && ps[139 * 4 + 3] < 0.999f;
 			const bool card = blend && test && dest == D3DBLEND_INVSRCALPHA &&
 				!(ffp.cur_ps_sampler_mask() & (1u << 2)) && !fading;
-			tag = card ? kSkinnedCardMarker : kSkinnedMarker;
+			tag = card ? kSkinnedCardMarker : !blend && texture_names::is_body_part(ffp.cur_texture(0)) ? kWetBodyMarker : kSkinnedMarker;
 		}
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
 		IDirect3DVertexBuffer9* vb = ffp.stream_vb(0);

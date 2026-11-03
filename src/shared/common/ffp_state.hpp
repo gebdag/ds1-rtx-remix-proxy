@@ -448,6 +448,8 @@ namespace shared::common
 		bool cur_draw_is_fur_shell(IDirect3DDevice9* dev);
 		// Stage 0 = texture x vertex colour, for colour and alpha (a fur shell's expanded vertex colour).
 		void apply_vertex_colour_stage(IDirect3DDevice9* dev);
+		// Stage 0 shows the texture alone: the draw's vertex colour holds data, not a colour.
+		void apply_texture_only_stage(IDirect3DDevice9* dev);
 		// A new texture can reuse a freed one's address: forget what was learnt about it.
 		void on_texture_created(IDirect3DBaseTexture9* texture);
 		void clear_skin_tone(IDirect3DDevice9* dev);

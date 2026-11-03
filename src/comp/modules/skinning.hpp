@@ -60,7 +60,8 @@ namespace comp
 		// that pairing alone (hair, eyes, parts of the face).
 		// base: SKIN_VTX_SIZE; overlay: the second uv set and the vertex alpha (a two-layer draw's second
 		// diffuse); vertex_colour: the first uv set and the whole vertex colour (fur shells).
-		enum class skin_layout : uint8_t { base, overlay, vertex_colour };
+		// body: the SKIN_OVERLAY_VTX_SIZE layout, the colour being the vertex's bind position (a body part's draw).
+		enum class skin_layout : uint8_t { base, overlay, vertex_colour, body };
 
 		struct skin_key {
 			IDirect3DVertexBuffer9* src_vb;

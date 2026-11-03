@@ -2112,6 +2112,16 @@ namespace shared::common
 		ffp_stages_applied_ = false;
 	}
 
+	void ffp_state::apply_texture_only_stage(IDirect3DDevice9* dev)
+	{
+		dev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+		dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		// Stage 0 now differs from setup_texture_stages; the next converted draw re-applies it.
+		ffp_stages_applied_ = false;
+	}
+
 	void ffp_state::on_texture_created(IDirect3DBaseTexture9* texture)
 	{
 		punch_through_.erase(texture);

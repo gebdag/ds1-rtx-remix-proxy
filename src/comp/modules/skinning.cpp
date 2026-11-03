@@ -5,6 +5,7 @@
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "../game/texture_scroll.hpp"
+#include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/effect_lights.hpp"
 
@@ -61,8 +62,17 @@ namespace comp
 		UINT total_verts = min_vtx + num_verts;
 		// A fur shell carries its vertex colour (ffp_state::cur_draw_is_fur_shell).
 		const bool fur = skin_overlay_decl_ && ffp.cur_draw_is_fur_shell(dev);
+		// A body part's vertices carry their place on the body, for the runtime's wet player. Hair reads the grid too,
+		// but its cards are not body-tagged in lightmap_sun, so only the body wets the grid.
+		// Not on what the game blends otherwise (ghosts, a fading body), which needs its alpha as it is.
+		DWORD body_blend = FALSE, body_dest = D3DBLEND_ZERO;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &body_blend);
+		dev->GetRenderState(D3DRS_DESTBLEND, &body_dest);
+		const bool body = skin_overlay_decl_ && !fur && (!body_blend || body_dest == D3DBLEND_INVSRCALPHA) &&
+			game::texture_names::is_body_part(ffp.cur_texture(0));
+		const bool coloured = fur || body;
 		auto* exp_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride,
-			fur ? skin_layout::vertex_colour : skin_layout::base);
+			fur ? skin_layout::vertex_colour : body ? skin_layout::body : skin_layout::base);
 
 		if (!exp_vb)
 		{
@@ -82,10 +92,12 @@ namespace comp
 		// Swap in expanded VB and declaration
 		IDirect3DVertexDeclaration9* orig_decl = nullptr;
 		dev->GetVertexDeclaration(&orig_decl);
-		dev->SetVertexDeclaration(fur ? skin_overlay_decl_ : skin_exp_decl_);
-		dev->SetStreamSource(0, exp_vb, 0, fur ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE);
+		dev->SetVertexDeclaration(coloured ? skin_overlay_decl_ : skin_exp_decl_);
+		dev->SetStreamSource(0, exp_vb, 0, coloured ? SKIN_OVERLAY_VTX_SIZE : SKIN_VTX_SIZE);
 		if (fur)
 			ffp.apply_vertex_colour_stage(dev);
+		else if (body)
+			ffp.apply_texture_only_stage(dev);
 
 		if (game::sky_meshes::is_emitter_draw(ffp.cur_ib(), pt, start_idx, prim_count))
 			game::effect_lights::observe_emitter(ffp.vs_const_data());
@@ -417,6 +429,14 @@ namespace comp
 		else if (layout == skin_layout::vertex_colour)
 		{
 			const DWORD argb = ffp.cur_vertex_color(src);
+			std::memcpy(&dst[48], &argb, sizeof(argb));
+		}
+		else if (layout == skin_layout::body)
+		{
+			// The bind position, in the wet player's grid (fork_ds1_ripples.h in the runtime). Texture stage 0 leaves
+			// the colour out on these draws (apply_texture_only_stage), so the draw looks the same.
+			const auto encode = [](float v) { return static_cast<DWORD>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+			const DWORD argb = 0xFF000000u | (encode((pos[0] + 1.0f) / 2.0f) << 16) | (encode((pos[1] + 0.2f) / 2.4f) << 8) | encode((pos[2] + 0.6f) / 1.2f);
 			std::memcpy(&dst[48], &argb, sizeof(argb));
 		}
 	}

@@ -315,6 +315,20 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.lit_effect;
 	}
 
+	bool is_body_part(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		if (it == g_entries.end())
+			return true;
+		if (it->second.name.size() < 3 || it->second.name[2] != '_')
+			return false;
+		const auto prefix = std::string_view(it->second.name).substr(0, 2);
+		return prefix == "hd" || prefix == "bd" || prefix == "am" || prefix == "lg" || prefix == "fg" || prefix == "hr";
+	}
+
 	owner owner_of(IDirect3DBaseTexture9* texture)
 	{
 		if (!texture)

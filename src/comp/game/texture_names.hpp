@@ -25,6 +25,11 @@ namespace comp::game::texture_names
 	// True for an effect texture the game lights only briefly (the lightning breath's bolts), which
 	// game::effect_lights stands a light in for.
 	bool is_lit_effect(IDirect3DBaseTexture9* texture);
+	// Whether a skinned draw with this diffuse can be part of the player: an armour or body part (hd_, bd_, am_, lg_,
+	// fg_, hr_) or an unnamed texture. Many of the parts' textures have no name: their DDS lies too deep in a large
+	// multi-texture TPF to find its header (legs and gauntlets among them). Enemies (c####), effects (s####) and
+	// objects (o####) do have names.
+	bool is_body_part(IDirect3DBaseTexture9* texture);
 
 	// True for the Estus flask's diffuse (the drinking effect's model), see game/estus.hpp.
 	bool is_estus_flask(IDirect3DBaseTexture9* texture);
