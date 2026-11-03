@@ -11,6 +11,7 @@
 #include "../game/map_lights.hpp"
 #include "../game/point_lights.hpp"
 #include "../game/texture_names.hpp"
+#include "../game/vanilla_view.hpp"
 
 #include "shared/common/dinput_hook_v2.hpp"
 #include <Xinput.h>
@@ -413,6 +414,69 @@ namespace comp
 			return shared::common::config::get().remix.enabled;
 		}
 		std::atomic_bool s_main_frame = false;
+		// The frame goes no further than the recording: no game image to take from it.
+		bool s_main_drop = false;
+		// The back buffer, once, for the game image.
+		bool s_main_reference = false;
+
+		// Waiting in vanilla graphics for the game's exposure (PS c135), which stood still in Remix.
+		struct
+		{
+			bool waiting = false;
+			bool switch_back = false;
+			int frames = 0;
+			int steady = 0;
+			float exposure = 0.0f;
+			std::chrono::steady_clock::time_point started;
+		} s_settle;
+
+		// Whether a requested frame can start now.
+		bool main_game_ready()
+		{
+			if (!shared::common::config::get().lookdev.main_game_comparison)
+				return true;
+			auto& s = s_settle;
+			if (!s.waiting)
+			{
+				if (game::vanilla_view::active())
+					return true;
+				game::vanilla_view::request_toggle();
+				s = {};
+				s.waiting = true;
+				s.switch_back = true;
+				s.started = std::chrono::steady_clock::now();
+				return false;
+			}
+			const auto waited = std::chrono::duration<float>(std::chrono::steady_clock::now() - s.started).count();
+			if (!game::vanilla_view::active())
+			{
+				if (waited < 2.0f)
+					return false;
+				s = {};
+				return true;
+			}
+			constexpr float kSteadyChange = 0.001f;
+			constexpr int kSteadyFrames = 15, kFewestFrames = 30;
+			constexpr float kLongestWait = 5.0f;
+			const float exposure = shared::common::ffp_state::get().ps_const_data()[135 * 4];
+			s.steady = std::abs(exposure - s.exposure) <= kSteadyChange * std::abs(exposure) ? s.steady + 1 : 0;
+			s.exposure = exposure;
+			s.frames++;
+			if ((s.frames < kFewestFrames || s.steady < kSteadyFrames) && waited < kLongestWait)
+				return false;
+			log(std::format("Vanilla graphics settled: {} frames, {:.1f} s, c135.x {}", s.frames, waited, exposure));
+			s.waiting = false;
+			return true;
+		}
+
+		void main_game_capture_over()
+		{
+			s_main_frame = false;
+			s_main_drop = false;
+			if (s_settle.switch_back)
+				game::vanilla_view::request_toggle();
+			s_settle = {};
+		}
 
 		bool recording(IDirect3DDevice9* dev)
 		{
@@ -491,7 +555,7 @@ namespace comp
 		bool read_render_target(IDirect3DSurface9* surface, Fn&& fn)
 		{
 			// It would wait on the bridge's server for a target Remix never drew.
-			if (main_game())
+			if (main_game() && !s_main_reference)
 				return false;
 			auto& c = *s_cap;
 			D3DSURFACE_DESC sd;
@@ -1540,6 +1604,7 @@ namespace comp
 				ffp.restore_rigid_source(dev);
 				ffp.restore_textures(dev);
 				s_main_frame = true;
+				s_main_drop = !game::vanilla_view::active();
 			}
 
 			const auto h = describe_device(dev, c);
@@ -1582,7 +1647,7 @@ namespace comp
 		void abort_capture(const char* why)
 		{
 			auto* c = s_cap;
-			s_main_frame = false;
+			main_game_capture_over();
 			s_capturing = false;
 			s_cap = nullptr;
 			fclose(c->w.file);
@@ -2212,12 +2277,19 @@ namespace comp
 					}
 					else
 					{
-						if (!main_game())
+						if (main_game() && !s_main_drop)
+						{
+							s_main_reference = true;
+							write_reference_image();
+							s_main_reference = false;
+						}
+						else if (!main_game())
 							write_reference_image();
 						s_cap->w.rec(REC_PRESENT);
 						finish_capture();
-						drop_present = s_main_frame;
-						s_main_frame = false;
+						drop_present = s_main_drop;
+						if (main_game())
+							main_game_capture_over();
 					}
 				}
 			}
@@ -2246,7 +2318,7 @@ namespace comp
 				// Nothing starts on a lost device: its references would keep the game's Reset
 				// failing (on_reset ends what was already running).
 				const bool presented = SUCCEEDED(hr);
-				if (presented && s_request && !s_cap)
+				if (presented && s_request && !s_cap && (!main_game() || main_game_ready()))
 				{
 					// starts right after a Present so the file holds one whole frame
 					s_request = false;
@@ -2443,7 +2515,7 @@ namespace comp
 				s_cap->w.rec(REC_DRAW, draw { static_cast<uint32_t>(type), start, count });
 				s_cap->stats.draws++;
 			}
-			if (s_main_frame)
+			if (s_main_drop)
 				return D3D_OK;
 			return s_draw_og(dev, type, start, count);
 		}
@@ -2459,7 +2531,7 @@ namespace comp
 				s_cap->w.rec(REC_DRAW_INDEXED, draw_indexed { static_cast<uint32_t>(type), base, min_index, num_vertices, start_index, count });
 				s_cap->stats.draws++;
 			}
-			if (s_main_frame)
+			if (s_main_drop)
 				return D3D_OK;
 			return s_draw_indexed_og(dev, type, base, min_index, num_vertices, start_index, count);
 		}
@@ -2478,7 +2550,7 @@ namespace comp
 				// D3D9 unbinds stream 0 after a UP draw, in the game and in the replay alike
 				s_cap->shadow.stream[0].reset();
 			}
-			if (s_main_frame)
+			if (s_main_drop)
 				return D3D_OK;
 			return s_draw_up_og(dev, type, count, vertices, stride);
 		}
@@ -2506,7 +2578,7 @@ namespace comp
 				c.shadow.stream[0].reset();
 				c.shadow.indices.reset();
 			}
-			if (s_main_frame)
+			if (s_main_drop)
 				return D3D_OK;
 			return s_draw_indexed_up_og(dev, type, min_index, num_vertices, count, indices, index_format, vertices, stride);
 		}

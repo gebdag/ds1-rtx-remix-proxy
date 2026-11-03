@@ -7,12 +7,17 @@ namespace comp
 	// starts the game with -lookdev; the normal INI never has it).
 	//
 	// The normal game has it too ([Lookdev] MainGameCapture, on by default), for files only:
-	// no stream, snapshots or freeze key. The real device there is the Remix bridge, which
-	// must not see the game's shader draws, so for the one frame the wrapper passes the game's
-	// calls through unconverted (main_game_frame), the draws stop at the recording and the
-	// Present is dropped: the last Remix frame stays up. The bridge keeps a CPU copy of
-	// everything the game wrote, but render targets stay on its server and are not read, and
-	// there is no game image for the file's reference (the bridge never rendered one).
+	// no stream, snapshots or freeze key. The real device there is the Remix bridge. For the
+	// one frame the wrapper passes the game's calls through unconverted (main_game_frame).
+	// The bridge keeps a CPU copy of everything the game wrote; render targets stay on its
+	// server and are not read, but for the back buffer.
+	//
+	// A request first switches to vanilla graphics (game::vanilla_view, what F8 does) and waits
+	// for the game's exposure to settle: Remix rasterises the frame as the game would, which
+	// is the file's game image, and path tracing comes back afterwards. In vanilla graphics
+	// already, it captures at once and stays there. With [Lookdev] MainGameComparison=0, or if
+	// the switch is refused, the frame goes no further than the recording: its draws stop
+	// there, the Present is dropped, the last Remix frame stays up and the file has no image.
 	//
 	// F9, or a rtx_comp\lookdev\capture.request file, records the next presented
 	// frame into rtx_comp\lookdev\<name>.ds1cap along with the image the game
