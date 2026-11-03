@@ -34,10 +34,6 @@ namespace comp::game::swamp
 			float height_in_alpha = 0.0f; // 1: the height texture is not the colour texture (surface_texture)
 			float metres_per_uv = 0.0f;  // the surface mesh's size per texture coordinate
 			float scene_diffuse = 0.0f;  // c100.x of most of the frame's map geometry
-			float rim_colour[3] = {};    // PS c95 * c169.z: the lobe on the surface
-			float rim_direction[3] = {}; // PS c92
-			float rim_sharpness = 0.0f;  // PS c169.y
-			float phong = 0.0f;          // PS c102.x
 
 			bool operator==(const surface_values& o) const { return std::memcmp(this, &o, sizeof(surface_values)) == 0; }
 		};
@@ -178,10 +174,6 @@ namespace comp::game::swamp
 			ok &= set("rtx.ds1Swamp.spanPerDepth", std::format("{}", v.span_per_depth));
 			ok &= set("rtx.ds1Swamp.fadeDistance", std::format("{}", v.fade));
 			ok &= set("rtx.ds1Swamp.heightScale", std::format("{}", v.height_scale));
-			ok &= set("rtx.ds1Swamp.rimColour", vec3(v.rim_colour));
-			ok &= set("rtx.ds1Swamp.rimDirection", vec3(v.rim_direction));
-			ok &= set("rtx.ds1Swamp.rimSharpness", std::format("{}", v.rim_sharpness));
-			ok &= set("rtx.ds1Swamp.phongExponent", std::format("{}", v.phong));
 			ok &= set("rtx.ds1Swamp.heightInAlpha", v.height_in_alpha != 0.0f ? "True" : "False");
 			if (v.metres_per_uv > 0.0f)
 				ok &= set("rtx.ds1Swamp.meshMetresPerUv", std::format("{}", v.metres_per_uv));
@@ -416,13 +408,6 @@ namespace comp::game::swamp
 			v.span_per_depth = c(vs, 142, 3) != 0.0f ? c(vs, 142, 0) * 8.0f / c(vs, 142, 3) : 0.0f;
 			v.fade = c(ps, 163, 2);
 			v.height_scale = c(ps, 169, 0);
-			for (int k = 0; k < 3; k++)
-			{
-				v.rim_colour[k] = c(ps, 95, k) * c(ps, 169, 2);
-				v.rim_direction[k] = c(ps, 92, k);
-			}
-			v.rim_sharpness = c(ps, 169, 1);
-			v.phong = c(ps, 102, 0);
 			// Blighttown's height pass reads the colour texture itself; Gaping Dragon's slime reads its own
 			// noise texture (m10_water), which surface_texture bakes into the colour texture's alpha.
 			IDirect3DBaseTexture9* colour = bound_texture(dev, 0);

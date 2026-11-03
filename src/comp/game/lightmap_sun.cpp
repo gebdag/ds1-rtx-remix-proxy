@@ -390,8 +390,8 @@ namespace comp::game::lightmap_sun
 				e.retry_frame = frame + kRetryFrames;
 			}
 			tag = e.tag;
-			// FRPG_Snow with a lobe of its own (PS c169.z, the slime; the runtime's rtx.ds1Swamp.rim*) has what it gets of the
-			// key light in that lobe. Remix's sun on top of it, through a gap in the roof, took a full reflection.
+			// FRPG_Snow with a key light lobe (PS c169.z, the slime) scales that lobe by a near-black lightmap: it gets none of
+			// that light. Remix's sun, through a gap in the roof, took a full reflection (148 against the game's 50).
 			if (ffp.cur_ps_swamp_pass() == ffp_state::swamp_pass::Surface && ffp.ps_const_data() && ffp.ps_const_data()[169 * 4 + 2] != 0.0f)
 				tag = kNoSunMarker;
 		}

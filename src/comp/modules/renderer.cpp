@@ -445,12 +445,12 @@ namespace comp
 		}
 
 		// Draws that read the game's sun constants (shadow direction c175, key
-		// light c92/c95) vote for the Remix sun. FRPG_Snow reads c92/c95 only for a lobe
-		// on its own surface (rtx.ds1Swamp.rim*), so it is no sun: in the Depths the slime
-		// was the only map draw voting, and turned a white sun on over a whole sewer.
+		// light c92/c95) vote for the Remix sun. The swamp's FRPG_Snow shader reads
+		// c92/c95 only for a rim lobe weighted by c169.z (0 in Blighttown): with no
+		// such lobe it does not use that light, and its c95 must not colour the sun.
 		const auto swamp_pass = ffp.cur_ps_swamp_pass();
 		uint32_t sun_flags = ffp.cur_ps_light_flags();
-		if (swamp_pass == game::swamp::pass::Surface)
+		if (swamp_pass == game::swamp::pass::Surface && ffp.ps_const_data() && ffp.ps_const_data()[169 * 4 + 2] == 0.0f)
 			sun_flags &= ~ffp.PS_LIGHT_DIR3;
 		if (ffp.view_proj_valid() && (sun_flags & (ffp.PS_LIGHT_DIR3 | ffp.PS_LIGHT_SHADOW)))
 			game::sun_light::observe(ffp.ps_const_data(), ffp.frame_count(), primCount,
