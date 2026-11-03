@@ -2,9 +2,17 @@
 
 namespace comp
 {
-	// Lookdev frame capture. Registered only in lookdev mode ([Lookdev] Enabled=1,
+	// Lookdev frame capture. Registered in lookdev mode ([Lookdev] Enabled=1,
 	// which lookdev\lookdev.ps1 writes into remix-comp-proxy.lookdev.ini before it
 	// starts the game with -lookdev; the normal INI never has it).
+	//
+	// The normal game has it too ([Lookdev] MainGameCapture, on by default), for files only:
+	// no stream, snapshots or freeze key. The real device there is the Remix bridge, which
+	// must not see the game's shader draws, so for the one frame the wrapper passes the game's
+	// calls through unconverted (main_game_frame), the draws stop at the recording and the
+	// Present is dropped: the last Remix frame stays up. The bridge keeps a CPU copy of
+	// everything the game wrote, but render targets stay on its server and are not read, and
+	// there is no game image for the file's reference (the bridge never rendered one).
 	//
 	// F9, or a rtx_comp\lookdev\capture.request file, records the next presented
 	// frame into rtx_comp\lookdev\<name>.ds1cap along with the image the game
@@ -37,6 +45,9 @@ namespace comp
 		// True while the frame being drawn goes into a capture file, whose
 		// reference image must show only what the game and proxy rendered.
 		static bool writing_file();
+
+		// True while the normal game's frame goes into a capture file.
+		static bool main_game_frame();
 
 		// True for a few seconds after a capture file was written; name = its name.
 		static bool recent_capture(std::string& name);

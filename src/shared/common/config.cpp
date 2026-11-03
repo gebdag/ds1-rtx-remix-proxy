@@ -311,6 +311,7 @@ namespace shared::common
 		// [Lookdev]
 		lookdev.enabled = get_bool("Lookdev", "Enabled", false);
 		lookdev.capture_key = get_int("Lookdev", "CaptureKey", VK_F9);
+		lookdev.main_game_capture = get_bool("Lookdev", "MainGameCapture", true);
 		lookdev.freeze_input_key = get_int("Lookdev", "FreezeInputKey", VK_F8);
 		lookdev.output_dir = get_string("Lookdev", "OutputDir", "rtx_comp\\lookdev");
 		lookdev.stream_budget_kb = std::max(256, get_int("Lookdev", "StreamBudgetKB", 2048));

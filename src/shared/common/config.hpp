@@ -403,6 +403,8 @@ namespace shared::common
 		{
 			bool enabled = false;
 			int capture_key = VK_F9;
+			// The capture key also works in the normal game, with Remix (lookdev_capture.hpp).
+			bool main_game_capture = true;
 			int freeze_input_key = VK_F8;
 			std::string output_dir = "rtx_comp\\lookdev";
 			// Live stream pacing: resource contents sent per frame, so a resync

@@ -344,7 +344,7 @@ namespace {
 
 	bool lookdev_passthrough()
 	{
-		return shared::common::config::get().lookdev.enabled;
+		return shared::common::config::get().lookdev.enabled || comp::lookdev_capture::main_game_frame();
 	}
 
 	// Remix composites its frame at the first UI-marked draw, else at Present. DS1 draws its

@@ -175,8 +175,9 @@ namespace comp
 
 		shared::common::loader::module_loader::register_module(std::make_unique<shared::common::dinput_v2>());
 
-		// Lookdev frame capture: lookdev mode only (-lookdev, remix-comp-proxy.lookdev.ini)
-		if (cfg.lookdev.enabled)
+		// Lookdev frame capture: lookdev mode (-lookdev, remix-comp-proxy.lookdev.ini), and in the normal game
+		// one frame at a time ([Lookdev] MainGameCapture). Never in the host, which replays them.
+		if (cfg.lookdev.enabled || (cfg.lookdev.main_game_capture && !shared::globals::lookdev_host))
 			shared::common::loader::module_loader::register_module(std::make_unique<lookdev_capture>());
 
 		game::d3dx_texture_watch::install();

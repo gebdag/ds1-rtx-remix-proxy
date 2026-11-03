@@ -4,6 +4,7 @@
 #include "lookdev_capture.hpp"
 
 #include "shared/common/config.hpp"
+#include "shared/common/ffp_state.hpp"
 #include "shared/lookdev/capture_format.hpp"
 #include "../game/estus.hpp"
 #include "../game/camera.hpp"
@@ -406,6 +407,13 @@ namespace comp
 			shared::common::log("Lookdev", msg, type, true);
 		}
 
+		// The normal game, on the Remix bridge: one whole frame at a time (see the header).
+		bool main_game()
+		{
+			return shared::common::config::get().remix.enabled;
+		}
+		std::atomic_bool s_main_frame = false;
+
 		bool recording(IDirect3DDevice9* dev)
 		{
 			return s_capturing.load(std::memory_order_relaxed) && !t_internal && s_cap && s_cap->dev == dev;
@@ -482,6 +490,9 @@ namespace comp
 		template <class Fn>
 		bool read_render_target(IDirect3DSurface9* surface, Fn&& fn)
 		{
+			// It would wait on the bridge's server for a target Remix never drew.
+			if (main_game())
+				return false;
 			auto& c = *s_cap;
 			D3DSURFACE_DESC sd;
 			if (FAILED(surface->GetDesc(&sd)))
@@ -864,11 +875,11 @@ namespace comp
 			if (info.usage & D3DUSAGE_DEPTHSTENCIL)
 				return CONTENTS_NONE;
 			if (info.pool == D3DPOOL_DEFAULT && (info.usage & D3DUSAGE_RENDERTARGET))
-				return CONTENTS_READBACK;
+				return main_game() ? CONTENTS_NONE : CONTENTS_READBACK;
 			if (default_static)
 				return CONTENTS_NONE;
-			// a read-only lock of a default-pool dynamic texture can wait for the GPU
-			return info.pool == D3DPOOL_DEFAULT ? CONTENTS_READBACK : CONTENTS_LOCK;
+			// a read-only lock of a default-pool dynamic texture can wait for the GPU, not with the bridge's copy
+			return info.pool == D3DPOOL_DEFAULT && !main_game() ? CONTENTS_READBACK : CONTENTS_LOCK;
 		}
 
 		// Whether contents of this size may go out now. Always in a capture, and
@@ -1091,7 +1102,7 @@ namespace comp
 					sd.Usage, static_cast<uint32_t>(sd.Pool), static_cast<uint32_t>(sd.MultiSampleType), sd.MultiSampleQuality });
 			// as snapshot_surface takes them
 			const bool render_target = surface == c.backbuffer || (sd.Usage & D3DUSAGE_RENDERTARGET);
-			stored.contents = (sd.Usage & D3DUSAGE_DEPTHSTENCIL) ? CONTENTS_NONE
+			stored.contents = (sd.Usage & D3DUSAGE_DEPTHSTENCIL) || (render_target && main_game()) ? CONTENTS_NONE
 				: (render_target || sd.Pool == D3DPOOL_DEFAULT) ? CONTENTS_READBACK : CONTENTS_LOCK;
 			stored.bytes = packed_bytes(sd.Format, sd.Width, sd.Height, 1);
 			first_contents(stored, force, [&] { snapshot_surface(surface, DATA_INITIAL); });
@@ -1428,12 +1439,6 @@ namespace comp
 		// Whether this device can be recorded at all; installs the device hooks.
 		bool device_recordable(IDirect3DDevice9* dev, const char* what)
 		{
-			if (shared::common::config::get().remix.enabled)
-			{
-				log(std::format("{} refused: [Remix] Enabled=1. Lookdev needs the vanilla system d3d9 (start with lookdev.ps1).", what),
-					shared::common::LOG_TYPE::LOG_TYPE_ERROR);
-				return false;
-			}
 			D3DDEVICE_CREATION_PARAMETERS cp;
 			dev->GetCreationParameters(&cp);
 			if (cp.BehaviorFlags & D3DCREATE_PUREDEVICE)
@@ -1527,6 +1532,16 @@ namespace comp
 			}
 			setvbuf(c->w.file, nullptr, _IOFBF, 8 << 20);
 
+			if (main_game())
+			{
+				// The last frame's conversion may have left the device in FFP state; the game only sets what it thinks changed.
+				auto& ffp = shared::common::ffp_state::get();
+				ffp.disengage(dev);
+				ffp.restore_rigid_source(dev);
+				ffp.restore_textures(dev);
+				s_main_frame = true;
+			}
+
 			const auto h = describe_device(dev, c);
 			c->w.raw(&h, sizeof(h));
 
@@ -1567,6 +1582,7 @@ namespace comp
 		void abort_capture(const char* why)
 		{
 			auto* c = s_cap;
+			s_main_frame = false;
 			s_capturing = false;
 			s_cap = nullptr;
 			fclose(c->w.file);
@@ -2175,6 +2191,7 @@ namespace comp
 
 		HRESULT __stdcall present_hk(IDirect3DDevice9* dev, const RECT* src, const RECT* dst, HWND wnd, const RGNDATA* dirty)
 		{
+			bool drop_present = false;
 			// Not recording(): a stream frame that overflowed the ring stops
 			// recording early but still ends here, where it is dropped.
 			if (!t_internal && s_cap && s_cap->dev == dev)
@@ -2195,30 +2212,36 @@ namespace comp
 					}
 					else
 					{
-						write_reference_image();
+						if (!main_game())
+							write_reference_image();
 						s_cap->w.rec(REC_PRESENT);
 						finish_capture();
+						drop_present = s_main_frame;
+						s_main_frame = false;
 					}
 				}
 			}
 
-			if (!t_internal)
+			if (!t_internal && !main_game())
 			{
 				internal_scope in;
 				snap_copy(dev);
 			}
 
-			const auto hr = s_present_og(dev, src, dst, wnd, dirty);
+			const auto hr = drop_present ? D3D_OK : s_present_og(dev, src, dst, wnd, dirty);
 
 			if (!t_internal)
 			{
 				s_frame_index++;
+				if (!main_game())
 				{
-					internal_scope in;
-					snap_finish(dev);
+					{
+						internal_scope in;
+						snap_finish(dev);
+					}
+					snap_poll();
+					poll_freeze_key();
 				}
-				snap_poll();
-				poll_freeze_key();
 				poll_request();
 				// Nothing starts on a lost device: its references would keep the game's Reset
 				// failing (on_reset ends what was already running).
@@ -2239,7 +2262,7 @@ namespace comp
 					end_stream_session("file capture");
 					start_capture(dev, s_request_name);
 				}
-				if (presented && !s_cap)
+				if (presented && !s_cap && !main_game())
 				{
 					// Streams start (or resume after a file capture or a dropped frame)
 					// right after a Present too, once the host is ready for them.
@@ -2420,6 +2443,8 @@ namespace comp
 				s_cap->w.rec(REC_DRAW, draw { static_cast<uint32_t>(type), start, count });
 				s_cap->stats.draws++;
 			}
+			if (s_main_frame)
+				return D3D_OK;
 			return s_draw_og(dev, type, start, count);
 		}
 
@@ -2434,6 +2459,8 @@ namespace comp
 				s_cap->w.rec(REC_DRAW_INDEXED, draw_indexed { static_cast<uint32_t>(type), base, min_index, num_vertices, start_index, count });
 				s_cap->stats.draws++;
 			}
+			if (s_main_frame)
+				return D3D_OK;
 			return s_draw_indexed_og(dev, type, base, min_index, num_vertices, start_index, count);
 		}
 
@@ -2451,6 +2478,8 @@ namespace comp
 				// D3D9 unbinds stream 0 after a UP draw, in the game and in the replay alike
 				s_cap->shadow.stream[0].reset();
 			}
+			if (s_main_frame)
+				return D3D_OK;
 			return s_draw_up_og(dev, type, count, vertices, stride);
 		}
 
@@ -2477,6 +2506,8 @@ namespace comp
 				c.shadow.stream[0].reset();
 				c.shadow.indices.reset();
 			}
+			if (s_main_frame)
+				return D3D_OK;
 			return s_draw_indexed_up_og(dev, type, min_index, num_vertices, count, indices, index_format, vertices, stride);
 		}
 
@@ -2611,7 +2642,8 @@ namespace comp
 				log("Could not hook Present; captures disabled", shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 				return 1;
 			}
-			hook_input_freeze();
+			if (!main_game())
+				hook_input_freeze();
 			const auto& cfg = shared::common::config::get().lookdev;
 			log(std::format("Ready. Capture key 0x{:X}, or create {}\\capture.request; freeze-input key 0x{:X}",
 				cfg.capture_key, output_dir(), cfg.freeze_input_key));
@@ -2634,6 +2666,11 @@ namespace comp
 			return false;
 		name = s_last_capture;
 		return true;
+	}
+
+	bool lookdev_capture::main_game_frame()
+	{
+		return s_main_frame.load(std::memory_order_relaxed);
 	}
 
 	bool lookdev_capture::writing_file()

@@ -1103,7 +1103,7 @@ namespace comp
 	{
 		// A capture file's reference image holds only what the game and the proxy
 		// rendered; and ImGui's own device calls never go into a capture or stream.
-		if (shared::common::config::get().lookdev.enabled && lookdev_capture::writing_file())
+		if (lookdev_capture::writing_file())
 			return;
 		lookdev_capture::private_scope private_draws;
 
@@ -1209,6 +1209,8 @@ namespace comp
 						gl->draw_pos_hud();
 					if (shared::common::config::get().lookdev.enabled)
 						draw_lookdev_input_hud();
+					else if (std::string name; lookdev_capture::recent_capture(name))
+						ImGui::GetForegroundDrawList()->AddText(ImVec2(20.0f, 20.0f), IM_COL32(255, 255, 255, 255), std::format("Captured {}", name).c_str());
 
 					shared::globals::imgui_is_rendering = true;
 					ImGui::EndFrame();

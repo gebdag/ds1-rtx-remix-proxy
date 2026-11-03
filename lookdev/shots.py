@@ -93,6 +93,8 @@ def main():
         time.sleep(1.0)
         img = shot.wait_frame(reference, 60)
         img.save(SNAPS / f"remix_{args.prefix}{path.stem}.png")
+        # A capture from the normal game has no game image.
+        reference = reference or Image.new("RGB", img.size)
         reference.convert("RGB").save(SNAPS / f"game_{args.prefix}{path.stem}.png")
         s = stats(img, reference)
         print(f"{path.stem} ours {s[0]:5.1f} game {s[1]:5.1f} error {s[2]:5.1f} black {s[3]:.2f}/{s[4]:.2f}  ({time.time() - t0:.1f} s)", flush=True)
