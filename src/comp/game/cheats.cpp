@@ -592,10 +592,13 @@ namespace comp::game::cheats
 				for (size_t i = 0; i < bonfire_count(); ++i)
 				{
 					const bool is_selected = (s_last_bonfire_index == static_cast<int>(i));
+					// Some destinations share a name, and a label alone is the row's ImGui ID.
+					ImGui::PushID(static_cast<int>(i));
 					if (ImGui::Selectable(s_bonfires[i].name, is_selected))
 					{
 						s_last_bonfire_index = static_cast<int>(i);
 					}
+					ImGui::PopID();
 
 					if (is_selected)
 					{
@@ -647,10 +650,13 @@ namespace comp::game::cheats
 				for (size_t i = 0; i < bonfire_count(); ++i)
 				{
 					const bool is_selected = (s_teleport_index == static_cast<int>(i));
+					// Some destinations share a name, and a label alone is the row's ImGui ID.
+					ImGui::PushID(static_cast<int>(i));
 					if (ImGui::Selectable(s_bonfires[i].name, is_selected))
 					{
 						s_teleport_index = static_cast<int>(i);
 					}
+					ImGui::PopID();
 
 					if (is_selected)
 					{
