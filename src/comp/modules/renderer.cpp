@@ -19,6 +19,7 @@
 #include "../game/lightmap_sun.hpp"
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
+#include "../game/mesh_lights.hpp"
 #include "../game/thin_walls.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
@@ -43,6 +44,8 @@ namespace comp
 		// Stage 4's D3DTSS_CONSTANT on a thin wall (game/thin_walls.hpp): the runtime lets lighting rays through
 		// its faces where they face the surface the ray left (Surface::isDs1ThinWall).
 		constexpr DWORD kThinWallMarker = 0xD4000003;
+		// Stage 4's D3DTSS_CONSTANT on a lamp the runtime's lighting rays pass (game/mesh_lights.hpp).
+		constexpr DWORD kLampMarker = 0xD4000004;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
 		// are blended over) in a pass whose camera is the main one: no user clip
@@ -468,6 +471,10 @@ namespace comp
 			ffp.ps_const_data());
 		// ... and lightmapped draws carry their lightmap's level, which the runtime scales the sun by.
 		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
+		// ... and emissive meshes the game gives no light get one of their own (rtx_comp\\lights\\mesh_lights.txt).
+		if (!ffp.is_depth_prepass())
+			game::mesh_lights::observe_draw(dev, ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
+				PrimitiveType, BaseVertexIndex, startIndex, primCount);
 
 		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
@@ -791,6 +798,10 @@ namespace comp
 					const bool effect = ffp.apply_sp_effect(dev);
 					if (inside_out)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
+					// A lamp holds its light inside: lighting rays pass it (game/mesh_lights.hpp).
+					const bool lamp = game::mesh_lights::is_lamp(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+					if (lamp)
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
 					game::effect_lights::observe_draw(dev,
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
@@ -878,7 +889,7 @@ namespace comp
 						ffp.clear_draw_tint(dev);
 					if (effect)
 						ffp.clear_sp_effect(dev);
-					if (inside_out)
+					if (inside_out || lamp)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				}
 				else

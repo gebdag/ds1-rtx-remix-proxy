@@ -15,6 +15,7 @@ namespace comp::game::point_lights
 		effect,     // stands in for an effect the engine lights only briefly — see game::effect_lights
 		ffx_table,  // an effect the game draws without a light, lit from the effect table — see game::ffx_lights
 		custom,     // placed by hand, per map — see game::custom_lights
+		mesh,       // on a mesh the game gives no light, by its texture — see game::mesh_lights
 	};
 
 	struct light

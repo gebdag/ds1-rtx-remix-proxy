@@ -72,6 +72,7 @@ namespace comp
 			effect,       // stand-in for a lit effect's draws (game::effect_lights)
 			ffx_table,    // an unlit effect's light from the effect table (game::ffx_lights)
 			custom,       // placed by hand, per map (game::custom_lights)
+			mesh,         // on a mesh the game gives no light, by its texture (game::mesh_lights)
 			unresolved,   // live slot with no usable parameters
 			count
 		};

@@ -5,6 +5,7 @@
 #include "../game/effect_lights.hpp"
 #include "../game/ffx_names.hpp"
 #include "../game/ffx_lights.hpp"
+#include "../game/mesh_lights.hpp"
 #include "../game/custom_lights.hpp"
 #include "../game/sun_light.hpp"
 #include "../game/atmosphere.hpp"
@@ -65,7 +66,7 @@ namespace comp
 		// Short source name per kind (switches, the selected light's heading), in section order.
 		const char* const kKindSource[] = {
 			"Sun", "Player", "Map", "Map entity", "Character", "Effect", "Stand-in", "Effect stand-in", "Unlit effect",
-			"Custom", "No parameters",
+			"Custom", "Mesh", "No parameters",
 		};
 		static_assert(std::size(kKindSource) == static_cast<size_t>(kind::count));
 
@@ -80,6 +81,7 @@ namespace comp
 			"Effect stand-ins (lightning bolts)",
 			"Unlit effects (lights from the effect table)",
 			"Custom lights (rtx_comp\\lights\\<map>.custom.txt)",
+			"Mesh lights (rtx_comp\\lights\\mesh_lights.txt)",
 			"Engine slots without parameters (never drawn)",
 		};
 		static_assert(std::size(kKindSection) == static_cast<size_t>(kind::count));
@@ -164,6 +166,7 @@ namespace comp
 			if (l.source == src::effect) return kind::effect;
 			if (l.source == src::ffx_table) return kind::ffx_table;
 			if (l.source == src::custom) return kind::custom;
+			if (l.source == src::mesh) return kind::mesh;
 			if (l.source == src::bank_row) return kind::map_row;
 			if (l.source == src::entity)
 			{
@@ -564,6 +567,10 @@ namespace comp
 			row.origin = game::custom_lights::path() + (l.spot_cone_deg > 0.0f ? std::format(", spot {:.0f} deg", l.spot_cone_deg) : "");
 			break;
 		}
+		case kind::mesh:
+			row.name = std::format("{} lamp {}", game::mesh_lights::texture_of(l.slot), l.slot - game::mesh_lights::kFirstSlot + 1);
+			row.origin = game::mesh_lights::path();
+			break;
 		case kind::ffx_table:
 		{
 			const char* effect = game::ffx_names::name(l.ffx_id);
@@ -661,6 +668,9 @@ namespace comp
 		if (kind_enabled_[static_cast<int>(kind::custom)])
 			for (const auto& l : game::custom_lights::get())
 				sources.push_back(&l);
+		if (kind_enabled_[static_cast<int>(kind::mesh)])
+			for (const auto& l : game::mesh_lights::get())
+				sources.push_back(&l);
 		if (kind_enabled_[static_cast<int>(kind::ffx_table)])
 		{
 			std::vector<const game::point_lights::light*> map_lights;
@@ -753,7 +763,7 @@ namespace comp
 				// the third: the game's strength was only measured for effect lights, and the head light at it
 				// lit Painted World's close-up ground 1.4x the game's (frame_20261030_093046).
 				const bool exact = row.kind == kind::fx_direct || row.kind == kind::effect || row.kind == kind::ffx_table ||
-					row.kind == kind::custom ||
+					row.kind == kind::custom || row.kind == kind::mesh ||
 					(is_static(row.kind) && bound_to_lightmap(src.x, src.y, src.z));
 				const float scale = intensity_scale * mult / (exact ? 1.0f : 3.14159265f);
 				radiance = {
@@ -1520,6 +1530,7 @@ namespace comp
 			"Synthesized for lit effect draws the game gives no light (lightning bolts, fire breath).",
 			"Lights for effects the game draws without one, from the effect table.",
 			"Lights placed by hand for this map (Custom lights for this map, below).",
+			"Lamps the game gives no light: every piece of a draw with a texture listed in mesh_lights.txt.",
 			"Engine slots with no colour or reach. Never drawn.",
 		};
 		static_assert(std::size(kKindHelp) == static_cast<size_t>(kind::count));

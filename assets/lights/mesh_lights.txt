@@ -1,0 +1,11 @@
+# Lights that come from the meshes themselves: for emissive meshes the game gives no light of their own. Every separate piece of a
+# draw with one of these textures gets a light, wherever it stands, on any map. Saving this file applies at once.
+#
+# texture  dwindleBegin dwindleEnd  r g b  intensityPct
+#
+# The light has the game's falloff, full strength to dwindleBegin and gone at dwindleEnd, and sits at the lamp's middle. The mesh itself
+# casts no shadow, or a closed lamp would hold its light in.
+#
+# Duke's Archives lanterns. Their glow is baked: lightmap against distance over 110,000 capture vertices, 0.7 under 3 m, 0.34 at 4-5 m,
+# the area's 0.26 by 5.5-6 m. Strength from the pool's size in the shader, colour from the game's frames around lanterns.
+m17_00_light_01  2.5 5.5  240 245 225  40
