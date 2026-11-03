@@ -288,7 +288,7 @@ def cmd_host(args):
     source = ["--live"] if args.live else [str(cap)]
     keep_host_logs()
     # A GPU crash writes a dump there and logs its reason (a hang, or a page fault and the resource), active shaders included.
-    env = dict(os.environ, DXVK_ENABLE_AFTERMATH="1", DXVK_AFTERMATH_DUMP_PATH=str(HOST_LOGS).replace("\\", "/"))
+    env = dict(os.environ, DXVK_ENABLE_AFTERMATH="1", DXVK_ENABLE_AFTERMATH_RESOURCE_TRACKING="1", DXVK_AFTERMATH_DUMP_PATH=str(HOST_LOGS).replace("\\", "/"))
     subprocess.Popen([str(HOST_IN_GAME), *source, "--proxy", PROXY_IN_GAME.name, "-lookdev-host", "-nobeep"],
                      cwd=str(GAME_DIR), env=env, creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
     lower_host_priority()
