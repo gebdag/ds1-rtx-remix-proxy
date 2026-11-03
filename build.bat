@@ -214,7 +214,9 @@ if errorlevel 1 goto :fail
 
 :: Copy INI to build output — prefer the root game INI over the assets template
 if "!CUSTOM_COMP!"=="1" (
-    if exist "!GAME_DIR!\remix-comp-proxy.ini" (
+    if exist "!GAME_DIR!\rtx_comp\settings\remix-comp-proxy.ini" (
+        copy /y "!GAME_DIR!\rtx_comp\settings\remix-comp-proxy.ini" "%GAME_OUT%\remix-comp-proxy.ini" >nul
+    ) else if exist "!GAME_DIR!\remix-comp-proxy.ini" (
         copy /y "!GAME_DIR!\remix-comp-proxy.ini" "%GAME_OUT%\remix-comp-proxy.ini" >nul
     ) else if exist "%ROOT%remix-comp-proxy.ini" (
         copy /y "%ROOT%remix-comp-proxy.ini" "%GAME_OUT%\remix-comp-proxy.ini" >nul
@@ -252,15 +254,18 @@ if not "!DEPLOY_TARGET!"=="" (
         :: PDB travels with the DLL (its embedded name), so crash dumps stay symbolizable.
         copy /y "%GAME_OUT%\%NAME%.pdb" "!DEPLOY_TARGET!\%NAME%.pdb" >nul
         :: Only copy INI on first deploy — never overwrite user's game-folder customizations.
-        if not exist "!DEPLOY_TARGET!\remix-comp-proxy.ini" (
+        :: One in the old place counts: the proxy moves it to rtx_comp\settings at startup, and a default
+        :: already there would win over it.
+        if not exist "!DEPLOY_TARGET!\rtx_comp\settings" mkdir "!DEPLOY_TARGET!\rtx_comp\settings"
+        if not exist "!DEPLOY_TARGET!\rtx_comp\settings\remix-comp-proxy.ini" if not exist "!DEPLOY_TARGET!\remix-comp-proxy.ini" (
             if exist "%GAME_OUT%\remix-comp-proxy.ini" (
-                copy /y "%GAME_OUT%\remix-comp-proxy.ini" "!DEPLOY_TARGET!\remix-comp-proxy.ini" >nul
+                copy /y "%GAME_OUT%\remix-comp-proxy.ini" "!DEPLOY_TARGET!\rtx_comp\settings\remix-comp-proxy.ini" >nul
             )
         )
         :: Synthesized map light tables. Only files missing at the destination are
         :: copied: these are hand-tunable in the game folder and a rebuild must not
         :: discard that. Delete one to have the generated table restored.
-        if not exist "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" if exist "%ROOT%assets\area_overrides.ini" copy /y "%ROOT%assets\area_overrides.ini" "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" >nul
+        if not exist "!DEPLOY_TARGET!\rtx_comp\settings\area_overrides.ini" if not exist "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" if exist "%ROOT%assets\area_overrides.ini" copy /y "%ROOT%assets\area_overrides.ini" "!DEPLOY_TARGET!\rtx_comp\settings\area_overrides.ini" >nul
         if exist "%ROOT%assets\lights" robocopy "%ROOT%assets\lights" "!DEPLOY_TARGET!\rtx_comp\lights" *.txt /XC /XN /XO >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy light tables
         ver >nul

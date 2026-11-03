@@ -4,7 +4,7 @@
     plus the lookdev frame capture (F9 or lookdev.py capture).
 
 .DESCRIPTION
-    Writes DATA\remix-comp-proxy.lookdev.ini from the normal remix-comp-proxy.ini
+    Writes DATA\rtx_comp\settings\remix-comp-proxy.lookdev.ini from the normal remix-comp-proxy.ini
     with the overrides below, then starts DARKSOULS.exe -lookdev. The proxy only
     reads the lookdev INI when it sees -lookdev, so a normal start (Steam, or the
     exe without the flag) is untouched. The normal INI is only read, never written.
@@ -78,8 +78,13 @@ if (-not (Test-Path (Join-Path $PSScriptRoot '..\deploy.conf'))) {
     throw "nv tree: ..\deploy.conf is missing, so DATA still belongs to the live set. Use the live tree's lookdev.ps1, or switch the game to the nv set first."
 }
 
-$src = Join-Path $GameDir 'remix-comp-proxy.ini'
-$dst = Join-Path $GameDir 'remix-comp-proxy.lookdev.ini'
+$settings = Join-Path $GameDir 'rtx_comp\settings'
+New-Item -ItemType Directory -Force $settings | Out-Null
+# A build that has not run yet leaves the normal INI in its old place; the proxy would move it at startup.
+$old = Join-Path $GameDir 'remix-comp-proxy.ini'
+$src = Join-Path $settings 'remix-comp-proxy.ini'
+if ((Test-Path $old) -and -not (Test-Path $src)) { Move-Item $old $src }
+$dst = Join-Path $settings 'remix-comp-proxy.lookdev.ini'
 if (-not (Test-Path $src)) { throw "Normal INI not found: $src" }
 
 $lines = Get-Content -LiteralPath $src -Encoding UTF8

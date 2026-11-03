@@ -95,16 +95,28 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		std::cout << "> Running as d3d9.dll proxy\n\n";
 		shared::common::set_console_color_default();
 
-		// Load config from INI file next to the DLL. -lookdev (lookdev\lookdev.ps1)
-		// selects the lookdev INI instead: vanilla rendering plus frame capture.
-		// The lookdev host (-lookdev-host) renders like the game, so it reads the
-		// normal INI.
+		// The INIs live in rtx_comp\settings, not in the game's root folder. Files an earlier build left in the
+		// old places move there; one already there wins, and a leftover stays where it is, unread.
+		shared::globals::settings_path = shared::globals::root_path + "\\rtx_comp\\settings";
+		CreateDirectoryA((shared::globals::root_path + "\\rtx_comp").c_str(), nullptr);
+		CreateDirectoryA(shared::globals::settings_path.c_str(), nullptr);
+		const std::pair<const char*, const char*> old_places[] = {
+			{ "", "remix-comp-proxy.ini" },
+			{ "", "remix-comp-proxy.lookdev.ini" },
+			{ "", "remix-comp-proxy.host.ini" },
+			{ "\\rtx_comp", "area_overrides.ini" },
+		};
+		for (const auto& [folder, name] : old_places)
+			MoveFileA((shared::globals::root_path + folder + "\\" + name).c_str(), (shared::globals::settings_path + "\\" + name).c_str());
+
+		// -lookdev (lookdev\lookdev.ps1) selects the lookdev INI: vanilla rendering plus frame capture.
+		// The lookdev host (-lookdev-host) renders like the game, so it reads the normal INI.
 		shared::globals::lookdev_host = shared::common::flags::has_flag("lookdev-host");
 		const char* ini_name = shared::common::flags::has_flag("lookdev")
 			? "\\remix-comp-proxy.lookdev.ini" : "\\remix-comp-proxy.ini";
-		shared::common::config::get().load(shared::globals::root_path + ini_name);
+		shared::common::config::get().load(shared::globals::settings_path + ini_name);
 		if (shared::globals::lookdev_host)
-			shared::common::config::get().set_overlay(shared::globals::root_path + "\\remix-comp-proxy.host.ini");
+			shared::common::config::get().set_overlay(shared::globals::settings_path + "\\remix-comp-proxy.host.ini");
 
 		// Apply fixed-address game patches as early as possible.
 		// Effect disabling lives in game/render_toggles.cpp now — schedule-level

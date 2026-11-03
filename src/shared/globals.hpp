@@ -29,6 +29,8 @@ namespace shared::globals
 	// memory and code do not exist in this process, so nothing may read, patch or
 	// hook it. Game state the modules need arrives through game::host_feed.
 	extern bool lookdev_host;
+	// <game>\rtx_comp\settings: the INIs a player edits. Set before the config loads.
+	extern std::string settings_path;
 
 	// Lookdev mode: the game sees no keyboard, mouse or gamepad input while set,
 	// so the camera stays where it was lined up (toggled by [Lookdev] FreezeInputKey).

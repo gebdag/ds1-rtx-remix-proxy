@@ -7,7 +7,7 @@ without restarting the game.
 ## Use
 
 ```
-powershell -File lookdev.ps1          # writes DATA\remix-comp-proxy.lookdev.ini, starts DARKSOULS.exe -lookdev
+powershell -File lookdev.ps1          # writes DATA\rtx_comp\settings\remix-comp-proxy.lookdev.ini, starts DARKSOULS.exe -lookdev
 python lookdev.py host --live         # Remix window that follows the running game frame by frame
 python lookdev.py capture [name]      # or F9 in game: records the next frame to a .ds1cap
 python lookdev.py host [name]         # Remix window replaying one captured frame

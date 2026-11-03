@@ -40,7 +40,7 @@ namespace comp::game::area_overrides
 
 		std::string file_path()
 		{
-			return shared::globals::root_path + "\\rtx_comp\\area_overrides.ini";
+			return shared::globals::settings_path + "\\area_overrides.ini";
 		}
 
 		void parse_file()
