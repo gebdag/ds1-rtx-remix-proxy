@@ -19,17 +19,17 @@ from map_geometry import Scene, blocks_rays, first, map_pieces, rotation, table_
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAP = 'm17_00_00_00'
-# name, position, radius, radiance, spot cone (0: a plain sphere). The halls: the game's floors are lit and its walls dark but for the
-# lanterns, so a spot from high in the void, down onto the floor and lower walls. The upper tiers are left to their lanterns.
-# The shiny pillar between the halls, at (302, 547), mirrors any light that reaches it as a white streak: each spot stands far enough
-# along its hall to keep it outside the cone, and is large, so its radiance is low.
-ROOMS = [('Archives_elevator_room', (236.0, 206.0, 481.0), 2.5, 7.0, 0.0),
-         ('Archives_stair_hall', (260.0, 280.5, 505.0), 2.0, 3.5, 0.0),
-         ('Archives_hall_1', (278.5, 340.0, 523.5), 9.0, 62.0, 35.0),
-         ('Archives_hall_2', (335.5, 340.0, 579.5), 9.0, 62.0, 35.0),
-         # The spots cannot reach under the balconies: a low light for the floor ring, a wide spot to stay off the pillar.
-         ('Archives_hall_1_low', (283.0, 291.0, 528.0), 6.0, 10.0, 60.0),
-         ('Archives_hall_2_low', (323.0, 291.0, 567.0), 6.0, 10.0, 60.0)]
+# name, position, radius, radiance, spot cone (0: a plain sphere). The game's floors are lit and its walls and vaults dark but for the
+# lanterns, so every fill is a spot down onto the floor and lower walls. The upper tiers are left to their lanterns.
+# The pillar between the halls, at (302, 547), is near black in the game and has a shiny material: each low spot stands on the far side
+# of its hall, with the pillar outside its cone even at the soft edge.
+ROOMS = [('Archives_elevator_room', (236.0, 211.0, 481.0), 2.5, 3.0, 60.0),
+         ('Archives_stair_hall', (260.0, 283.0, 505.0), 2.0, 4.0, 50.0),
+         ('Archives_hall_1', (278.5, 340.0, 523.5), 9.0, 85.0, 35.0),
+         ('Archives_hall_2', (335.5, 340.0, 579.5), 9.0, 85.0, 35.0),
+         # The high spots cannot reach under the balconies.
+         ('Archives_hall_1_low', (278.0, 291.0, 523.0), 6.0, 3.0, 60.0),
+         ('Archives_hall_2_low', (331.0, 291.0, 575.0), 6.0, 3.0, 60.0)]
 FILL_COLOUR = '130 180 255'
 
 
