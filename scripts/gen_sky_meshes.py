@@ -14,7 +14,9 @@ Rules (per FLVER in map/mNN_NN_NN_NN):
   - in a map with a sky model, a mesh of any other model 1 km across or more whose top is above the
     top of the map's sky layers is its enclosure (Ash Lake's canopy and wall ring): seen only
     through the sky, and as world geometry it would shut the ambient sky out;
-  - EXTRA_LAYERS: far blended layers checked against captures one by one (Ash Lake's mist).
+  - EXTRA_LAYERS: far layers checked against captures one by one (Ash Lake's mist, the Archives' far ground).
+    CAMERA_ABOVE holds one such mesh in the sky only while the camera is higher than that (the proxy reads
+    `above <y>` at the end of its lines): sky draws behind all world geometry, which is wrong near it.
 
 Also writes assets/sky/shell_meshes.txt, same format: the blended shells (see blended_shells), which
 the proxy draws as their own surfaces instead of decals. Outside SHELL_MAPS only solid shells count (see
@@ -73,6 +75,21 @@ EXTRA_LAYERS = {
     # they met their world-geometry lower halves at a seam where the game's shading met Remix's.)
     ('m13_02_00_00', 'm0050B2A13', 0),
     ('m13_02_00_00', 'm2000B2A13', 0),
+    # Duke's Archives (frame_20261103_163307): the far ground ring, then the land below the castle (mountains,
+    # forest, lower walls). The game draws them before its cloud bowl and blends the clouds over them; as world
+    # geometry they stood in front of the clouds. Their models have no sky layer.
+    ('m17_00_00_00', 'm8000B0A17', 0),
+    ('m17_00_00_00', 'm2300B0A17', 1),
+    ('m17_00_00_00', 'm2300B0A17', 2),
+    ('m17_00_00_00', 'm2300B0A17', 3),
+}
+CAMERA_ABOVE = {
+    # The mountains' mesh also holds the ground around the castle's foot, up to y 267. From 425 standing places over
+    # the map, rays that met these meshes with world geometry behind them: from below 267 up to 46% of directions
+    # (y 130-160 and 220-250); from above it 2.6% at one place, 0.2% or less elsewhere. Below, they stay world geometry.
+    ('m17_00_00_00', 'm2300B0A17', 1): 267.0,
+    ('m17_00_00_00', 'm2300B0A17', 2): 267.0,
+    ('m17_00_00_00', 'm2300B0A17', 3): 267.0,
 }
 
 
@@ -276,7 +293,9 @@ def main():
             in_sky.add((map_id, model, i))
         for j, fs in enumerate(mesh.face_sets):
             idx = np.asarray(fs.indices, dtype='<u2')
-            out.append(f'{fnv1a64(idx.tobytes()):016x} {len(idx)} {map_id}/{model}/mesh{i}/lod{j} {name}')
+            above = CAMERA_ABOVE.get((map_id, model, i))
+            suffix = f' above {above:g}' if above is not None else ''
+            out.append(f'{fnv1a64(idx.tobytes()):016x} {len(idx)} {map_id}/{model}/mesh{i}/lod{j} {name}{suffix}')
 
     for map_dir in sorted(glob.glob(os.path.join(args.data, 'map', 'm*_*'))):
         map_id = os.path.basename(map_dir)

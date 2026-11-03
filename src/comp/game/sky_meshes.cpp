@@ -1,6 +1,9 @@
 #include "std_include.hpp"
 #include "sky_meshes.hpp"
 
+#include "shared/common/ffp_state.hpp"
+
+#include <limits>
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
@@ -26,6 +29,7 @@ namespace comp::game::sky_meshes
 			uint8_t cut = 0;     // glass: the alpha that separates came (>=) from glass
 			std::string texture; // glass: the diffuse the mesh is drawn with
 			std::string derived; // glass: the glass pass texture (rtx_comp\glass\<derived>.dds)
+			float above_y = -std::numeric_limits<float>::infinity(); // sky: only while the camera is above this height
 		};
 
 		// Entries live in g_hashes for good (a node map: pointers stay valid).
@@ -72,8 +76,11 @@ namespace comp::game::sky_meshes
 					continue;
 				if (k == kind::glass && !(in >> texture >> cut >> derived && cut > 0 && cut < 256))
 					continue;
+				float above_y = -std::numeric_limits<float>::infinity();
+				if (std::string word; k == kind::sky && in >> texture >> word && word == "above")
+					in >> above_y;
 				g_hashes.emplace(std::stoull(hash_hex, nullptr, 16),
-					entry{ source, k, static_cast<uint8_t>(cut), texture, derived });
+					entry{ source, k, static_cast<uint8_t>(cut), texture, derived, above_y });
 				g_counts.insert(count);
 				loaded++;
 			}
@@ -159,7 +166,13 @@ namespace comp::game::sky_meshes
 
 	bool is_sky_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
-		return lookup(ib, type, start_index, prim_count).k == kind::sky;
+		const match m = lookup(ib, type, start_index, prim_count);
+		if (m.k != kind::sky)
+			return false;
+		if (m.e->above_y == -std::numeric_limits<float>::infinity())
+			return true;
+		float x, y, z;
+		return shared::common::ffp_state::get().world_offset(x, y, z) && y > m.e->above_y;
 	}
 
 	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
