@@ -15,7 +15,7 @@ import sys
 
 import numpy as np
 
-from gen_room_meshes import Scene, blocks_rays, first, map_pieces, rotation, table_sources
+from map_geometry import Scene, blocks_rays, first, map_pieces, rotation, table_sources
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAP = 'm17_00_00_00'
