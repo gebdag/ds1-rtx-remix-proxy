@@ -28,6 +28,8 @@ namespace comp::game::lightmap_sun
 	// shader: DS1's hair cards, which the runtime renders as hair cards (cutouts at full texture
 	// detail) instead of stacked blends.
 	constexpr DWORD kSkinnedCardMarker = 0xD2000001;
+	// A lightmap level of nothing: no sun on this draw (Surface::ds1SunLightmap).
+	constexpr DWORD kNoSunMarker = 0xD1000000;
 	// A draw of a body part: its vertices carry their bind position in their colour, and it gets wet
 	// (skinning::expand_skin_vertex, rtx_dark_souls_ripples.h in the runtime).
 	constexpr DWORD kWetBodyMarker = 0xD2000002;
