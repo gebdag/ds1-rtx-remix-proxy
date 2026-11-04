@@ -177,9 +177,6 @@ namespace shared::common
 		struct sprite_point { float x, y, z, alpha; float r, g, b; float area; bool additive; };
 		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
 		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
-		// Whether a sprite batch is a fog wall.
-		using fog_wall_fn = bool(*)(IDirect3DBaseTexture9* texture, UINT prim_count);
-		void set_fog_wall_test(fog_wall_fn fn) { fog_wall_fn_ = fn; }
 
 		// Per-frame flags — set by the comp layer's camera module
 		void set_inject_view_pos(bool v) { inject_view_pos_ = v; }
@@ -523,7 +520,7 @@ namespace shared::common
 		void clear_decal_marker(IDirect3DDevice9* dev);
 		// Alpha-blended unlit meshes (PS_UNLIT) take the sprites' unlit marker on stage 0's constant;
 		// true when set. Cleared with clear_decal_marker.
-		bool apply_unlit_layer_marker(IDirect3DDevice9* dev, bool scene_mist = false);
+		bool apply_unlit_layer_marker(IDirect3DDevice9* dev);
 
 		// --- Rigid vertex expansion (CPU-side SHORT→FLOAT UV conversion) ---
 
@@ -565,7 +562,6 @@ namespace shared::common
 		camera_pos_fn camera_override_fn_ = nullptr;
 		map_loaded_fn map_loaded_fn_ = nullptr;
 		sprite_observer_fn sprite_observer_fn_ = nullptr;
-		fog_wall_fn fog_wall_fn_ = nullptr;
 		bool inject_view_pos_ = false;
 		bool offset_world_ = false;
 
@@ -672,11 +668,17 @@ namespace shared::common
 		// the Multi sprites' textures per vertex (a small mip: the vertices of a subdivided sprite are several
 		// top-level texels apart); empty when the format cannot be read. full_* is its top level's size, flat
 		// whether every texel is the same colour.
+		struct mask_mip
+		{
+			UINT width = 0, height = 0;
+			std::vector<std::array<float, 4>> texels;
+		};
 		struct mask_texels
 		{
 			UINT width = 0, height = 0, full_width = 0, full_height = 0;
 			bool flat = false;
 			std::vector<std::array<float, 4>> texels;
+			std::vector<mask_mip> mips;
 		};
 		std::unordered_map<IDirect3DBaseTexture9*, mask_texels> mask_texels_;
 		const mask_texels* texture_texels(IDirect3DBaseTexture9* texture);

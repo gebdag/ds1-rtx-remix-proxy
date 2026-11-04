@@ -2468,42 +2468,6 @@ namespace shared::common
 				sprite_observer_fn_(sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
 		}
 
-		// A batch off screen and far away goes no further: its lights have seen it (the observer above), and every sprite costs the game thread
-		// (a fire 90 m off and two fog walls were 4 ms in the Demon Ruins) and Remix a new acceleration structure. Bounce rays get nothing visible
-		// from sprites anyway; close by they stay, for reflections.
-		if (!points && count)
-		{
-			constexpr float kMargin = 1.3f;
-			constexpr double kKeepWithin = 20.0;
-			unsigned all_outside = 0x3F;
-			double nearest = DBL_MAX;
-			const UINT index_count = prim == D3DPT_TRIANGLELIST ? prim_count * 3 : prim_count + 2;
-			for (UINT n = 0; n < index_count && (all_outside || nearest > kKeepWithin * kKeepWithin); n++)
-			{
-				const UINT i = !indices ? n : index_format == D3DFMT_INDEX32 ? static_cast<const uint32_t*>(indices)[n] : static_cast<const uint16_t*>(indices)[n];
-				if (i >= count)
-					continue;
-				const float px = out[i].x, py = out[i].y, pz = out[i].z;
-				const float cx = P[0] * px + P[1] * py + P[2] * pz + P[3];
-				const float cy = P[4] * px + P[5] * py + P[6] * pz + P[7];
-				const float cw = P[12] * px + P[13] * py + P[14] * pz + P[15];
-				unsigned outside = 0;
-				if (cx > cw * kMargin) outside |= 1;
-				if (cx < -cw * kMargin) outside |= 2;
-				if (cy > cw * kMargin) outside |= 4;
-				if (cy < -cw * kMargin) outside |= 8;
-				if (cw <= 0.0f) outside |= 16;
-				all_outside &= outside | 32;
-				const double dx = px - sprite_cam_[0], dy = py - sprite_cam_[1], dz = pz - sprite_cam_[2];
-				nearest = std::min(nearest, dx * dx + dy * dy + dz * dz);
-			}
-			if ((all_outside & 31) && nearest > kKeepWithin * kKeepWithin)
-			{
-				hr = S_OK;
-				return true;
-			}
-		}
-
 		IDirect3DVertexDeclaration9* game_decl = nullptr;
 		dev->GetVertexDeclaration(&game_decl);
 
@@ -2542,13 +2506,17 @@ namespace shared::common
 		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled): the sprite's colour is its display
 		// value (the game's exposure is in it, vertex_colour above). Stage 0's constant is inert in
 		// rasterization: no stage argument references D3DTA_CONSTANT.
-		// A fog wall has its own: the game's fog wall has its colour and nothing of the haze, which the look's scene pass
-		// would take from the far surface behind it (dark teal instead of the game's grey).
+		// Unfogged sprites have their own: in the game such a sprite (fog walls, s00903) has its colour and nothing of the haze, which the
+		// look's scene pass would take from the far surface behind it (dark teal instead of the game's grey).
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
 		constexpr DWORD kUnhazedUnlitMarker = 0xD15D0E23;
-		const bool fog_wall = !masked && indices && prim == D3DPT_TRIANGLELIST && fog_wall_fn_ && fog_wall_fn_(cur_texture_[0], prim_count);
+		// An alpha sprite the game's own constants leave unfogged: VS c159.y is 0 (no colour fog, extinction or inscatter at all), or VS c135.w (its
+		// extinction and inscatter share) and PS c4.w (its fog colour) are 0.
+		DWORD sprite_dest = 0;
+		dev->GetRenderState(D3DRS_DESTBLEND, &sprite_dest);
+		const bool unfogged = !masked && sprite_dest == D3DBLEND_INVSRCALPHA && (vs_const_[159 * 4 + 1] == 0.0f || (vs_const_[135 * 4 + 3] == 0.0f && ps_const_[4 * 4 + 3] == 0.0f));
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, fog_wall ? kUnhazedUnlitMarker : kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged ? kUnhazedUnlitMarker : kUnlitMarker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		constexpr DWORD kFeatherMarker = 0xD8000000u;
@@ -2838,6 +2806,33 @@ namespace shared::common
 				{
 					result.width = w;
 					result.height = h;
+					// Box mips down to one texel, for the area mean over a sprite cell (sample_footprint).
+					{
+						const std::vector<std::array<float, 4>>* from = &t;
+						UINT fw = w, fh = h;
+						while (fw > 1 || fh > 1)
+						{
+							const UINT nw = std::max(fw / 2, 1u), nh = std::max(fh / 2, 1u);
+							mask_mip mip { nw, nh, std::vector<std::array<float, 4>>(static_cast<size_t>(nw) * nh) };
+							for (UINT y = 0; y < nh; y++)
+								for (UINT x = 0; x < nw; x++)
+								{
+									const UINT x0 = x * fw / nw, x1 = std::min((x + 1) * fw / nw, fw), y0 = y * fh / nh, y1 = std::min((y + 1) * fh / nh, fh);
+									std::array<float, 4> sum {};
+									for (UINT b = y0; b < y1; b++)
+										for (UINT a = x0; a < x1; a++)
+											for (int k = 0; k < 4; k++)
+												sum[k] += (*from)[static_cast<size_t>(b) * fw + a][k];
+									const float n = static_cast<float>((x1 - x0) * (y1 - y0));
+									for (int k = 0; k < 4; k++)
+										mip.texels[static_cast<size_t>(y) * nw + x][k] = sum[k] / n;
+								}
+							result.mips.push_back(std::move(mip));
+							from = &result.mips.back().texels;
+							fw = nw;
+							fh = nh;
+						}
+					}
 					result.flat = std::all_of(t.begin(), t.end(), [&](const std::array<float, 4>& texel)
 					{
 						for (int k = 0; k < 4; k++)
@@ -2872,6 +2867,31 @@ namespace shared::common
 			for (int k = 0; k < 4; k++)
 				r[k] = (a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (c[k] * (1 - tx) + d[k] * tx) * ty;
 			return r;
+		}
+	}
+
+	namespace
+	{
+		// The texture averaged over a footprint this wide in uv: the box mip whose texel is about that wide, bilinear, and between mips.
+		template <typename T>
+		std::array<float, 4> sample_footprint(const T& mask, float u, float v, float footprint)
+		{
+			const float texels = footprint * static_cast<float>(std::max(mask.width, mask.height));
+			if (texels <= 1.0f || mask.mips.empty())
+				return sample_wrap(mask.texels, mask.width, mask.height, u, v);
+			const float level = std::log2(texels);
+			const int below = std::min(static_cast<int>(level), static_cast<int>(mask.mips.size()));
+			const int above = std::min(below + 1, static_cast<int>(mask.mips.size()));
+			const float t = std::clamp(level - static_cast<float>(below), 0.0f, 1.0f);
+			auto at = [&](int m) -> std::array<float, 4>
+			{
+				if (m == 0)
+					return sample_wrap(mask.texels, mask.width, mask.height, u, v);
+				const auto& mip = mask.mips[static_cast<size_t>(m) - 1];
+				return sample_wrap(mip.texels, mip.width, mip.height, u, v);
+			};
+			const auto a = at(below), b = at(above);
+			return { a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t };
 		}
 	}
 
@@ -2946,13 +2966,15 @@ namespace shared::common
 			if (!indices) return i;
 			return index_format == D3DFMT_INDEX32 ? static_cast<const uint32_t*>(indices)[i] : static_cast<const uint16_t*>(indices)[i];
 		};
+		float footprint[3] = {};
 		auto pack = [&](const vertex& v)
 		{
 			float c[4] = { v.c[0], v.c[1], v.c[2], v.c[3] };
 			for (int l = 0; l < 3; l++)
 				if (l != carrier && layers[l].texels)
 				{
-					const auto s = sample_wrap(layers[l].texels->texels, layers[l].texels->width, layers[l].texels->height, v.uv[l][0], v.uv[l][1]);
+					// Over a cell's footprint: a coarse cell's corners alone can all fall outside a mask's disc, which made distant item glows vanish.
+					const auto s = sample_footprint(*layers[l].texels, v.uv[l][0], v.uv[l][1], footprint[l]);
 					for (int k = 0; k < 4; k++)
 						c[k] *= s[k];
 				}
@@ -3010,6 +3032,16 @@ namespace shared::common
 				cells = std::clamp(static_cast<int>(std::ceil(size * kCellsPerScreenSize)), 1, kCells);
 			}
 			const int points = (cells + 1) * (cells + 2) / 2;
+			for (int l = 0; l < 3; l++)
+			{
+				float span = 0.0f;
+				if (layers[l].uv_off >= 0)
+					for (int c = 0; c < 3; c++)
+						for (int k = 0; k < 2; k++)
+							span = std::max(span, std::abs(corner[(c + 1) % 3].uv[l][k] - corner[c].uv[l][k]));
+				// Half a cell: enough to keep a coarse cell's mean (simulated: exact to about 5%, 1 and 2 cells exact) without flattening near sprites' peak.
+				footprint[l] = 0.5f * span / static_cast<float>(cells);
+			}
 			// Barycentric grid: point (i, j) = corner0 + i/n (corner1 - corner0) + j/n (corner2 - corner0).
 			for (int i = 0; i <= cells; i++)
 				for (int j = 0; i + j <= cells; j++)
@@ -3268,19 +3300,8 @@ namespace shared::common
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 	}
 
-	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev, bool scene_mist)
+	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev)
 	{
-		// Firelink's mist: blended like these, its light on the self-lit tag, and no haze: the game's draw has none (c103-c111 cleared).
-		if (scene_mist)
-		{
-			DWORD blended = FALSE;
-			if (dev)
-				dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
-			if (!blended)
-				return false;
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0xD15D0E23u);
-			return true;
-		}
 		// An alpha-blended unlit mesh (PS_UNLIT: texture * c100 * vertex colour * c139, every one an SFX
 		// glow layer such as Bed of Chaos's glyph rings) is drawn like the unlit sprites: the sprites' unlit
 		// marker, so Remix composites it as the game does (alpha-blended in gamma space, lighting nothing),

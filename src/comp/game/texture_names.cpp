@@ -315,15 +315,6 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.lit_effect;
 	}
 
-	bool is_scene_mist(IDirect3DBaseTexture9* texture)
-	{
-		if (!texture)
-			return false;
-		std::shared_lock lock(g_mutex);
-		const auto it = g_entries.find(texture);
-		return it != g_entries.end() && it->second.name == "m10_mist";
-	}
-
 	bool is_body_part(IDirect3DBaseTexture9* texture)
 	{
 		if (!texture)

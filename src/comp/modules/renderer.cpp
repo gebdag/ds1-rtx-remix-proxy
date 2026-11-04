@@ -78,16 +78,7 @@ namespace comp
 		// so the edge-on mist stack at the horizon turned into a dark band. They go to the sky
 		// raster with the game's shaders, like the dome and cloud sea (shown where the view reaches
 		// the sky, which is where they sit).
-		// One of the flat sheets of Firelink's chasm mist, all one mesh of 197 triangles. The map's other m10_mist meshes, its horizon shell
-		// among them, stay in the sky: edge-on in the scene they make a dark band over the ruins (firelink_look).
-		bool is_mist_sheet(UINT prim_count)
-		{
-			constexpr UINT kSheetTriangles = 197;
-			const int stage = shared::common::config::get().ffp.albedo_stage;
-			return prim_count == kSheetTriangles && game::texture_names::is_scene_mist(shared::common::ffp_state::get().cur_texture(static_cast<UINT>(stage)));
-		}
-
-		bool is_backdrop_layer(IDirect3DDevice9* dev, UINT prim_count)
+		bool is_backdrop_layer(IDirect3DDevice9* dev)
 		{
 			auto& ffp = shared::common::ffp_state::get();
 			if (!is_atmospheric_layer())
@@ -97,14 +88,10 @@ namespace comp
 			dev->GetRenderState(D3DRS_CLIPPLANEENABLE, &clip_planes);
 			if (!blend || clip_planes != 0)
 				return false;
-			// Firelink's mist fills the chasm down to Blighttown: sheets stacked from y -153 to -216, with the map's far buildings below and among
-			// them. Sky draws behind all world geometry, which took the mist off everything it hangs in front of. They stay in the scene as unlit layers.
-			if (is_mist_sheet(prim_count))
-				return false;
-			if (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE)
-				return true;
 			const int stage = shared::common::config::get().ffp.albedo_stage;
 			const auto name = game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(stage)));
+			if (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE)
+				return true;
 			return name.find("_bg_") != std::string::npos || name.find("back_ground") != std::string::npos;
 		}
 	}
@@ -477,7 +464,7 @@ namespace comp
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
 		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
-			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) || is_mist_sheet(primCount),
+			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
@@ -577,7 +564,7 @@ namespace comp
 		// plane, and its copy must stay out of the sky.
 		const bool sky_draw = !water_draw && ffp.view_proj_valid() && !ffp.cur_decl_is_skinned() &&
 			shared::common::config::get().sky.mark_sky_draws &&
-			(is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount) || is_backdrop_layer(dev, primCount));
+			(is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount) || is_backdrop_layer(dev));
 
 		if (!ffp.view_proj_valid())
 		{
@@ -789,9 +776,8 @@ namespace comp
 						apply_came_pass_states(ctx, dev, glass_cut);
 					const bool base_decal = !shell && !glass_texture && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					// Alpha-blended unlit glow layers take the sprites' unlit marker instead (ffp_state).
-					const bool scene_mist = is_mist_sheet(primCount);
-					const bool unlit_layer = !base_decal && !shell && !glass_texture && (scene_mist || !is_atmospheric_layer()) &&
-						ffp.apply_unlit_layer_marker(dev, scene_mist);
+					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
+						ffp.apply_unlit_layer_marker(dev);
 					if (shell && (shell_mode == 2 || flask))
 					{
 						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).
