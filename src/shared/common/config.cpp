@@ -253,6 +253,7 @@ namespace shared::common
 		lights.resolve_entity_params = get_bool("Lights", "ResolveEntityParams", true);
 		lights.synthesized_lights = get_bool("Lights", "SynthesizedLights", true);
 		lights.fire_light_scale = std::max(0.0f, get_float("Lights", "FireLightScale", 1.0f));
+		lights.effect_table_scale = std::max(0.0f, get_float("Lights", "EffectTableScale", 1.0f));
 
 		// [Hud]
 		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);

@@ -31,6 +31,6 @@ namespace comp::game::ffx_lights
 	// camera. Slots are unique per instance while it lives; ffx_id / ffx_top_id name the effect.
 	// covers are the map's own lights (MSB bank lights, bank entities, map_lights stand-ins): a persistent
 	// effect with one of them within 3 m is the flame that light stands for, and gets none.
-	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers);
+	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale);
 
 }

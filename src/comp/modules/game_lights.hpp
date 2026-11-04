@@ -35,6 +35,9 @@ namespace comp
 		}
 
 		float fire_light_scale = 1.0f;
+		float effect_table_scale = 1.0f;
+		unsigned lightmap_bound_map_id_ = 0;
+		bool turned_off_as_character_only(const game::point_lights::light& l) const;
 		float intensity_scale = 1.0f;
 		float radius_scale = 1.0f;
 

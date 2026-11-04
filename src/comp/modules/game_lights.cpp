@@ -227,6 +227,7 @@ namespace comp
 		enabled = cfg.lights.enabled;
 		intensity_scale = cfg.lights.intensity_scale;
 		fire_light_scale = cfg.lights.fire_light_scale;
+		effect_table_scale = cfg.lights.effect_table_scale;
 		radius_scale = cfg.lights.radius_scale;
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		skip_characters_only_ = cfg.get_bool("Lights", "SkipCharacterOnly", true);
@@ -385,6 +386,12 @@ namespace comp
 		float ox = 0.0f, oy = 0.0f, oz = 0.0f;
 		if (!ps_const || !shared::common::ffp_state::get().world_offset(ox, oy, oz))
 			return;
+		// Per map, like the other bindings: over a session the list filled up with lights from elsewhere and later lights stayed 3.14x dim.
+		if (const unsigned map = game::map_lights::current_map_id(); map != lightmap_bound_map_id_)
+		{
+			lightmap_bound_.clear();
+			lightmap_bound_map_id_ = map;
+		}
 		for (int i = 0; i < std::min(light_count, 4); i++)
 		{
 			const float* colour = &ps_const[(116 + i) * 4];
@@ -423,6 +430,17 @@ namespace comp
 			if (!known && bound.size() < 1024)
 				bound.push_back(world);
 		}
+	}
+
+	bool game_lights::turned_off_as_character_only(const game::point_lights::light& l) const
+	{
+		const kind k = classify(l);
+		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity))
+			return false;
+		// One the user forced on shines.
+		if (const auto* edit = find_override(make_row(l, nullptr).key); edit && edit->include_map)
+			return false;
+		return characters_only(l.x, l.y, l.z) && !game::map_lights::is_flame(l.x, l.y, l.z);
 	}
 
 	bool game_lights::characters_only(float x, float y, float z) const
@@ -646,7 +664,13 @@ namespace comp
 		// The particle stand-ins these lights already stand for are dropped inside effect_lights, before
 		// its light cap (they took slots there and pushed visible stand-ins out and back in), and with
 		// hysteresis on the distance and on the game light's presence (its own fire lights flicker).
-		game::effect_lights::set_covers(sources);
+		// A map light the character-only rule turns off lights nothing, so it must not stand in for a flame either: the flame ended with no light at all.
+		std::vector<const game::point_lights::light*> lit_sources;
+		lit_sources.reserve(sources.size());
+		for (const auto* s : sources)
+			if (!turned_off_as_character_only(*s))
+				lit_sources.push_back(s);
+		game::effect_lights::set_covers(lit_sources);
 		const auto& effects = game::effect_lights::collect();
 		static unsigned particle_log_frame = 0;
 		const bool particle_log = frame - particle_log_frame >= 300;
@@ -693,10 +717,10 @@ namespace comp
 			for (const auto* s : sources)
 			{
 				const kind k = classify(*s);
-				if ((k == kind::map_row || k == kind::bank_entity || k == kind::synthetic) && s->has_params)
+				if ((k == kind::map_row || k == kind::bank_entity || k == kind::synthetic) && s->has_params && !turned_off_as_character_only(*s))
 					map_lights.push_back(s);
 			}
-			for (const auto& l : game::ffx_lights::collect(map_lights))
+			for (auto& l : game::ffx_lights::collect(map_lights, effect_table_scale))
 				sources.push_back(&l);
 		}
 
@@ -1366,6 +1390,7 @@ namespace comp
 		ok &= cfg.set_string("Lights", "Enabled", flag(enabled));
 		ok &= cfg.set_string("Lights", "IntensityScale", std::format("{:.3f}", intensity_scale));
 		ok &= cfg.set_string("Lights", "FireLightScale", std::format("{:.3f}", fire_light_scale));
+		ok &= cfg.set_string("Lights", "EffectTableScale", std::format("{:.3f}", effect_table_scale));
 		ok &= cfg.set_string("Lights", "RadiusScale", std::format("{:.3f}", radius_scale));
 		ok &= cfg.set_string("Lights", "GameFalloff", game_falloff_ ? "1" : "0");
 		ok &= cfg.set_string("Lights", "SkipCharacterOnly", skip_characters_only_ ? "1" : "0");
@@ -1448,6 +1473,7 @@ namespace comp
 		enabled = cfg.get_bool("Lights", "Enabled", true);
 		intensity_scale = cfg.get_float("Lights", "IntensityScale", 1.0f);
 		fire_light_scale = std::max(0.0f, cfg.get_float("Lights", "FireLightScale", 1.0f));
+		effect_table_scale = std::max(0.0f, cfg.get_float("Lights", "EffectTableScale", 1.0f));
 		radius_scale = cfg.get_float("Lights", "RadiusScale", 1.0f);
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		skip_characters_only_ = cfg.get_bool("Lights", "SkipCharacterOnly", true);
@@ -1772,6 +1798,12 @@ namespace comp
 			"Lights stood in for fire effects the game gives no light (fire breath, fire spells).\n"
 			"1 = torch to bonfire strength. Saved as [Lights] FireLightScale.");
 		ImGui::SliderFloat("##fire", &fire_light_scale, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
+		form_label("Effect light brightness",
+			"Lights from ffx_lights.tsv, for effects the game draws bright but gives no light (spells, attacks, ambient effects).\n"
+			"Their colour is a fit from the effect's sprites, weaker than the game's own effect lights of the same kind: fire by 1.8,\n"
+			"magic by 7, other glows by 18, in median light. This scales their colour; light goes with its 2.2 power.\n"
+			"Saved as [Lights] EffectTableScale.");
+		ImGui::SliderFloat("##effect_table", &effect_table_scale, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
 		form_label("Reach", "How far every point light reaches: its dwindle begin and end times this (not the custom Remix\n"
 			"lights). Saved as [Lights] RadiusScale.");
 		ImGui::SliderFloat("##reach", &radius_scale, 0.1f, 10.0f, "x %.2f");

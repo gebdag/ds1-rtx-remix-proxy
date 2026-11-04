@@ -2441,8 +2441,16 @@ namespace shared::common
 				else { v[0] = vertex_of(0); v[1] = vertex_of(t + 1); v[2] = vertex_of(t + 2); }
 				if (v[0] >= count || v[1] >= count || v[2] >= count)
 					continue;
-				sprite_point p { (out[v[0]].x + out[v[1]].x + out[v[2]].x) / 3.0f, (out[v[0]].y + out[v[1]].y + out[v[2]].y) / 3.0f,
-					(out[v[0]].z + out[v[1]].z + out[v[2]].z) / 3.0f,
+				// Where the particle is, not its position pushed towards the camera for the soft fade: up to 1.45 m along the view, which moved the
+				// lights with the camera and could lose the match with their effect.
+				float centre[3] = {};
+				for (const UINT vi : v)
+				{
+					const auto* at = reinterpret_cast<const float*>(src + static_cast<size_t>(vi) * stride + cur_decl_pos_off_);
+					for (int k = 0; k < 3; k++)
+						centre[k] += at[k] / 3.0f;
+				}
+				sprite_point p { centre[0], centre[1], centre[2],
 					static_cast<float>(std::max({ out[v[0]].color >> 24, out[v[1]].color >> 24, out[v[2]].color >> 24 })) / 255.0f };
 				float rgb[3] = {};
 				for (const UINT vi : v)

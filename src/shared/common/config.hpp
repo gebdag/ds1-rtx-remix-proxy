@@ -269,6 +269,7 @@ namespace shared::common
 			// every game light reached Remix at a third of its strength (game_lights.cpp); with them corrected it lit a
 			// fireball's surroundings three times as bright as before.
 			float fire_light_scale = 1.0f;
+			float effect_table_scale = 1.0f; // [Lights] EffectTableScale, the colour of table effect lights: fire 1.8x in light, as the game's own fire lights
 		} lights;
 
 		// The light the game hangs on the player's head (a LerpBank point light on a

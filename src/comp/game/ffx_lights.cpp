@@ -108,7 +108,7 @@ namespace comp::game::ffx_lights
 		return static_cast<int>(g_table.size());
 	}
 
-	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers)
+	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale)
 	{
 		g_out.clear();
 		if (!g_loaded)
@@ -186,7 +186,7 @@ namespace comp::game::ffx_lights
 			point_lights::light l {};
 			l.slot = it->second.slot;
 			l.x = c.pos[0]; l.y = c.pos[1]; l.z = c.pos[2];
-			l.r = c.e->r * c.level; l.g = c.e->g * c.level; l.b = c.e->b * c.level;
+			l.r = c.e->r * c.level * colour_scale; l.g = c.e->g * c.level * colour_scale; l.b = c.e->b * c.level * colour_scale;
 			l.dwindle_begin = c.e->dwindle_begin;
 			l.dwindle_end = c.e->dwindle_end;
 			l.has_params = true;
