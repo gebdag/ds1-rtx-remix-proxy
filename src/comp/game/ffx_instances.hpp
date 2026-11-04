@@ -31,7 +31,7 @@ namespace comp::game::ffx_instances
 	enum class children { none, leftover, running };
 
 	// working: the first child at work, for running.
-	children child_state(unsigned address, int* working = nullptr);
+	children child_state(unsigned address, int* working = nullptr, bool brief = false);
 
 	// How many instances the last walk visited.
 	int last_walk_count();

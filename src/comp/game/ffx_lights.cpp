@@ -143,7 +143,8 @@ namespace comp::game::ffx_lights
 				// "Persistent" is inferred for many effects (a character's event effects), which then play once and
 				// stay behind like the brief ones. One with no children at all draws by itself: it stays lit.
 				int working = 0;
-				const auto children = ffx_instances::child_state(inst.address, &working);
+				// A brief effect's light also ends when only 2118 remains (Hellkite's fire). A persistent one, a torch's, only by 2101.
+				const auto children = ffx_instances::child_state(inst.address, &working, !c.e->persistent);
 				const bool lit = c.e->persistent ? children != ffx_instances::children::leftover
 					: f->second.level >= kFadeOff && children == ffx_instances::children::running;
 				f->second.level = lit ? 1.0f : f->second.level * decay;

@@ -41,6 +41,10 @@ namespace comp::game::ffx_instances
 		// the Moonlight Butterfly's spear impacts (13237) keep one until the area unloads.
 		constexpr int kLeftoverEffect = 2101;
 
+		// Library effect 2118 likewise stays behind, in brief effects (Hellkite's fire). Not the other "no sprite" library effects: 2023 is a live emitter,
+		// and nearly every brief effect holds nothing but such children.
+		constexpr int kBriefLeftoverEffect = 2118;
+
 		// Effect trees are small; the caps guard against a list changing under the walk.
 		constexpr int kMaxInstances = 8192;
 		constexpr int kMaxParents = 32;
@@ -157,7 +161,7 @@ namespace comp::game::ffx_instances
 		return *reinterpret_cast<const float*>(&bits);
 	}
 
-	children child_state(unsigned address, int* working)
+	children child_state(unsigned address, int* working, bool brief)
 	{
 		DWORD stack[kMaxTreeNodes];
 		int depth = 0;
@@ -168,7 +172,7 @@ namespace comp::game::ffx_instances
 		for (int visited = 0; depth > 0 && visited < kMaxTreeNodes; ++visited)
 		{
 			const DWORD node = stack[--depth];
-			if (const int id = effect_id(node); id != kLeftoverEffect)
+			if (const int id = effect_id(node); id != kLeftoverEffect && !(brief && id == kBriefLeftoverEffect))
 			{
 				if (working)
 					*working = id;
