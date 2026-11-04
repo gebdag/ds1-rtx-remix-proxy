@@ -8,6 +8,7 @@
 #include "shared/common/config.hpp"
 #include "shared/globals.hpp"
 #include "sun_light.hpp"
+#include "map_lights.hpp"
 #include "../modules/game_lights.hpp"
 
 #include <cmath>
@@ -957,11 +958,45 @@ namespace comp::game::atmosphere
 			for (auto& face : cube)
 				for (float& v : face)
 					v = std::pow(std::max(v, 0.0f), 2.2f);
-			if (!(g_ambient_sent_once && cube == g_ambient_sent))
+			// The game's ambient is per region and jumps at a border, where its baked light hides that. Remix's sky must not: it eases over about
+			// a second, sent a few times a second while it moves. Menus keep theirs exact.
+			static std::array<std::array<float, 3>, 6> shown = {};
+			static auto last_time = std::chrono::steady_clock::now();
+			static auto last_send = last_time;
+			const auto now = std::chrono::steady_clock::now();
+			const float dt = std::clamp(std::chrono::duration<float>(now - last_time).count(), 0.0f, 0.5f);
+			last_time = now;
+			// Nor does a new map's sky after a load (the map id is 0 through one): the first moments, since its first frames can still hold the old map's values.
+			static auto last_load = last_time;
+			if (map_lights::current_map_id() == 0)
+				last_load = now;
+			const bool just_loaded = std::chrono::duration<float>(now - last_load).count() < 2.0f;
+			if (!g_ambient_sent_once || shared::common::ffp_state::get().menu_is_path_traced() || just_loaded || shared::globals::lookdev_host)
+				shown = cube;
+			else
+				for (int f = 0; f < 6; f++)
+					for (int c = 0; c < 3; c++)
+					{
+						shown[f][c] += (cube[f][c] - shown[f][c]) * (1.0f - std::exp(-dt / 1.0f));
+						// Arrived: the sun's strength reads this, so it must stop changing too.
+						if (std::abs(cube[f][c] - shown[f][c]) <= 0.005f * std::max(cube[f][c], 1e-3f))
+							shown[f][c] = cube[f][c];
+					}
+			float moved = 0.0f;
+			if (g_ambient_sent_once)
+				for (int f = 0; f < 6; f++)
+					for (int c = 0; c < 3; c++)
+						moved = std::max(moved, std::abs(shown[f][c] - g_ambient_sent[f][c]) / std::max(g_ambient_sent[f][c], 1e-3f));
+			// The sun's strength is measured against this sky (ambient_toward): it must not step while the sky eases.
+			for (int f = 0; f < 6; f++)
+				for (int c = 0; c < 3; c++)
+					g_ambient_gamma[f][c] = std::pow(std::max(shown[f][c], 0.0f), 1.0f / 2.2f);
+			if (!g_ambient_sent_once || (just_loaded && moved > 0.0f) || (moved > 0.01f && std::chrono::duration<float>(now - last_send).count() > 0.12f))
 			{
-				send_ambient(cube);
-				g_ambient_sent = cube;
+				send_ambient(shown);
+				g_ambient_sent = shown;
 				g_ambient_sent_once = true;
+				last_send = now;
 			}
 		}
 		if (g_have_haze && !(g_haze_sent_once && g_haze_sent == g_haze_ready))
@@ -1072,6 +1107,27 @@ namespace comp::game::atmosphere
 			}
 		}
 		write_look_state(frame);
+	}
+
+	bool probe_lobe(IDirect3DBaseTexture9* probe, const float* scale, const float* direction, float* up, float* down, float* lobe)
+	{
+		ambient_source s;
+		s.probe = probe;
+		for (int c = 0; c < 3; c++)
+		{
+			s.scale[c] = scale[c];
+			s.shadow_dir[c] = direction[c];
+		}
+		probe_split split;
+		if (!split_probe(s, split))
+			return false;
+		for (int c = 0; c < 3; c++)
+		{
+			up[c] = split.up[c];
+			down[c] = split.down[c];
+			lobe[c] = split.sun[c];
+		}
+		return true;
 	}
 
 	void set_sun_gamma(const float* base, const float* lobe)

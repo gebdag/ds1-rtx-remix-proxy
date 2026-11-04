@@ -8,6 +8,7 @@
 #include "../game/mesh_lights.hpp"
 #include "../game/custom_lights.hpp"
 #include "../game/sun_light.hpp"
+#include "../game/map_sun.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
 #include "shared/common/remix_api.hpp"
@@ -435,7 +436,8 @@ namespace comp
 	bool game_lights::turned_off_as_character_only(const game::point_lights::light& l) const
 	{
 		const kind k = classify(l);
-		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity))
+		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity) || !characters_only(l.x, l.y, l.z) ||
+			game::map_lights::is_flame(l.x, l.y, l.z))
 			return false;
 		// One the user forced on shines.
 		const auto* edit = find_override(row_key(k, l));
@@ -996,11 +998,49 @@ namespace comp
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(),
 			sun_fallback_colour);
 
-		const float* key_colour = sun_colour_set ? sun_colour : sun.key.colour;
-		const float* key_direction = sun_direction_set ? sun_direction : sun.key.dir;
+		// One sun, the map's: it stays where it is and as it is wherever the player stands (game/map_sun.hpp). A map without a named row goes by what the
+		// game draws with, keeping the strongest it has seen. [Sun] Colour and Direction in an area override either.
+		const unsigned sun_map = game::map_lights::current_map_id();
+		const auto& authored = game::map_sun::get(sun_map);
+		if (sun_map != seen_sun_map_)
+		{
+			seen_sun_map_ = sun_map;
+			seen_sun_ = {};
+			seen_sun_strength_ = 0.0f;
+			seen_sun_frames_ = 0;
+		}
+		// Not in the first moments of a map, while its draws can still carry the last one's values.
+		constexpr int kSeenSunAfterFrames = 60;
+		if (seen_sun_frames_ < kSeenSunAfterFrames)
+			seen_sun_frames_++;
 		float ambient[3] = {};
-		const float facing_sun[3] = { -key_direction[0], -key_direction[1], -key_direction[2] };
-		game::atmosphere::ambient_toward(facing_sun, ambient);
+		if (!authored.authored && sun.valid && seen_sun_frames_ >= kSeenSunAfterFrames)
+		{
+			const float facing[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
+			const float strength = 0.2126f * sun.key.colour[0] + 0.7152f * sun.key.colour[1] + 0.0722f * sun.key.colour[2];
+			if (strength > seen_sun_strength_ || !seen_sun_.has_sun)
+			{
+				seen_sun_strength_ = strength;
+				seen_sun_.has_sun = true;
+				std::memcpy(seen_sun_.direction, sun.key.dir, sizeof(seen_sun_.direction));
+				std::memcpy(seen_sun_.lobe, sun.key.colour, sizeof(seen_sun_.lobe));
+				game::atmosphere::ambient_toward(facing, seen_sun_.base);
+			}
+		}
+		const auto& map_sun = authored.authored ? authored : seen_sun_;
+		// Not at the title or in a menu's character view, which have their own light.
+		const bool in_a_map = sun_map != 0 && ((sun_map >> 24) & 0xFF) < 99 && !shared::common::ffp_state::get().menu_is_path_traced();
+		const bool sun_wanted = sun_enabled && in_a_map && (map_sun.has_sun || sun_colour_set);
+		game::sun_light::set_world_direction(sun_wanted ? (sun_direction_set ? sun_direction : map_sun.direction) : nullptr);
+		const float* key_direction = sun_direction_set ? sun_direction : map_sun.direction;
+		const float* key_colour = sun_colour_set ? sun_colour : map_sun.lobe;
+		if (map_sun.has_sun && !sun_colour_set)
+			std::memcpy(ambient, map_sun.base, sizeof(ambient));
+		else
+		{
+			const float facing_sun[3] = { -key_direction[0], -key_direction[1], -key_direction[2] };
+			game::atmosphere::ambient_toward(facing_sun, ambient);
+		}
 		game::atmosphere::set_sun_gamma(ambient, key_colour);
 		float linear[3];
 		for (int c = 0; c < 3; ++c)
@@ -1017,7 +1057,7 @@ namespace comp
 		};
 		const bool lit = radiance.x > 0.0f || radiance.y > 0.0f || radiance.z > 0.0f;
 
-		if (!sun_enabled || !sun.valid || !lit)
+		if (!sun_wanted || !lit)
 		{
 			release_sun();
 			return;

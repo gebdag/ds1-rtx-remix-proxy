@@ -1,4 +1,6 @@
 #pragma once
+#include <shared_mutex>
+#include <unordered_set>
 #include "config.hpp"
 
 #include <array>
@@ -201,6 +203,20 @@ namespace shared::common
 		// Mean RGB of each face of a cube texture's top level (+X, -X, +Y, -Y, +Z, -Z), cached
 		// per texture. 8888 cubes only (DS1's irradiance probes); false for anything else.
 		bool cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces);
+		// Cube textures the device created, by address: the game reaches its probes through handles of its own.
+		void note_cube(IDirect3DBaseTexture9* cube)
+		{
+			std::unique_lock lock(known_cubes_mutex_);
+			known_cubes_.insert(cube);
+		}
+		IDirect3DBaseTexture9* known_cube(uint32_t address) const
+		{
+			auto* cube = reinterpret_cast<IDirect3DBaseTexture9*>(static_cast<uintptr_t>(address));
+			std::shared_lock lock(known_cubes_mutex_);
+			return known_cubes_.contains(cube) ? cube : nullptr;
+		}
+		// A new map's cubes can sit at an old one's addresses.
+		void forget_cube_faces() { cube_faces_.clear(); }
 
 		// The texture bound on stage 11: the irradiance probe of DS1's HemEnv shaders.
 		IDirect3DBaseTexture9* probe_texture() const { return probe_texture_; }
@@ -774,6 +790,8 @@ namespace shared::common
 		IDirect3DBaseTexture9* cur_texture_[8] = {};
 		IDirect3DBaseTexture9* probe_texture_ = nullptr;
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<std::array<float, 3>, 6>> cube_faces_;
+		std::unordered_set<IDirect3DBaseTexture9*> known_cubes_;
+		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking
 		IDirect3DVertexBuffer9* stream_vb_[4] = {};

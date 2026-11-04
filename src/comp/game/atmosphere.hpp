@@ -96,4 +96,6 @@ namespace comp::game::atmosphere
 	// lightmap * lobe to that ambient in the game, and the runtime scales the sun on them to match
 	// (lightmap_sun.hpp).
 	void set_sun_gamma(const float* base, const float* lobe);
+	// A probe cube times scale, as a sky gradient (up, down) plus a lobe along direction (of travel). False if the cube cannot be read.
+	bool probe_lobe(IDirect3DBaseTexture9* probe, const float* scale, const float* direction, float* up, float* down, float* lobe);
 }

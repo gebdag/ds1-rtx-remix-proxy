@@ -69,6 +69,8 @@ namespace comp::game::sun_light
 	// The sun's propagation direction from the last completed vote, without
 	// closing the current one. False while no direction is valid.
 	bool key_direction(float* out_dir);
+	// The sun that shines, which is what shadow casters are kept along. Null: go by what the game draws with.
+	void set_world_direction(const float* direction);
 
 	// The live constant shadow, for the raw-register readout (null before the
 	// first vote).

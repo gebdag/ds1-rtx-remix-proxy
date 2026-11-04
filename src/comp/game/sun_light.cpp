@@ -103,6 +103,8 @@ namespace comp::game::sun_light
 				out.colour[i] = std::max(0.0f, colour[i]);
 		}
 
+		float g_world_direction[3] = {};
+		bool g_have_world_direction = false;
 		float g_probe_sun[3] = {};
 		bool g_have_probe_sun = false;
 
@@ -238,8 +240,20 @@ namespace comp::game::sun_light
 		g_have_probe_sun = true;
 	}
 
+	void set_world_direction(const float* direction)
+	{
+		g_have_world_direction = direction != nullptr;
+		if (direction)
+			std::memcpy(g_world_direction, direction, sizeof(g_world_direction));
+	}
+
 	bool key_direction(float* out_dir)
 	{
+		if (g_have_world_direction)
+		{
+			std::memcpy(out_dir, g_world_direction, sizeof(g_world_direction));
+			return true;
+		}
 		if (!g_state.valid)
 			return false;
 		for (int i = 0; i < 3; ++i)

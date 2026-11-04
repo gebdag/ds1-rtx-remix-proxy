@@ -1,4 +1,5 @@
 #pragma once
+#include "../game/map_sun.hpp"
 
 #include "shared/common/config.hpp"
 #include <array>
@@ -35,9 +36,14 @@ namespace comp
 		}
 
 		float fire_light_scale = 1.0f;
-		float effect_table_scale = 1.0f;
 		unsigned lightmap_bound_map_id_ = 0;
+		// A map with no named sun row: the strongest sun the game has drawn with there.
+		unsigned seen_sun_map_ = 0;
+		int seen_sun_frames_ = 0;
+		float seen_sun_strength_ = 0.0f;
+		game::map_sun::values seen_sun_;
 		bool turned_off_as_character_only(const game::point_lights::light& l) const;
+		float effect_table_scale = 1.0f; // [Lights] EffectTableScale, the colour of table effect lights: fire 1.8x in light, as the game's own fire lights
 		float intensity_scale = 1.0f;
 		float radius_scale = 1.0f;
 

@@ -842,6 +842,8 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_CreateCubeTexture, EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
 		const crash_context::stopwatch sw;
 		const auto hr = m_pIDirect3DDevice9->CreateCubeTexture(EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
+		if (SUCCEEDED(hr) && ppCubeTexture && *ppCubeTexture)
+			shared::common::ffp_state::get().note_cube(*ppCubeTexture);
 		if (FAILED(hr))
 			crash_context::note("CubeTex e=%u L%u f=%s p=%u t=%u hr=%08X", EdgeLength, Levels, format_tag(Format).c_str(), Pool, sw.ms(), hr);
 		return hr;
