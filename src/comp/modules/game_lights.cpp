@@ -438,9 +438,8 @@ namespace comp
 		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity))
 			return false;
 		// One the user forced on shines.
-		if (const auto* edit = find_override(make_row(l, nullptr).key); edit && edit->include_map)
-			return false;
-		return characters_only(l.x, l.y, l.z) && !game::map_lights::is_flame(l.x, l.y, l.z);
+		const auto* edit = find_override(row_key(k, l));
+		return !(edit && edit->include_map);
 	}
 
 	bool game_lights::characters_only(float x, float y, float z) const
