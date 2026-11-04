@@ -2158,6 +2158,15 @@ namespace shared::common
 			dev->SetTextureStageState(5, D3DTSS_CONSTANT, 0);
 	}
 
+	float ffp_state::sprite_fog_alpha(const float* position) const
+	{
+		const float w = sprite_w_row_[0] * position[0] + sprite_w_row_[1] * position[1] + sprite_w_row_[2] * position[2] + sprite_w_row_[3];
+		if (!(w > 0.1f))
+			return 1.0f;
+		const float fog = std::clamp((w - vs_const_[2 * 4]) * vs_const_[2 * 4 + 1] * vs_const_[159 * 4], 0.0f, 1.0f);
+		return std::clamp(1.0f - fog * ps_const_[4 * 4 + 3], 0.0f, 1.0f);
+	}
+
 	void ffp_state::push_soft_sprite(float* position, float feather) const
 	{
 		// A soft sprite sits half a feather nearer than its vertices say, so it fades from 50% at a surface
@@ -2363,6 +2372,8 @@ namespace shared::common
 				DWORD colour = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
 				if (game_colour)
 					colour = vertex_colour(colour);
+				if (const float fade = sprite_fog_alpha(pos); fade < 1.0f)
+					colour = (colour & 0x00FFFFFFu) | (static_cast<DWORD>((colour >> 24) * fade + 0.5f) << 24);
 				auto corner = [&](float sx, float sy, float u, float v)
 				{
 					auto& o = out[written++];
@@ -2475,6 +2486,14 @@ namespace shared::common
 			if (!sprite_points_.empty())
 				sprite_observer_fn_(sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
 		}
+		// Fog takes from what shows, after the lights above have read the particle: not a fire's light with the camera's distance.
+		if (!points)
+			for (UINT v = 0; v < count; v++)
+			{
+				const auto* pos = reinterpret_cast<const float*>(src + static_cast<size_t>(v) * stride + cur_decl_pos_off_);
+				if (const float fade = sprite_fog_alpha(pos); fade < 1.0f)
+					out[v].color = (out[v].color & 0x00FFFFFFu) | (static_cast<DWORD>((out[v].color >> 24) * fade + 0.5f) << 24);
+			}
 
 		IDirect3DVertexDeclaration9* game_decl = nullptr;
 		dev->GetVertexDeclaration(&game_decl);
@@ -2960,10 +2979,11 @@ namespace shared::common
 			const unsigned char* sv = src + static_cast<size_t>(i) * stride;
 			vertex v {};
 			std::memcpy(v.p, sv + cur_decl_pos_off_, sizeof(v.p));
+			const float fog_alpha = sprite_fog_alpha(v.p);
 			if (cur_ps_sfx_class_ == sfx_class::SoftSprite && cur_decl_feather_off_ >= 0)
 				push_soft_sprite(v.p, *reinterpret_cast<const float*>(sv + cur_decl_feather_off_));
 			const DWORD c = cur_decl_has_color_ ? pack_decl_color(sv, cur_decl_color_off_, cur_decl_color_type_) : 0xFFFFFFFFu;
-			v.c[0] = ((c >> 16) & 0xFF) / 255.0f; v.c[1] = ((c >> 8) & 0xFF) / 255.0f; v.c[2] = (c & 0xFF) / 255.0f; v.c[3] = (c >> 24) / 255.0f;
+			v.c[0] = ((c >> 16) & 0xFF) / 255.0f; v.c[1] = ((c >> 8) & 0xFF) / 255.0f; v.c[2] = (c & 0xFF) / 255.0f; v.c[3] = (c >> 24) / 255.0f * fog_alpha;
 			for (int l = 0; l < 3; l++)
 				if (layers[l].uv_off >= 0)
 					std::memcpy(v.uv[l], sv + layers[l].uv_off, sizeof(v.uv[l]));

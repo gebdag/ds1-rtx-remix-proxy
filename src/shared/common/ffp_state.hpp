@@ -674,6 +674,9 @@ namespace shared::common
 		std::vector<sprite_point> sprite_points_;
 		// A soft sprite vertex pushed towards the camera by half its feather along its view ray, as the
 		// sprite shaders' ZFeather does (draw_sprite_up: the camera and the w row of its view-projection).
+		// What of a sprite vertex's alpha the game's fog leaves: 1 - sat((w - c2.x) * c2.y * c159.x) * c4.w. c159.x is 1 for additive and subtractive
+		// draws and 0 for alpha ones, whose fog goes into their colour.
+		float sprite_fog_alpha(const float* position) const;
 		double sprite_cam_[3] = {};
 		float sprite_w_row_[4] = {};
 		void push_soft_sprite(float* position, float feather) const;
