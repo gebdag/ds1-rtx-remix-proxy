@@ -75,6 +75,17 @@ EXTRA_LAYERS = {
     # they met their world-geometry lower halves at a seam where the game's shading met Remix's.)
     ('m13_02_00_00', 'm0050B2A13', 0),
     ('m13_02_00_00', 'm2000B2A13', 0),
+    # Tomb of the Giants, the view of Ash Lake (frame_20261104_094601): the forest, its ground, the lake and the mist, all a kilometre or more
+    # across and 160 m or more from the path. As world geometry they sealed the lookout from the ambient sky and went black, the mist with them.
+    ('m13_01_00_00', 'm0010B1A13', 0),
+    ('m13_01_00_00', 'm0010B1A13', 1),
+    ('m13_01_00_00', 'm0020B1A13', 0),
+    ('m13_01_00_00', 'm0110B1A13', 0),
+    ('m13_01_00_00', 'm0030B1A13', 0),
+    ('m13_01_00_00', 'm0050B1A13', 0),
+    ('m13_01_00_00', 'm0100B1A13', 0),
+    ('m13_01_00_00', 'm0100B1A13', 1),
+    ('m13_01_00_00', 'm0120B1A13', 0),
     # Duke's Archives (frame_20261103_163307): the far ground ring, then the land below the castle (mountains,
     # forest, lower walls). The game draws them before its cloud bowl and blends the clouds over them; as world
     # geometry they stood in front of the clouds. Their models have no sky layer.
