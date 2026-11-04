@@ -86,6 +86,9 @@ EXTRA_LAYERS = {
     ('m13_01_00_00', 'm0100B1A13', 0),
     ('m13_01_00_00', 'm0100B1A13', 1),
     ('m13_01_00_00', 'm0120B1A13', 0),
+    # Undead Burg (frame_20261104_133638): the far land under the cloud sea, 1.6-5 km across. As world geometry it stood in front of the clouds.
+    ('m10_01_00_00', 'm8000B1A10', 0),
+    ('m10_01_00_00', 'm2372B1A10', 1),
     # Duke's Archives (frame_20261103_163307): the far ground ring, then the land below the castle (mountains,
     # forest, lower walls). The game draws them before its cloud bowl and blends the clouds over them; as world
     # geometry they stood in front of the clouds. Their models have no sky layer.
