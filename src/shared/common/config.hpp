@@ -289,6 +289,7 @@ namespace shared::common
 			// With the game's falloff: scales the game's dwindle begin and end together (1 = the
 			// game's reach). Range / UseGameRange apply to the inverse-square light only.
 			float falloff_range_scale = 1.0f;
+			float falloff_max_colour = 0.0f; // the strongest channel the game's colour may reach, 0 = no limit
 			// How Offset is applied: 0 world axes (x, y, z); 1 view: turns with the camera
 			// heading (right, up, forward); 2 character: turns with the body (right, up,
 			// forward). View and character use the heading only, so the light stays level.

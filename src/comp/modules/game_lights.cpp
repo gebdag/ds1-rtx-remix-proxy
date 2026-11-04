@@ -1166,11 +1166,15 @@ namespace comp
 			const float game_end = std::max(0.01f, (game ? src->dwindle_end : c.range) * c.falloff_range_scale);
 			const float game_begin = game
 				? std::min(std::max(0.0f, src->dwindle_begin) * c.falloff_range_scale, game_end * 0.99f) : 0.0f;
+			// The Skull Lantern makes the game's colour 4, three times the usual head light's, and in the path tracer's dark
+			// surroundings that blows out. A limit per area (area_overrides.ini) takes the lantern down and leaves the usual one alone.
+			const float peak = std::max({ colour[0], colour[1], colour[2], 1e-4f });
+			const float limit = c.falloff_max_colour > 0.0f ? std::min(c.falloff_max_colour / peak, 1.0f) : 1.0f;
 			const float scale = c.falloff_intensity * mult / 3.14159265f;
 			radiance = {
-				std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
-				std::pow(std::max(colour[1], 0.0f), 2.2f) * scale,
-				std::pow(std::max(colour[2], 0.0f), 2.2f) * scale,
+				std::pow(std::max(colour[0] * limit, 0.0f), 2.2f) * scale,
+				std::pow(std::max(colour[1] * limit, 0.0f), 2.2f) * scale,
+				std::pow(std::max(colour[2] * limit, 0.0f), 2.2f) * scale,
 			};
 			falloff_table += std::format("{:x}:{:.4g}:{:.4g};", string_hash64("ds1_player_light"), game_begin, game_end);
 		}
@@ -1475,6 +1479,7 @@ namespace comp
 		p.intensity = std::max(0.0f, cfg.get_float("PlayerLight", "Intensity", 1.0f));
 		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 1.0f));
 		p.falloff_range_scale = std::max(0.01f, cfg.get_float("PlayerLight", "FalloffRangeScale", 1.0f));
+		p.falloff_max_colour = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffMaxColour", 0.0f));
 		const auto frame = cfg.get_string("PlayerLight", "OffsetFrame", "View");
 		p.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0 : _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
 		p.offset[0] = p.offset[1] = p.offset[2] = 0.0f;
