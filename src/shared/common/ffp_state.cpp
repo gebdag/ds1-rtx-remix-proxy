@@ -2506,9 +2506,13 @@ namespace shared::common
 		// Unlit marker (runtime: rtx.fixedFunctionUnlitMarkerEnabled): the sprite's colour is its display
 		// value (the game's exposure is in it, vertex_colour above). Stage 0's constant is inert in
 		// rasterization: no stage argument references D3DTA_CONSTANT.
+		// A fog wall has its own: the game's fog wall has its colour and nothing of the haze, which the look's scene pass
+		// would take from the far surface behind it (dark teal instead of the game's grey).
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
+		constexpr DWORD kUnhazedUnlitMarker = 0xD15D0E23;
+		const UINT keep_one_of = !masked && indices && prim == D3DPT_TRIANGLELIST && sprite_thinning_fn_ ? sprite_thinning_fn_(cur_texture_[0], prim_count) : 0;
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, keep_one_of ? kUnhazedUnlitMarker : kUnlitMarker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		constexpr DWORD kFeatherMarker = 0xD8000000u;
@@ -2573,10 +2577,39 @@ namespace shared::common
 			}
 			dev->SetTexture(0, cur_texture_[carrier]);
 		}
+		// Keeps every k-th ribbon by its first vertex's slot: a particle holds its slot for life, so none pops as the batch's order changes.
+		const void* draw_indices = indices;
+		UINT draw_prims = prim_count;
+		if (!masked_triangles && indices && prim == D3DPT_TRIANGLELIST)
+		{
+			if (keep_one_of > 1)
+			{
+				constexpr UINT kRibbonVertices = 8;
+				const UINT size = index_format == D3DFMT_INDEX32 ? 4 : 2;
+				sprite_thin_indices_.resize(static_cast<size_t>(prim_count) * 3 * size);
+				const auto* from = static_cast<const unsigned char*>(indices);
+				UINT kept = 0;
+				for (UINT t = 0; t < prim_count; t++)
+				{
+					const unsigned char* triangle = from + static_cast<size_t>(t) * 3 * size;
+					const UINT first = size == 4 ? *reinterpret_cast<const uint32_t*>(triangle) : *reinterpret_cast<const uint16_t*>(triangle);
+					if ((first / kRibbonVertices) % keep_one_of == 0)
+					{
+						std::memcpy(sprite_thin_indices_.data() + static_cast<size_t>(kept) * 3 * size, triangle, 3 * size);
+						kept++;
+					}
+				}
+				if (kept)
+				{
+					draw_indices = sprite_thin_indices_.data();
+					draw_prims = kept;
+				}
+			}
+		}
 		hr = masked_triangles
 			? dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, masked_triangles, masked_sprite_vertices_.data(), sizeof(sprite_vertex))
 			: indices
-			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
+			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, draw_prims, draw_indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
 		if (points)
 			dev->SetRenderState(D3DRS_CULLMODE, game_cull);
