@@ -21,9 +21,8 @@ namespace comp::game::debug_tools
 	constexpr unsigned kFlagPlayerSilence = 0x16;  // enemies do not hear the player
 	constexpr unsigned kFlagAllNoUpdateAi = 0x1C;  // every AI character stands still
 
-	// Whether the game has an online session (GameMan+0xB4E), and a warning line to show while it has.
-	bool online_session();
-	void online_warning();
+	// One atomic store of a few code bytes, for code the game thread may be running: false if they cross an aligned qword.
+	bool write_code(DWORD addr, const BYTE* bytes, size_t size);
 
 	// The game's WorldChrMan static (its +0x3C is the local player's ChrIns), 0 if not found.
 	unsigned world_chr_man();

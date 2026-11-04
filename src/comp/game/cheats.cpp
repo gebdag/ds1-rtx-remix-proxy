@@ -517,7 +517,6 @@ namespace comp::game::cheats
 
 	void tab_imgui()
 	{
-		debug_tools::online_warning();
 		if (!s_available)
 		{
 			ImGui::TextDisabled("God mode unavailable (AOB not found)");

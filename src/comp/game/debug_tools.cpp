@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "debug_tools.hpp"
+#include "shared/common/config.hpp"
 
 using shared::common::log;
 using shared::common::LOG_TYPE;
@@ -101,8 +102,9 @@ namespace comp::game::debug_tools
 
 		code_patch s_patches[] = {
 			{ "Never Framerate-Disconnect",
-				"Online, the game drops the session when the framerate stays low. This always skips that\n"
-				"branch (the session monitor's jz becomes jmp). Offline it is never reached.",
+				"When the framerate stays low the game warns that it is insufficient for online play and drops\n"
+				"to the title. This always skips that branch (the session monitor's jz becomes jmp). On by\n"
+				"default; [Cheats] NeverFramerateDisconnect=0 starts with it off.",
 				"80 7C 24 13 00 74 41 8B C6 E8", 5, 1, { 0x74 }, { 0xEB } },
 			{ "Weapons Never Break",
 				"Equipment wear does nothing (the wear function returns success at once). Durability already\n"
@@ -411,24 +413,24 @@ namespace comp::game::debug_tools
 
 		for (auto& p : s_patches)
 			install(p);
+
+		// PTDE's servers are gone: nothing is lost by never taking the game to the title for its framerate.
+		auto& framerate = s_patches[0];
+		if (framerate.addr && shared::common::config::get().get_bool("Cheats", "NeverFramerateDisconnect", true) &&
+			write_code_atomic(framerate.addr, framerate.patched, framerate.size))
+		{
+			framerate.on = true;
+			log("Debug", std::format("{}: ON", framerate.name));
+		}
 	}
 
-	bool online_session()
+	bool write_code(DWORD addr, const BYTE* bytes, size_t size)
 	{
-		BYTE active = 0;
-		return read(deref(s_game_man) + 0xB4E, active) && active != 0;
-	}
-
-	void online_warning()
-	{
-		if (online_session())
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
-				"Online session active: phantoms and invaders see these changes. Use them offline.");
+		return write_code_atomic(addr, bytes, size);
 	}
 
 	void tab_imgui()
 	{
-		online_warning();
 		if (ImGui::CollapsingHeader("Game debug flags", ImGuiTreeNodeFlags_DefaultOpen))
 			flags_section();
 		if (ImGui::CollapsingHeader("Patches", ImGuiTreeNodeFlags_DefaultOpen))
