@@ -2468,6 +2468,42 @@ namespace shared::common
 				sprite_observer_fn_(sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
 		}
 
+		// A batch off screen and far away goes no further: its lights have seen it (the observer above), and every sprite costs the game thread
+		// (a fire 90 m off and two fog walls were 4 ms in the Demon Ruins) and Remix a new acceleration structure. Bounce rays get nothing visible
+		// from sprites anyway; close by they stay, for reflections.
+		if (!points && count)
+		{
+			constexpr float kMargin = 1.3f;
+			constexpr double kKeepWithin = 20.0;
+			unsigned all_outside = 0x3F;
+			double nearest = DBL_MAX;
+			const UINT index_count = prim == D3DPT_TRIANGLELIST ? prim_count * 3 : prim_count + 2;
+			for (UINT n = 0; n < index_count && (all_outside || nearest > kKeepWithin * kKeepWithin); n++)
+			{
+				const UINT i = !indices ? n : index_format == D3DFMT_INDEX32 ? static_cast<const uint32_t*>(indices)[n] : static_cast<const uint16_t*>(indices)[n];
+				if (i >= count)
+					continue;
+				const float px = out[i].x, py = out[i].y, pz = out[i].z;
+				const float cx = P[0] * px + P[1] * py + P[2] * pz + P[3];
+				const float cy = P[4] * px + P[5] * py + P[6] * pz + P[7];
+				const float cw = P[12] * px + P[13] * py + P[14] * pz + P[15];
+				unsigned outside = 0;
+				if (cx > cw * kMargin) outside |= 1;
+				if (cx < -cw * kMargin) outside |= 2;
+				if (cy > cw * kMargin) outside |= 4;
+				if (cy < -cw * kMargin) outside |= 8;
+				if (cw <= 0.0f) outside |= 16;
+				all_outside &= outside | 32;
+				const double dx = px - sprite_cam_[0], dy = py - sprite_cam_[1], dz = pz - sprite_cam_[2];
+				nearest = std::min(nearest, dx * dx + dy * dy + dz * dz);
+			}
+			if ((all_outside & 31) && nearest > kKeepWithin * kKeepWithin)
+			{
+				hr = S_OK;
+				return true;
+			}
+		}
+
 		IDirect3DVertexDeclaration9* game_decl = nullptr;
 		dev->GetVertexDeclaration(&game_decl);
 
@@ -2510,9 +2546,9 @@ namespace shared::common
 		// would take from the far surface behind it (dark teal instead of the game's grey).
 		constexpr DWORD kUnlitMarker = 0xD15D0E1D;
 		constexpr DWORD kUnhazedUnlitMarker = 0xD15D0E23;
-		const UINT keep_one_of = !masked && indices && prim == D3DPT_TRIANGLELIST && sprite_thinning_fn_ ? sprite_thinning_fn_(cur_texture_[0], prim_count) : 0;
+		const bool fog_wall = !masked && indices && prim == D3DPT_TRIANGLELIST && fog_wall_fn_ && fog_wall_fn_(cur_texture_[0], prim_count);
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, keep_one_of ? kUnhazedUnlitMarker : kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, fog_wall ? kUnhazedUnlitMarker : kUnlitMarker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		constexpr DWORD kFeatherMarker = 0xD8000000u;
@@ -2577,39 +2613,10 @@ namespace shared::common
 			}
 			dev->SetTexture(0, cur_texture_[carrier]);
 		}
-		// Keeps every k-th ribbon by its first vertex's slot: a particle holds its slot for life, so none pops as the batch's order changes.
-		const void* draw_indices = indices;
-		UINT draw_prims = prim_count;
-		if (!masked_triangles && indices && prim == D3DPT_TRIANGLELIST)
-		{
-			if (keep_one_of > 1)
-			{
-				constexpr UINT kRibbonVertices = 8;
-				const UINT size = index_format == D3DFMT_INDEX32 ? 4 : 2;
-				sprite_thin_indices_.resize(static_cast<size_t>(prim_count) * 3 * size);
-				const auto* from = static_cast<const unsigned char*>(indices);
-				UINT kept = 0;
-				for (UINT t = 0; t < prim_count; t++)
-				{
-					const unsigned char* triangle = from + static_cast<size_t>(t) * 3 * size;
-					const UINT first = size == 4 ? *reinterpret_cast<const uint32_t*>(triangle) : *reinterpret_cast<const uint16_t*>(triangle);
-					if ((first / kRibbonVertices) % keep_one_of == 0)
-					{
-						std::memcpy(sprite_thin_indices_.data() + static_cast<size_t>(kept) * 3 * size, triangle, 3 * size);
-						kept++;
-					}
-				}
-				if (kept)
-				{
-					draw_indices = sprite_thin_indices_.data();
-					draw_prims = kept;
-				}
-			}
-		}
 		hr = masked_triangles
 			? dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, masked_triangles, masked_sprite_vertices_.data(), sizeof(sprite_vertex))
 			: indices
-			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, draw_prims, draw_indices, index_format, out, sizeof(sprite_vertex))
+			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
 		if (points)
 			dev->SetRenderState(D3DRS_CULLMODE, game_cull);
@@ -2912,8 +2919,11 @@ namespace shared::common
 			return 0;
 		carrier_sampler = layers[carrier].sampler;
 
-		// Sprite quads are a few metres across at most: 6 x 6 cells per triangle follow the smooth layers.
+		// Sprite quads are a few metres across at most: up to 6 x 6 cells per triangle follow the smooth layers. Fewer by how large it is on
+		// screen, a cell about 35 pixels of a 1080p view at most: a fire 90 m off in the Demon Ruins, ten pixels a sprite, took 39,000 triangles
+		// a frame and 3 ms of the game thread for what one triangle shows.
 		constexpr int kCells = 6;
+		constexpr float kCellsPerScreenSize = 30.0f;
 		struct vertex { float p[3]; float c[4]; float uv[3][2]; };
 		struct sprite_vertex { float x, y, z; DWORD color; float u, v; };
 		const auto* src = static_cast<const unsigned char*>(vertices);
@@ -2957,7 +2967,9 @@ namespace shared::common
 		constexpr int kGridPoints = (kCells + 1) * (kCells + 2) / 2;
 		vertex grid[kGridPoints];
 		sprite_vertex packed[kGridPoints];
-		auto at = [&](int i, int j) -> const sprite_vertex& { return packed[i * (2 * kCells + 3 - i) / 2 + j]; };
+		int cells = kCells;
+		auto point_of = [&](int i, int j) { return i * (2 * cells + 3 - i) / 2 + j; };
+		auto at = [&](int i, int j) -> const sprite_vertex& { return packed[point_of(i, j)]; };
 		auto emit = [&](const sprite_vertex& a, const sprite_vertex& b, const sprite_vertex& c)
 		{
 			for (const sprite_vertex* v : { &a, &b, &c })
@@ -2980,12 +2992,30 @@ namespace shared::common
 			if (idx[0] >= count || idx[1] >= count || idx[2] >= count)
 				continue;
 			const vertex corner[3] = { read(idx[0]), read(idx[1]), read(idx[2]) };
-			// Barycentric grid: point (i, j) = corner0 + i/n (corner1 - corner0) + j/n (corner2 - corner0).
-			for (int i = 0; i <= kCells; i++)
-				for (int j = 0; i + j <= kCells; j++)
+			{
+				float longest = 0.0f, distance = 0.0f;
+				for (int c = 0; c < 3; c++)
 				{
-					const float w1 = static_cast<float>(i) / kCells, w2 = static_cast<float>(j) / kCells, w0 = 1.0f - w1 - w2;
-					vertex& g = grid[i * (2 * kCells + 3 - i) / 2 + j];
+					const vertex& from = corner[c];
+					const vertex& to = corner[(c + 1) % 3];
+					const float dx = to.p[0] - from.p[0], dy = to.p[1] - from.p[1], dz = to.p[2] - from.p[2];
+					longest = std::max(longest, dx * dx + dy * dy + dz * dz);
+				}
+				for (int k = 0; k < 3; k++)
+				{
+					const float d = corner[0].p[k] - static_cast<float>(sprite_cam_[k]);
+					distance += d * d;
+				}
+				const float size = distance > 1e-4f ? std::sqrt(longest / distance) : 1.0f;
+				cells = std::clamp(static_cast<int>(std::ceil(size * kCellsPerScreenSize)), 1, kCells);
+			}
+			const int points = (cells + 1) * (cells + 2) / 2;
+			// Barycentric grid: point (i, j) = corner0 + i/n (corner1 - corner0) + j/n (corner2 - corner0).
+			for (int i = 0; i <= cells; i++)
+				for (int j = 0; i + j <= cells; j++)
+				{
+					const float w1 = static_cast<float>(i) / cells, w2 = static_cast<float>(j) / cells, w0 = 1.0f - w1 - w2;
+					vertex& g = grid[point_of(i, j)];
 					auto mix = [&](auto member, int n)
 					{
 						for (int k = 0; k < n; k++)
@@ -2997,13 +3027,13 @@ namespace shared::common
 						for (int k = 0; k < 2; k++)
 							g.uv[l][k] = w0 * corner[0].uv[l][k] + w1 * corner[1].uv[l][k] + w2 * corner[2].uv[l][k];
 				}
-			for (int p = 0; p < kGridPoints; p++)
+			for (int p = 0; p < points; p++)
 				packed[p] = pack(grid[p]);
-			for (int i = 0; i < kCells; i++)
-				for (int j = 0; i + j < kCells; j++)
+			for (int i = 0; i < cells; i++)
+				for (int j = 0; i + j < cells; j++)
 				{
 					emit(at(i, j), at(i + 1, j), at(i, j + 1));
-					if (i + j + 1 < kCells)
+					if (i + j + 1 < cells)
 						emit(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
 				}
 		}
@@ -3238,8 +3268,19 @@ namespace shared::common
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 	}
 
-	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev)
+	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev, bool scene_mist)
 	{
+		// Firelink's mist: blended like these, its light on the self-lit tag, and no haze: the game's draw has none (c103-c111 cleared).
+		if (scene_mist)
+		{
+			DWORD blended = FALSE;
+			if (dev)
+				dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
+			if (!blended)
+				return false;
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0xD15D0E23u);
+			return true;
+		}
 		// An alpha-blended unlit mesh (PS_UNLIT: texture * c100 * vertex colour * c139, every one an SFX
 		// glow layer such as Bed of Chaos's glyph rings) is drawn like the unlit sprites: the sprites' unlit
 		// marker, so Remix composites it as the game does (alpha-blended in gamma space, lighting nothing),

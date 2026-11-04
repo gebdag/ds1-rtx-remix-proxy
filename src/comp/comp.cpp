@@ -43,28 +43,20 @@ namespace comp
 		game::effect_lights::observe_sprites(points, count);
 	}
 
-	// A fog wall is thousands of ribbons, about 40 layers on every pixel. That is more than a ray keeps, so it showed dark chunks where
-	// layers were dropped, and every ray at it paid for them all. Around ten layers look the same: the first few are already opaque.
-	static UINT sprite_thinning(IDirect3DBaseTexture9* texture, UINT prim_count)
+	// A fog wall: thousands of ribbons of one texture in one batch.
+	static bool is_fog_wall(IDirect3DBaseTexture9* texture, UINT prim_count)
 	{
-		constexpr UINT kFogWallTriangles = 8000;
+		constexpr UINT kFogWallTriangles = 2000;
 		if (prim_count < kFogWallTriangles || !texture)
-			return 0;
+			return false;
 		static std::unordered_map<IDirect3DBaseTexture9*, bool> known;
 		const auto it = known.find(texture);
-		bool fog;
 		if (it != known.end())
-			fog = it->second;
-		else
-		{
-			const auto name = game::texture_names::name_of(texture);
-			if (name.empty())
-				return 0;
-			fog = known[texture] = name == "s00313";
-		}
-		if (!fog)
-			return 0;
-		return static_cast<UINT>(std::max(shared::common::config::get().get_int("Sprites", "FogWallKeepOneOf", 4), 1));
+			return it->second;
+		const auto name = game::texture_names::name_of(texture);
+		if (name.empty())
+			return false;
+		return known[texture] = name == "s00313";
 	}
 
 	void on_begin_scene_cb()
@@ -111,7 +103,7 @@ namespace comp
 				return id != 0 && ((id >> 24) & 0xFF) < 99; // the bound of map_lights' current_map_name
 			});
 			ffp.set_sprite_observer(observe_sprites);
-			ffp.set_sprite_thinning(sprite_thinning);
+			ffp.set_fog_wall_test(is_fog_wall);
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}
