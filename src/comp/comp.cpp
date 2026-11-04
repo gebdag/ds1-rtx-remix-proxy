@@ -41,22 +41,7 @@ namespace comp
 		if (game::map_lights::wants_sprites())
 			game::map_lights::observe_sprites(points, count);
 		game::effect_lights::observe_sprites(points, count);
-	}
-
-	// A fog wall: thousands of ribbons of one texture in one batch.
-	static bool is_fog_wall(IDirect3DBaseTexture9* texture, UINT prim_count)
-	{
-		constexpr UINT kFogWallTriangles = 2000;
-		if (prim_count < kFogWallTriangles || !texture)
-			return false;
-		static std::unordered_map<IDirect3DBaseTexture9*, bool> known;
-		const auto it = known.find(texture);
-		if (it != known.end())
-			return it->second;
-		const auto name = game::texture_names::name_of(texture);
-		if (name.empty())
-			return false;
-		return known[texture] = name == "s00313";
+		game::waterfall::observe_sprites(points, count);
 	}
 
 	void on_begin_scene_cb()
