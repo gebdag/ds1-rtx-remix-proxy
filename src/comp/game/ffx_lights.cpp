@@ -24,9 +24,11 @@ namespace comp::game::ffx_lights
 		constexpr size_t kMaxLights = 64;
 		// A map light this close to a persistent effect stands for it (a wall torch's MSB light).
 		constexpr float kCoverRadius = 3.0f;
-		// A brief effect past its visual lifetime stays lit while its emitters run, then fades with this
-		// time constant and goes when it is too faint to matter.
-		constexpr float kFadeSeconds = 0.25f;
+		// An effect that has stopped emitting goes dark for good after this long: its instance can stay behind until the
+		// area unloads. Longer than its fade, so a fire whose emitters pause comes back.
+		constexpr float kEndedForGood = 1.15f;
+		// A fade that does not end at zero goes the rest of the way in this.
+		constexpr float kFadeRest = 0.1f;
 		constexpr float kFadeOff = 0.01f;
 		// Seconds past its visual life after which what keeps a brief effect lit is logged, once per effect.
 		constexpr float kLingerLog = 5.0f;
@@ -45,6 +47,18 @@ namespace comp::game::ffx_lights
 		std::unordered_map<unsigned, tracked> g_slots;
 		std::vector<point_lights::light> g_out;
 
+		// How bright the effect's sprite is, this far into its life: 0 past the end.
+		float fade_at(const entry& e, float seconds)
+		{
+			if (e.fade_life <= 0.0f)
+				return seconds <= 0.0f ? 1.0f : 0.0f;
+			if (seconds >= e.fade_life)
+				return e.fade.back() * std::max(1.0f - (seconds - e.fade_life) / kFadeRest, 0.0f);
+			const float at = std::max(seconds, 0.0f) / e.fade_life * static_cast<float>(e.fade.size() - 1);
+			const size_t i = std::min(static_cast<size_t>(at), e.fade.size() - 2);
+			return e.fade[i] + (e.fade[i + 1] - e.fade[i]) * (at - static_cast<float>(i));
+		}
+
 		// An instance's brightness: 1 while it shows, fading after.
 		struct fade
 		{
@@ -52,16 +66,18 @@ namespace comp::game::ffx_lights
 			float level;
 			UINT seen;
 			float first_seen;   // seconds since g_origin: an instance's own age can stand at 0 (seen with state 0xFFFFFFFE)
+			float ended = -1.0f; // when it stopped emitting, on the clock of first_seen
+			float own_age = 0.0f; // the instance's age field when last read
 		};
 		std::unordered_map<unsigned, fade> g_fades;
-		std::chrono::steady_clock::time_point g_fade_time = std::chrono::steady_clock::now();
-		const std::chrono::steady_clock::time_point g_origin = g_fade_time;
+		const std::chrono::steady_clock::time_point g_origin = std::chrono::steady_clock::now();
 
 		void load()
 		{
 			g_loaded = true;
 			std::ifstream file(shared::globals::root_path + "\\rtx_comp\\ffx_lights.tsv");
 			std::string line;
+			int refused = 0;
 			while (std::getline(file, line))
 			{
 				if (line.empty() || line[0] == '#')
@@ -69,20 +85,40 @@ namespace comp::game::ffx_lights
 				if (line.back() == '\r')
 					line.pop_back();
 				std::istringstream in(line);
-				int id = 0, planar = 0, persistent = 0;
+				int id = 0, planar = 0, persistent = 0, impact = 0;
+				std::string fade;
 				entry e {};
 				std::string confidence;
-				in >> id >> e.r >> e.g >> e.b >> e.dwindle_begin >> e.dwindle_end >> planar >> persistent >> confidence >> e.visual_life;
+				in >> id >> e.r >> e.g >> e.b >> e.dwindle_begin >> e.dwindle_end >> planar >> persistent >> confidence >> e.visual_life >> impact >> e.fade_life >> fade;
 				if (!in || id <= 0)
+				{
+					refused++;
 					continue;
+				}
 				in >> std::ws;
 				std::getline(in, e.category);
 				e.planar = planar != 0;
 				e.persistent = persistent != 0;
+				e.impact = impact != 0;
+				std::istringstream samples(fade);
+				float peak = -1.0f;
+				size_t peak_at = 0;
+				for (size_t i = 0; i < e.fade.size(); i++)
+				{
+					char comma = 0;
+					samples >> e.fade[i];
+					samples >> comma;
+					if (e.fade[i] > peak)
+					{
+						peak = e.fade[i];
+						peak_at = i;
+					}
+				}
+				e.fade_peak = e.fade_life * static_cast<float>(peak_at) / static_cast<float>(e.fade.size() - 1);
 				e.confidence = confidence.empty() ? 'l' : confidence[0];
 				g_table[id] = std::move(e);
 			}
-			shared::common::log("FfxLights", std::format("{} effect lights from rtx_comp\\ffx_lights.tsv", g_table.size()));
+			shared::common::log("FfxLights", std::format("{} effect lights from rtx_comp\\ffx_lights.tsv, {} rows refused", g_table.size(), refused));
 		}
 
 		int free_slot()
@@ -119,9 +155,6 @@ namespace comp::game::ffx_lights
 
 		const UINT frame = shared::common::ffp_state::get().frame_count();
 		const auto time_now = std::chrono::steady_clock::now();
-		const float dt = std::clamp(std::chrono::duration<float>(time_now - g_fade_time).count(), 0.0f, 0.5f);
-		g_fade_time = time_now;
-		const float decay = std::exp(-dt / kFadeSeconds);
 		const float now = std::chrono::duration<float>(time_now - g_origin).count();
 		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; float level; };
 		std::vector<candidate> candidates;
@@ -138,22 +171,49 @@ namespace comp::game::ffx_lights
 			if (fresh_fade || f->second.ffx_id != inst.ffx_id)
 				f->second = { inst.ffx_id, 1.0f, frame, now };
 			f->second.seen = frame;
-			if (const float age = std::max(ffx_instances::age(inst.address), now - f->second.first_seen); age >= c.e->visual_life)
+			// The light follows what the game's particles do, from the effect's own fade: an impact over its whole life, others once they stop emitting,
+			// when the last particles out go through theirs.
+			const float own_age = ffx_instances::age(inst.address);
+			if (std::isfinite(own_age))
+			{
+				// A new instance at a freed one's address, running the same effect: its age starts again.
+				if (own_age + 0.1f < f->second.own_age)
+					f->second = { inst.ffx_id, 1.0f, frame, now };
+				f->second.own_age = own_age;
+			}
+			const float age = std::isfinite(own_age) ? std::max(own_age, now - f->second.first_seen) : now - f->second.first_seen;
+			if (c.e->impact)
+				f->second.level = fade_at(*c.e, age);
+			else if (age >= c.e->visual_life)
 			{
 				// "Persistent" is inferred for many effects (a character's event effects), which then play once and
 				// stay behind like the brief ones. One with no children at all draws by itself: it stays lit.
 				int working = 0;
 				// A brief effect's light also ends when only 2118 remains (Hellkite's fire). A persistent one, a torch's, only by 2101.
 				const auto children = ffx_instances::child_state(inst.address, &working, !c.e->persistent);
+				const bool ended_for_good = f->second.ended >= 0.0f && now - f->second.ended > kEndedForGood;
 				const bool lit = c.e->persistent ? children != ffx_instances::children::leftover
-					: f->second.level >= kFadeOff && children == ffx_instances::children::running;
-				f->second.level = lit ? 1.0f : f->second.level * decay;
+					: !ended_for_good && children == ffx_instances::children::running;
+				const bool just_ended = !lit && f->second.ended < 0.0f;
+				if (lit)
+					f->second.ended = -1.0f;
+				else if (just_ended)
+					f->second.ended = now;
+				// The sprite's own fade from its brightest on, sped up where it runs past kEndedForGood: some last 13 s, and that is a light left hanging.
+				const float tail = c.e->fade_life - c.e->fade_peak;
+				f->second.level = lit ? 1.0f : fade_at(*c.e, c.e->fade_peak + (now - f->second.ended) * std::max(tail / kEndedForGood, 1.0f));
 				if (lit && !c.e->persistent && age > c.e->visual_life + kLingerLog && g_lingering.insert(inst.ffx_id).second)
 					shared::common::log("FfxLights", std::format("effect {} (under {}) lit {:.0f} s past its visual life {:.2f} s, kept on by child {}",
 						inst.ffx_id, ffx_instances::top_effect_id(inst.address), age - c.e->visual_life, c.e->visual_life, working));
-				if (!lit && c.e->persistent && f->second.level >= kFadeOff && g_ended.insert(inst.ffx_id).second)
+				if (just_ended && c.e->persistent && g_ended.insert(inst.ffx_id).second)
 					shared::common::log("FfxLights", std::format("persistent effect {} (under {}) ends at age {:.1f} s: only leftovers remain",
 						inst.ffx_id, ffx_instances::top_effect_id(inst.address), age));
+			}
+			else
+			{
+				// A fresh instance's age can read as junk for a frame: that frame's ending does not stay.
+				f->second.level = 1.0f;
+				f->second.ended = -1.0f;
 			}
 			c.level = f->second.level;
 			if (c.level < kFadeOff)

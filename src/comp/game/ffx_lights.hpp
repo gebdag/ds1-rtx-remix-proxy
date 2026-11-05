@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "point_lights.hpp"
 
 namespace comp::game::ffx_lights
@@ -18,6 +20,11 @@ namespace comp::game::ffx_lights
 		float dwindle_end;
 		bool planar;               // its brightest sprite lies in the effect's own plane (messages, signs)
 		bool persistent;           // lasts while its map, object, owner or status lasts
+		bool impact = false; // a projectile's hit effect: its brightness is its fade, whatever its children do
+		// What the sprite the light was measured from gives off over its life, from the effect's colour and size curves.
+		float fade_life = 0.0f;
+		std::array<float, 12> fade {};
+		float fade_peak = 0.0f; // seconds into fade_life where it is brightest
 		float visual_life;         // seconds its brightest sprites last
 		char confidence;           // 'h', 'm' or 'l'
 		std::string category;
