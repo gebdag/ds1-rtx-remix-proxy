@@ -310,6 +310,8 @@ namespace shared::common
 		// The menu's quad as it reaches the screen sizes the view's private target (the game's stays 512): square, its
 		// larger side in pixels. The view's draws and the quad use that target in place of the game's.
 		void note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count);
+		// How much smaller the UI is drawn than its full-screen size (1 at 16:9).
+		void set_ui_fit(float x, float y) { ui_fit_x_ = x; ui_fit_y_ = y; }
 		IDirect3DSurface9* menu_native_surface() const { return cur_rt_menu_path_traced_ ? menu_native_surface_ : nullptr; }
 		IDirect3DBaseTexture9* menu_native_texture_for(IDirect3DBaseTexture9* texture) const
 		{
@@ -794,6 +796,7 @@ namespace shared::common
 		// c8-c10: World/Bone matrix (4x3 column-major, 3 regs)
 		// Proj range == View range so a single c0-c6 write marks both valid.
 		int vs_reg_view_start_ = 0;
+		float ui_fit_x_ = 1.0f, ui_fit_y_ = 1.0f;
 		int vs_reg_view_end_ = 4;
 		int vs_reg_proj_start_ = 0;    // same as view — VP is combined
 		int vs_reg_proj_end_ = 4;

@@ -777,8 +777,8 @@ namespace shared::common
 			min_y = std::min<int>(min_y, v[1]);
 			max_y = std::max<int>(max_y, v[1]);
 		}
-		const float pixels_x = (max_x - min_x) / 8.0f * screen.Width / 1280.0f;
-		const float pixels_y = (max_y - min_y) / 8.0f * screen.Height / 720.0f;
+		const float pixels_x = (max_x - min_x) / 8.0f * screen.Width / 1280.0f * ui_fit_x_;
+		const float pixels_y = (max_y - min_y) / 8.0f * screen.Height / 720.0f * ui_fit_y_;
 		UINT width = static_cast<UINT>(std::ceil(std::max(pixels_x, pixels_y)));
 		UINT height = width;
 		if (menu_cell_count_ > 0)

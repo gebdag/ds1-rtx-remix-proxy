@@ -30,6 +30,7 @@ using comp::tracer;
 #include "../game/ffx_instances.hpp"
 #include "../game/hud_scale.hpp"
 #include "../game/eye_sprites.hpp"
+#include "../game/aspect_ratio.hpp"
 #include "game_lights.hpp"
 #include "lookdev_capture.hpp"
 
@@ -311,6 +312,18 @@ namespace {
 	// Lookdev mode is the vanilla reference: draws and render targets go to the
 	// device untouched, past every Remix-oriented route (prepass drop, UV
 	// expansion, sky/HUD markers, post-FX skip, category filters, RT redirects).
+	UINT up_vertex_count(D3DPRIMITIVETYPE type, UINT primitives)
+	{
+		switch (type)
+		{
+		case D3DPT_POINTLIST: return primitives;
+		case D3DPT_LINELIST: return primitives * 2;
+		case D3DPT_LINESTRIP: return primitives + 1;
+		case D3DPT_TRIANGLELIST: return primitives * 3;
+		default: return primitives + 2; // strips and fans
+		}
+	}
+
 	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
 	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
 	{
@@ -321,6 +334,7 @@ namespace {
 		res.follow_game(pp->BackBufferWidth, pp->BackBufferHeight);
 		shared::common::log("Resolution", std::format("{}: BackBuffer {}x{} -> {}x{}, render {}x{}", where, asked_width, asked_height,
 			pp->BackBufferWidth, pp->BackBufferHeight, res.render_width, res.render_height));
+		comp::game::aspect_ratio::on_game_resolution(pp->BackBufferWidth, pp->BackBufferHeight, std::string_view(where).starts_with("Create"));
 	}
 
 	// After a Reset the game sets viewports and scissors at the full size it remembers. True when (width, height) is
@@ -882,9 +896,9 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_CreateRenderTarget, Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
-		if (res.render_width > 0 && res.render_height > 0 && Width == 1024 && Height == 720)
+		if (res.render_width > 0 && res.render_height > 0 && ((Width == 1024 && Height == 720) || (shared::globals::lookdev_host && res.was_render_size(Width, Height))))
 		{
-			shared::common::log("Resolution", std::format("CreateRenderTarget override 1024x720 -> {}x{}", res.render_width, res.render_height));
+			shared::common::log("Resolution", std::format("CreateRenderTarget override {}x{} -> {}x{}", Width, Height, res.render_width, res.render_height));
 			Width = res.render_width;
 			Height = res.render_height;
 		}
@@ -899,9 +913,9 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_CreateDepthStencilSurface, Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
-		if (res.render_width > 0 && res.render_height > 0 && Width == 1024 && Height == 720)
+		if (res.render_width > 0 && res.render_height > 0 && ((Width == 1024 && Height == 720) || (shared::globals::lookdev_host && res.was_render_size(Width, Height))))
 		{
-			shared::common::log("Resolution", std::format("CreateDepthStencilSurface override 1024x720 -> {}x{}", res.render_width, res.render_height));
+			shared::common::log("Resolution", std::format("CreateDepthStencilSurface override {}x{} -> {}x{}", Width, Height, res.render_width, res.render_height));
 			Width = res.render_width;
 			Height = res.render_height;
 		}
@@ -1332,7 +1346,9 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_DrawPrimitiveUP, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		draw_split_scope split_scope;
-		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9);
+		if (comp::game::aspect_ratio::active() && PrimitiveType == D3DPT_TRIANGLESTRIP)
+			pVertexStreamZeroData = comp::game::aspect_ratio::final_quad(pVertexStreamZeroData, VertexStreamZeroStride, PrimitiveCount + 2, shared::common::ffp_state::get().last_decl());
+		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9, pVertexStreamZeroData, VertexStreamZeroStride, up_vertex_count(PrimitiveType, PrimitiveCount));
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		// UP draws (sprites, UI, post passes) carry no haze set, self-lit ambient or lightmap of their own.
@@ -1397,6 +1413,10 @@ namespace comp
 		// A path traced menu view has no alpha of its own: the quad adds its colour (over black where nothing was hit).
 		if (!lookdev_passthrough() && shared::common::ffp_state::get().cur_texture_is_menu_path_traced())
 		{
+			// Only off 16:9: these quads never had a HUD scale of their own.
+			std::optional<comp::game::hud_scale::draw_scope> menu_fit;
+			if (comp::game::aspect_ratio::active())
+				menu_fit.emplace(m_pIDirect3DDevice9, static_cast<const char*>(pVertexStreamZeroData) + size_t(MinVertexIndex) * VertexStreamZeroStride, VertexStreamZeroStride, NumVertices);
 			shared::common::ffp_state::get().note_menu_quad(m_pIDirect3DDevice9, pVertexStreamZeroData, VertexStreamZeroStride, NumVertices);
 			DWORD src_blend = D3DBLEND_SRCALPHA;
 			m_pIDirect3DDevice9->GetRenderState(D3DRS_SRCBLEND, &src_blend);
@@ -1421,7 +1441,7 @@ namespace comp
 			m_pIDirect3DDevice9->SetRenderState(D3DRS_SRCBLEND, src_blend);
 			return hr;
 		}
-		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9);
+		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9, static_cast<const char*>(pVertexStreamZeroData) + size_t(MinVertexIndex) * VertexStreamZeroStride, VertexStreamZeroStride, NumVertices);
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
@@ -1557,6 +1577,8 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_SetVertexShaderConstantF, StartRegister, pConstantData, Vector4fCount);
 		auto& ffp = shared::common::ffp_state::get();
+		if (comp::game::aspect_ratio::active())
+			pConstantData = comp::game::aspect_ratio::camera_constants(StartRegister, pConstantData, Vector4fCount);
 		ffp.on_set_vs_const_f(StartRegister, pConstantData, Vector4fCount);
 		if (auto* d = diagnostics::get()) d->on_set_vs_const_f(StartRegister, pConstantData, Vector4fCount);
 		return m_pIDirect3DDevice9->SetVertexShaderConstantF(StartRegister, pConstantData, Vector4fCount);
@@ -2065,6 +2087,7 @@ namespace comp
 extern "C" IDirect3D9* WINAPI Direct3DCreate9(UINT SDKVersion)
 {
 	shared::common::log("d3d9", "Direct3DCreate9 called. Creating proxy interface.");
+	comp::game::aspect_ratio::before_game_window();
 	auto real_fn = d3d9_proxy::get_Direct3DCreate9();
 	if (!real_fn) return nullptr;
 

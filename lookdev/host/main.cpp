@@ -209,6 +209,21 @@ namespace
 			std::printf("CreateDevice failed (hr=0x%08lX)\n", static_cast<unsigned long>(hr));
 			return nullptr;
 		}
+		// Another output size, for tests: DS1_HOST_SIZE=WxH. As the game does it: a device at one size, then a Reset to the setting.
+		if (const char* size = std::getenv("DS1_HOST_SIZE"))
+		{
+			int width = 0, height = 0;
+			if (std::sscanf(size, "%dx%d", &width, &height) == 2 && width > 0 && height > 0)
+			{
+				RECT rect { 0, 0, width, height };
+				AdjustWindowRect(&rect, static_cast<DWORD>(GetWindowLongW(hwnd, GWL_STYLE)), FALSE);
+				SetWindowPos(hwnd, nullptr, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER);
+				pp.BackBufferWidth = width;
+				pp.BackBufferHeight = height;
+				const HRESULT reset = dev->Reset(&pp);
+				std::printf("output size %dx%d: Reset hr=0x%08lX\n", width, height, static_cast<unsigned long>(reset));
+			}
+		}
 		return dev;
 	}
 

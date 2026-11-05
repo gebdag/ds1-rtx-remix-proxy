@@ -1,5 +1,7 @@
 #include "std_include.hpp"
 #include "hud_scale.hpp"
+#include "aspect_ratio.hpp"
+#include "shared/globals.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
 
@@ -191,6 +193,7 @@ namespace comp::game::hud_scale
 		{
 			float scale = 1.0f;
 			float x = 0.0f, y = 0.0f;
+			bool pinned = false; // off 16:9: the anchor stays where the full-screen UI has it
 			bool on = false;
 			UINT frame = 0;
 		};
@@ -210,6 +213,7 @@ namespace comp::game::hud_scale
 			g_replay.scale = next_float(buffer);
 			g_replay.x = next_float(buffer);
 			g_replay.y = next_float(buffer);
+			g_replay.pinned = next_float(buffer) != 0.0f;
 			g_replay.on = true;
 			g_replay.frame = shared::common::ffp_state::get().frame_count();
 		}
@@ -248,10 +252,10 @@ namespace comp::game::hud_scale
 			}
 		}
 
-		bool open_bracket(void* dc, float scale, float x, float y)
+		bool open_bracket(void* dc, float scale, float x, float y, bool pinned)
 		{
-			const float args[3] = { scale, x, y };
-			return write_command(dc, command_on, args, 3);
+			const float args[4] = { scale, x, y, pinned ? 1.0f : 0.0f };
+			return write_command(dc, command_on, args, 4);
 		}
 
 		void close_bracket(void* dc)
@@ -279,7 +283,7 @@ namespace comp::game::hud_scale
 
 		void __fastcall dialog_draw_detour(void* self, void* edx, void* dc)
 		{
-			if (!g_any_scaled && !g_log_names)
+			if (!g_any_scaled && !g_log_names && !aspect_ratio::active())
 				return g_dialog_draw(self, edx, dc);
 
 			const walk_state outer = t_walk;
@@ -294,8 +298,8 @@ namespace comp::game::hud_scale
 					{
 						log_name(name, nullptr, kGroups[whole.g].label);
 						const float scale = g_scale[whole.g];
-						if (scale != 1.0f)
-							bracket = open_bracket(dc, scale, whole.x, whole.y);
+						if (scale != 1.0f || aspect_ratio::active())
+							bracket = open_bracket(dc, scale, whole.x, whole.y, aspect_ratio::hud_at_edges());
 						break;
 					}
 			t_walk.bracketed = outer.bracketed || bracket;
@@ -323,7 +327,7 @@ namespace comp::game::hud_scale
 
 		void __fastcall object_draw_detour(void* self, void* edx, void* dc)
 		{
-			if (!g_any_scaled && !g_log_names)
+			if (!g_any_scaled && !g_log_names && !aspect_ratio::active())
 				return g_object_draw(self, edx, dc);
 
 			bool bracket = false;
@@ -336,8 +340,9 @@ namespace comp::game::hud_scale
 					const float scale = g_scale[part->g];
 					const bool placed = !part->own_centre || object_centre(self, &x, &y);
 					log_name(t_walk.dialog, name, kGroups[part->g].label, x, y);
-					if (scale != 1.0f && placed)
-						bracket = open_bracket(dc, scale, x, y);
+					// What follows a target in the world stays on it: only its shape is corrected.
+					if ((scale != 1.0f || aspect_ratio::active()) && placed)
+						bracket = open_bracket(dc, scale, x, y, part->own_centre || aspect_ratio::hud_at_edges());
 				}
 				else
 				{
@@ -392,15 +397,56 @@ namespace comp::game::hud_scale
 		shared::common::log("HudScale", "dialog draws hooked");
 	}
 
-	draw_scope::draw_scope(IDirect3DDevice9* dev)
+	namespace
 	{
-		if (!g_replay.on || g_replay.scale == 1.0f)
+		// Off 16:9, what a draw outside any bracket is: the UI, and whether it spans the screen on each axis. Icons and bars
+		// have 16 bit positions in eighths of a pixel, text floats in pixels. Internal quads have float positions too and
+		// the same proportions, but they cover their target.
+		bool off_shape_ui_draw(const float* c, const void* vertices, UINT stride, UINT count, bool& span_x, bool& span_y)
+		{
+			if (!vertices || !count || stride < 8 || c[1] != 0.0f || c[4] != 0.0f || !(c[0] > 0.0f) || !(c[5] < 0.0f))
+				return false;
+			// The game's UI space. A replay holds any HUD scale of its game in these constants already.
+			const bool designed = std::abs(c[0] - 1.0f / 640.0f) < 1e-5f && std::abs(c[5] + 1.0f / 360.0f) < 1e-5f;
+			if (!designed && !(shared::globals::lookdev_host && std::abs(c[0] / -c[5] - 9.0f / 16.0f) < 0.01f))
+				return false;
+			auto* declaration = shared::common::ffp_state::get().last_decl();
+			D3DVERTEXELEMENT9 elements[MAXD3DDECLLENGTH] {};
+			UINT element_count = 0;
+			if (!declaration || FAILED(declaration->GetDeclaration(elements, &element_count)) || elements[0].Usage != D3DDECLUSAGE_POSITION)
+				return false;
+			const bool eighths = elements[0].Type == D3DDECLTYPE_SHORT2 || elements[0].Type == D3DDECLTYPE_SHORT4;
+			if (!eighths && !(elements[0].Type == D3DDECLTYPE_FLOAT3 && stride == 24))
+				return false;
+			float min_x = FLT_MAX, max_x = -FLT_MAX, min_y = FLT_MAX, max_y = -FLT_MAX;
+			for (UINT i = 0; i < count; i++)
+			{
+				const char* vertex = static_cast<const char*>(vertices) + static_cast<size_t>(i) * stride;
+				const float x = eighths ? reinterpret_cast<const short*>(vertex)[0] / 8.0f : reinterpret_cast<const float*>(vertex)[0];
+				const float y = eighths ? reinterpret_cast<const short*>(vertex)[1] / 8.0f : reinterpret_cast<const float*>(vertex)[1];
+				min_x = std::min(min_x, x);
+				max_x = std::max(max_x, x);
+				min_y = std::min(min_y, y);
+				max_y = std::max(max_y, y);
+			}
+			span_x = (max_x - min_x) * c[0] >= 1.98f;
+			span_y = (max_y - min_y) * -c[5] >= 1.98f;
+			return true;
+		}
+	}
+
+	draw_scope::draw_scope(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count)
+	{
+		const bool off_shape = aspect_ratio::active();
+		if (!g_replay.on && !off_shape)
 			return;
-		const auto& ffp = shared::common::ffp_state::get();
-		if (g_replay.frame != ffp.frame_count())
+		auto& ffp = shared::common::ffp_state::get();
+		// The closing command can be lost to a full buffer: a bracket ends with its frame at the latest.
+		if (g_replay.on && g_replay.frame != ffp.frame_count())
 		{
 			g_replay.on = false;
-			return;
+			if (!off_shape)
+				return;
 		}
 		// The UI's c0 and c1: ndc = x * c.x + y * c.y + c.w, x and y in the virtual 1280x720. Anything else is no
 		// UI draw of ours.
@@ -408,16 +454,39 @@ namespace comp::game::hud_scale
 		if (!(std::abs(constants_[0]) > 1e-5f) || !(std::abs(constants_[5]) > 1e-5f))
 			return;
 
-		const float s = g_replay.scale, x = g_replay.x, y = g_replay.y;
+		float fit[2] = { 1.0f, 1.0f };
+		if (off_shape)
+		{
+			bool span_x = false, span_y = false;
+			// A bracket's draws are the UI by construction: there only what spans the screen is of interest.
+			if (!off_shape_ui_draw(constants_, vertices, stride, count, span_x, span_y) && !g_replay.on)
+				return;
+			fit[0] = span_x ? 1.0f : aspect_ratio::fit_x();
+			fit[1] = span_y ? 1.0f : aspect_ratio::fit_y();
+		}
+
+		const float s = g_replay.on ? g_replay.scale : 1.0f, x = g_replay.on ? g_replay.x : 0.0f, y = g_replay.on ? g_replay.y : 0.0f;
+		const bool pinned = g_replay.on && g_replay.pinned;
 		float scaled[8];
 		std::memcpy(scaled, constants_, sizeof(scaled));
 		for (int row = 0; row < 2; row++)
 		{
 			const float* c = &constants_[row * 4];
 			float* out = &scaled[row * 4];
-			out[0] = c[0] * s;
-			out[1] = c[1] * s;
-			out[3] = c[3] + (1.0f - s) * (x * c[0] + y * c[1]);
+			if (!off_shape)
+			{
+				out[0] = c[0] * s;
+				out[1] = c[1] * s;
+				out[3] = c[3] + (1.0f - s) * (x * c[0] + y * c[1]);
+				continue;
+			}
+			const float size = s * fit[row];
+			// The anchor's place, then everything round it at the new size.
+			const float anchor = x * c[0] + y * c[1];
+			const float place = (anchor + c[3]) * (pinned ? 1.0f : fit[row]);
+			out[0] = c[0] * size;
+			out[1] = c[1] * size;
+			out[3] = place - size * anchor;
 		}
 		dev_ = dev;
 		dev->SetVertexShaderConstantF(0, scaled, 2);
@@ -432,12 +501,33 @@ namespace comp::game::hud_scale
 				scissor_.right >= static_cast<LONG>(viewport.X + viewport.Width) && scissor_.bottom >= static_cast<LONG>(viewport.Y + viewport.Height);
 			if (!whole)
 			{
-				const float px = viewport.X + x * viewport.Width / kWidth, py = viewport.Y + y * viewport.Height / kHeight;
 				RECT rect;
-				rect.left = std::lround(px + (scissor_.left - px) * s);
-				rect.right = std::lround(px + (scissor_.right - px) * s);
-				rect.top = std::lround(py + (scissor_.top - py) * s);
-				rect.bottom = std::lround(py + (scissor_.bottom - py) * s);
+				if (!off_shape)
+				{
+					const float px = viewport.X + x * viewport.Width / kWidth, py = viewport.Y + y * viewport.Height / kHeight;
+					rect.left = std::lround(px + (scissor_.left - px) * s);
+					rect.right = std::lround(px + (scissor_.right - px) * s);
+					rect.top = std::lround(py + (scissor_.top - py) * s);
+					rect.bottom = std::lround(py + (scissor_.bottom - py) * s);
+					dev->SetScissorRect(&rect);
+					scissor_changed_ = true;
+					return;
+				}
+				// Pixel to UI space through the game's constants, and back through the new ones.
+				const auto moved_x = [&](LONG pixel)
+				{
+					const float u = ((pixel - float(viewport.X)) / viewport.Width * 2.0f - 1.0f - constants_[3]) / constants_[0];
+					return std::lround(viewport.X + (u * scaled[0] + scaled[3] + 1.0f) * 0.5f * viewport.Width);
+				};
+				const auto moved_y = [&](LONG pixel)
+				{
+					const float v = (1.0f - (pixel - float(viewport.Y)) / viewport.Height * 2.0f - constants_[7]) / constants_[5];
+					return std::lround(viewport.Y + (1.0f - (v * scaled[5] + scaled[7])) * 0.5f * viewport.Height);
+				};
+				rect.left = moved_x(scissor_.left);
+				rect.right = moved_x(scissor_.right);
+				rect.top = moved_y(scissor_.top);
+				rect.bottom = moved_y(scissor_.bottom);
 				dev->SetScissorRect(&rect);
 				scissor_changed_ = true;
 			}
@@ -461,6 +551,7 @@ namespace comp::game::hud_scale
 			return;
 		}
 		auto& cfg = shared::common::config::get();
+		aspect_ratio::hud_position_imgui();
 		ImGui::TextWrapped("Sizes of the in-game HUD. Each part shrinks towards its own corner. Pause menus, shops and conversations stay as they are.");
 		ImGui::Spacing();
 		bool changed = false;

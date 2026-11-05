@@ -21,7 +21,8 @@ namespace comp::game::hud_scale
 	class draw_scope
 	{
 	public:
-		explicit draw_scope(IDirect3DDevice9* dev);
+		// The vertices are read only off 16:9, to tell the UI from internal passes and what spans the screen.
+		draw_scope(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count);
 		~draw_scope();
 		draw_scope(const draw_scope&) = delete;
 		draw_scope& operator=(const draw_scope&) = delete;
