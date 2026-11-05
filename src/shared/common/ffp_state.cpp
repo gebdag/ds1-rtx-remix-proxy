@@ -3344,15 +3344,15 @@ namespace shared::common
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
 	}
 
-	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev)
+	bool ffp_state::apply_unlit_layer_marker(IDirect3DDevice9* dev, bool light_shaft)
 	{
 		// An alpha-blended unlit mesh (PS_UNLIT: texture * c100 * vertex colour * c139, every one an SFX
 		// glow layer such as Bed of Chaos's glyph rings) is drawn like the unlit sprites: the sprites' unlit
 		// marker, so Remix composites it as the game does (alpha-blended in gamma space, lighting nothing),
 		// with its exposure count. Its colour is c100 times the texture, which the self-lit tag carries
 		// (atmosphere.hpp tag_self_lit). Additive ones (the bonfire and torch flames) keep their own path.
-		// So is a lit effect mesh, whose light goes in that tag too.
-		if (!dev || !((cur_ps_light_flags_ & PS_UNLIT) || cur_is_lit_effect_mesh()) || cur_decl_is_skinned())
+		// So is a lit effect mesh, whose light goes in that tag too, and a light shaft (texture_names::is_light_shaft).
+		if (!dev || !((cur_ps_light_flags_ & PS_UNLIT) || cur_is_lit_effect_mesh() || light_shaft) || cur_decl_is_skinned())
 			return false;
 		DWORD blend_enabled = FALSE, src = 0, dst = 0;
 		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_enabled);

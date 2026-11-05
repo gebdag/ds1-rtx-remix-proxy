@@ -57,8 +57,9 @@ namespace comp::game::atmosphere
 	// shells, c100 = 10, which Remix otherwise lit as plain surfaces in the dark). Alpha-blended draws only:
 	// an opaque one is a surface Remix lights, additive ones keep the fixed additive intensity.
 	// A lit effect mesh (`lit_effect`, ffp_state cur_is_lit_effect_mesh) likewise, tagged with c100 times its light.
+	// A light shaft (`light_shaft`, texture_names::is_light_shaft) with the game's ambient on it, seen from the side.
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
-		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false);
+		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false);
 
 	// View fade: FRPG_NtoA multiplies its alpha by sat((|N.V| - c176.x) * c176.y), so its foliage cards
 	// (M_Tree[D]_Edge, alpha tested) vanish edge-on and its additive shells (Bed of Chaos's seal) glow

@@ -20,6 +20,7 @@ namespace comp::game::texture_names
 			bool estus_flask = false;
 			bool butterfly_wing = false;
 			bool lava = false;
+			bool light_shaft = false;
 			owner owned_by = owner::unknown;
 		};
 
@@ -206,6 +207,14 @@ namespace comp::game::texture_names
 			return owner::map;
 		}
 
+		// Light shafts the game draws as alpha-blended map meshes lit by the area's ambient: the Bed of Chaos room's rays
+		// (m14_light, frame_20261029_191317 draw 551: an opaque grey texture faded by vertex alpha 0 to 0.7) and the
+		// m11 volume lights. The "*light_shaft*" planes are atmospheric layers (classify_atmospheric) and additive.
+		bool classify_light_shaft(const std::string& s)
+		{
+			return s == "m14_light" || s.find("vollight") != std::string::npos;
+		}
+
 		bool classify_lava(const std::string& s)
 		{
 			return s.size() > 10 && s[0] == 'm' && std::isdigit(static_cast<unsigned char>(s[1])) &&
@@ -250,6 +259,7 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
 		++g_named;
 		if (e.atmospheric)
@@ -295,6 +305,15 @@ namespace comp::game::texture_names
 		std::shared_lock lock(g_mutex);
 		const auto it = g_entries.find(texture);
 		return it != g_entries.end() && it->second.estus_flask;
+	}
+
+	bool is_light_shaft(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.light_shaft;
 	}
 
 	bool is_butterfly_wing(IDirect3DBaseTexture9* texture)
@@ -355,6 +374,7 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);

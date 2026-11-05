@@ -616,7 +616,8 @@ namespace comp::game::atmosphere
 		}
 	}
 
-	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect)
+	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
+		bool light_shaft)
 	{
 		DWORD tag = 0;
 		g_self_lit_below_tag = 0;
@@ -625,13 +626,33 @@ namespace comp::game::atmosphere
 		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
 		// flame layers, each (1, 0.39, 0.2) * texture, clip red and climb through orange to yellow there, while a
 		// linear sum stays red (frame_20261101_135237).
-		DWORD blended = FALSE, dst_blend = 0;
-		if ((unlit || lit_effect) && dev)
+		DWORD blended = FALSE, dst_blend = 0, src_blend = 0;
+		if ((unlit || lit_effect || light_shaft) && dev)
 		{
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blended);
 			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
+			dev->GetRenderState(D3DRS_SRCBLEND, &src_blend);
 		}
-		if ((unlit || lit_effect) && blended && ps_const)
+		// The shaft's light is the HemEnv shader's ambient (c86, c98, c99, probe): only a lit one, blended as the unlit layer
+		// marker requires (ffp_state::apply_unlit_layer_marker), which the renderer then sets.
+		if (light_shaft && ambient && !unlit && blended && src_blend == D3DBLEND_SRCALPHA && dst_blend == D3DBLEND_INVSRCALPHA && ps_const)
+		{
+			// A light shaft: the game lights it as a map surface, texture * c100 * (c86 * probe(N) + lerp(c99, c98, N.y / 2 + 1 / 2)).
+			// It hangs in the air and is seen from every side: the probe's mean over its faces and the hemisphere's middle.
+			std::array<std::array<float, 3>, 6> faces {};
+			const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
+			tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+			{
+				float mean = 0.0f;
+				for (const auto& f : faces)
+					mean += f[c] / 6.0f;
+				const float value = ps_const[100 * 4 + c] * ((probed ? mean : 0.0f) * ps_const[86 * 4 + c] +
+					0.5f * (ps_const[98 * 4 + c] + ps_const[99 * 4 + c]));
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(value, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+			}
+		}
+		else if ((unlit || lit_effect) && blended && ps_const)
 		{
 			// The game's light for it is c100 alone, or c100 * the lit effect mesh's light. At least 1 per channel, as for
 			// additive draws below.

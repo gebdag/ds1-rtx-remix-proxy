@@ -38,6 +38,10 @@ namespace comp::game::texture_names
 	// fronts face each other, which it draws as a thin wall (game/thin_walls.hpp).
 	bool is_butterfly_wing(IDirect3DBaseTexture9* texture);
 
+	// A light shaft drawn as an alpha-blended map mesh the game lights by the area's ambient (m14_light by the Bed of
+	// Chaos): a self-lit layer in Remix (atmosphere tag_self_lit), not a decal, which hangs in the air with nothing behind.
+	bool is_light_shaft(IDirect3DBaseTexture9* texture);
+
 	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
 	bool is_lava(IDirect3DBaseTexture9* texture);
 

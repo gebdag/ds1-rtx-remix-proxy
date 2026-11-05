@@ -552,7 +552,7 @@ namespace shared::common
 		void clear_decal_marker(IDirect3DDevice9* dev);
 		// Alpha-blended unlit meshes (PS_UNLIT) take the sprites' unlit marker on stage 0's constant;
 		// true when set. Cleared with clear_decal_marker.
-		bool apply_unlit_layer_marker(IDirect3DDevice9* dev);
+		bool apply_unlit_layer_marker(IDirect3DDevice9* dev, bool light_shaft = false);
 
 		// --- Rigid vertex expansion (CPU-side SHORT→FLOAT UV conversion) ---
 

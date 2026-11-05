@@ -65,6 +65,14 @@ namespace comp
 
 		// The game's diffuse for this draw is an atmospheric or backdrop layer
 		// (mist, fog, clouds, light shafts, backdrop cards) by its TPF name.
+		// A light shaft mesh (texture_names::is_light_shaft), not skinned.
+		bool is_light_shaft_draw()
+		{
+			auto& ffp = shared::common::ffp_state::get();
+			const int stage = shared::common::config::get().ffp.albedo_stage;
+			return !ffp.cur_decl_is_skinned() && game::texture_names::is_light_shaft(ffp.cur_texture(static_cast<UINT>(stage)));
+		}
+
 		bool is_atmospheric_layer()
 		{
 			auto& ffp = shared::common::ffp_state::get();
@@ -244,7 +252,8 @@ namespace comp
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
-			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh());
+			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
+			ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -307,7 +316,10 @@ namespace comp
 				// Remix composites them onto the surface beneath. Free-standing
 				// atmospheric layers are not: a decal only survives on a surface
 				// behind it, so mist or a backdrop card in front of the sky vanished.
-				const bool base_decal = !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+				const bool light_shaft = !is_atmospheric_layer() && is_light_shaft_draw();
+				const bool base_decal = !is_atmospheric_layer() && !light_shaft && ffp.apply_blended_decal_marker(dev);
+				// A light shaft is a glow layer, as on the indexed path (its colour is the self-lit tag).
+				const bool shaft_layer = light_shaft && ffp.apply_unlit_layer_marker(dev, true);
 				const bool tinted = ffp.apply_draw_tint(dev);
 				const bool effect = ffp.apply_sp_effect(dev);
 				const bool toned = ffp.apply_skin_tone(dev, false);
@@ -322,7 +334,7 @@ namespace comp
 				if (toned)
 					ffp.clear_skin_tone(dev);
 				shared::common::ffp_prof::count_converted_draw();
-				if (base_decal)
+				if (base_decal || shaft_layer)
 					ffp.clear_decal_marker(dev);
 
 				// Two-layer material: re-draw the overlay diffuse as a coplanar
@@ -466,7 +478,8 @@ namespace comp
 		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
-			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh());
+			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
+			ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -780,10 +793,12 @@ namespace comp
 						glass_split_texture(dev, ffp, PrimitiveType, startIndex, primCount, glass_cut);
 					if (glass_texture)
 						apply_came_pass_states(ctx, dev, glass_cut);
-					const bool base_decal = !shell && !glass_texture && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					// A light shaft hangs in the air, a glow layer like the unlit ones: never a decal.
+					const bool light_shaft = !water_draw && is_light_shaft_draw();
+					const bool base_decal = !shell && !glass_texture && !light_shaft && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					// Alpha-blended unlit glow layers take the sprites' unlit marker instead (ffp_state).
 					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
-						ffp.apply_unlit_layer_marker(dev);
+						ffp.apply_unlit_layer_marker(dev, light_shaft);
 					if (shell && (shell_mode == 2 || flask))
 					{
 						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).
