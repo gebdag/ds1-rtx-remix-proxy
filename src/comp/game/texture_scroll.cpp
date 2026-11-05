@@ -90,14 +90,14 @@ namespace comp::game::texture_scroll
 
 		void apply_water(IDirect3DDevice9* dev, const water_layers& w, const float* ps)
 		{
-			// How strongly the water reflects seen face-on (PS c130 * c131) and the tint of its
-			// reflection (c132), for the runtime's water Fresnel. The game weights its reflection by
-			// c131; at 0 it reflects nothing and its tint never shows (the Undead Asylum's water has a
-			// blue c132 that turned Remix's reflection blue), so the reflection stays untinted.
+			// How strongly the water reflects seen face-on (PS c130 * c131) and how much of it comes back
+			// (c132), for the runtime's water Fresnel. c132 is a colour: mauve in the Depths, orange in the
+			// Burg, teal at Ash Lake. It suits the game's reflection, a dim low-resolution image. Over a real
+			// reflection of the lit scene it reads as a coloured sheen, so only its strength stays. At
+			// c131 0 the game reflects nothing and c132 never shows: no strength from it then.
 			const float face_on = ps[130 * 4] * ps[131 * 4];
-			static constexpr float kNeutral[3] = { 1.0f, 1.0f, 1.0f };
-			const float* tint = ps[131 * 4] > 0.0f ? &ps[132 * 4] : kNeutral;
-			dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(face_on), to_byte(tint[0]), to_byte(tint[1]), to_byte(tint[2])));
+			const float reflection_level = ps[131 * 4] > 0.0f ? 0.2126f * ps[132 * 4] + 0.7152f * ps[132 * 4 + 1] + 0.0722f * ps[132 * 4 + 2] : 1.0f;
+			dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(face_on), to_byte(reflection_level), to_byte(reflection_level), to_byte(reflection_level)));
 
 			const float wave_height = ps[126 * 4];
 			// The normal map repeats every texture coordinate, so whole coordinates drop out of the
