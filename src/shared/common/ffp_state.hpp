@@ -750,6 +750,9 @@ namespace shared::common
 		// Its colour scale before fog (sfx_shaders.inc) and whether it applies the exposure c135.
 		std::unordered_map<IDirect3DPixelShader9*, float> ps_sfx_colour_scale_;
 		float cur_ps_sfx_colour_scale_ = 1.0f;
+		// The SFX pixel shader reads the scene depth (soft sprites, lit soft smoke); sfx_shaders.inc.
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_sfx_reads_depth_;
+		bool cur_ps_sfx_reads_depth_ = false;
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_reads_exposure_;
 		bool cur_ps_reads_exposure_ = false;
 

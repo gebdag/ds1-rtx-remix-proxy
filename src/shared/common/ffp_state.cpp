@@ -286,6 +286,7 @@ namespace shared::common
 		cur_ps_light_flags_ = 0;
 		cur_ps_sfx_class_ = sfx_class::None;
 		cur_ps_sfx_colour_scale_ = 1.0f;
+		cur_ps_sfx_reads_depth_ = false;
 		cur_ps_reads_exposure_ = false;
 		cur_ps_draw_tint_ = false;
 		cur_ps_point_lights_ = 0;
@@ -307,6 +308,8 @@ namespace shared::common
 				cur_ps_sfx_class_ = it->second;
 			if (auto it = ps_sfx_colour_scale_.find(shader); it != ps_sfx_colour_scale_.end())
 				cur_ps_sfx_colour_scale_ = it->second;
+			if (auto it = ps_sfx_reads_depth_.find(shader); it != ps_sfx_reads_depth_.end())
+				cur_ps_sfx_reads_depth_ = it->second;
 			if (auto it = ps_reads_exposure_.find(shader); it != ps_reads_exposure_.end())
 				cur_ps_reads_exposure_ = it->second;
 			if (auto it = ps_water_surface_.find(shader); it != ps_water_surface_.end())
@@ -405,15 +408,17 @@ namespace shared::common
 			: hash == water_wave_hash ? swamp_pass::WaveRing
 			: swamp_pass::None;
 
-		struct sfx_entry { uint32_t hash; sfx_class cls; float colour_scale; const char* name; };
+		struct sfx_entry { uint32_t hash; sfx_class cls; float colour_scale; bool reads_depth; const char* name; };
 		static constexpr sfx_entry sfx_shaders[] = {
 #include "sfx_shaders.inc"
 		};
 		sfx_class sfx = sfx_class::None;
 		float sfx_scale = 1.0f;
+		bool sfx_depth = false;
 		for (const auto& e : sfx_shaders)
-			if (e.hash == hash) { sfx = e.cls; sfx_scale = e.colour_scale; break; }
+			if (e.hash == hash) { sfx = e.cls; sfx_scale = e.colour_scale; sfx_depth = e.reads_depth; break; }
 		ps_sfx_class_[shader] = sfx;
+		ps_sfx_reads_depth_[shader] = sfx_depth;
 		ps_sfx_colour_scale_[shader] = sfx_scale;
 		ps_reads_exposure_[shader] = reads_float_const(bytecode, 135);
 		if (is_water)
@@ -2546,16 +2551,23 @@ namespace shared::common
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged ? kUnhazedUnlitMarker : kUnlitMarker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
+		// A sprite whose shader never reads the scene depth (SimpleSpriteType0: a message's runes, laid on the
+		// floor) has hard edges in the game: 0 millimetres, so Remix's own soft fade leaves it alone too.
 		constexpr DWORD kFeatherMarker = 0xD8000000u;
 		DWORD stage2_constant = 0;
 		// The median: a draw's particles each have their own feather, often several times apart.
-		const bool feathered = !feathers.empty();
+		const bool feathered = !feathers.empty() || ((cur_ps_sfx_class_ == sfx_class::Sprite || cur_ps_sfx_class_ == sfx_class::LitSprite) && !cur_ps_sfx_reads_depth_);
 		if (feathered)
 		{
 			dev->GetTextureStageState(2, D3DTSS_CONSTANT, &stage2_constant);
-			std::nth_element(feathers.begin(), feathers.begin() + feathers.size() / 2, feathers.end());
-			const double mm = std::min(static_cast<double>(feathers[feathers.size() / 2]) * 1000.0, static_cast<double>(0xFFFFFF));
-			dev->SetTextureStageState(2, D3DTSS_CONSTANT, kFeatherMarker | std::max(static_cast<DWORD>(std::lround(mm)), DWORD { 1 }));
+			DWORD mm = 0;
+			if (!feathers.empty())
+			{
+				std::nth_element(feathers.begin(), feathers.begin() + feathers.size() / 2, feathers.end());
+				const double m = std::min(static_cast<double>(feathers[feathers.size() / 2]) * 1000.0, static_cast<double>(0xFFFFFF));
+				mm = std::max(static_cast<DWORD>(std::lround(m)), DWORD { 1 });
+			}
+			dev->SetTextureStageState(2, D3DTSS_CONSTANT, kFeatherMarker | mm);
 		}
 		// Some particle layers (the Crystal Cave fog) are drawn into a reduced-resolution
 		// buffer that a filter pass later upsamples onto the frame. Remix ray-traces only
