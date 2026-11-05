@@ -1,4 +1,5 @@
 #include "std_include.hpp"
+#include "../game/waterfall.hpp"
 #include "renderer.hpp"
 #include "game_lights.hpp"
 
@@ -473,8 +474,13 @@ namespace comp
 		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 		// ... and emissive meshes the game gives no light get one of their own (rtx_comp\\lights\\mesh_lights.txt).
 		if (!ffp.is_depth_prepass())
+		{
 			game::mesh_lights::observe_draw(dev, ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
 				PrimitiveType, BaseVertexIndex, startIndex, primCount);
+			// ... and the map's waterfalls are remembered, to tell when the player stands in one.
+			game::waterfall::observe_draw(dev, ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
+				PrimitiveType, BaseVertexIndex, startIndex, primCount);
+		}
 
 		// Probe-lit draws supply the area's ambient light (irradiance probe + hemisphere).
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
