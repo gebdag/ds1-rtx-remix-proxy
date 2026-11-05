@@ -117,6 +117,13 @@ namespace comp::game::map_sun
 		IDirect3DBaseTexture9* cube_of(uintptr_t handle)
 		{
 			auto& ffp = shared::common::ffp_state::get();
+			// A cube the game has freed, with this map's banks still pointing at it, must not be called.
+			const auto live = [&](uint32_t address) -> IDirect3DBaseTexture9*
+			{
+				auto* cube = ffp.known_cube(address);
+				uint32_t table = 0;
+				return cube && read_bytes(address, &table, sizeof(table)) && table == ffp.known_cube_vtable() ? cube : nullptr;
+			};
 			uint32_t first[11] = {};
 			if (!handle || !read_bytes(handle, first, sizeof(first)))
 				return nullptr;
@@ -124,14 +131,14 @@ namespace comp::game::map_sun
 			{
 				if (!a)
 					continue;
-				if (auto* cube = ffp.known_cube(a))
+				if (auto* cube = live(a))
 					return cube;
 				uint32_t second[16] = {};
 				if (!read_bytes(a, second, sizeof(second)))
 					continue;
 				for (const uint32_t b : second)
 					if (b)
-						if (auto* cube = ffp.known_cube(b))
+						if (auto* cube = live(b))
 							return cube;
 			}
 			return nullptr;

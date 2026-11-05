@@ -172,7 +172,11 @@ namespace comp::game::atmosphere
 		// Ambient: the probe-lit set most of the frame uses (dominant_set), and the cube sent.
 		struct ambient_source
 		{
+			// Which probe, for comparing sets only. The game frees it with its map while this set is still held, so it is never called: its
+			// faces are read while it is bound to a draw.
 			IDirect3DBaseTexture9* probe = nullptr;
+			std::array<std::array<float, 3>, 6> faces {};
+			unsigned int has_faces = 0;
 			float scale[4] = {};      // c86
 			float upper[4] = {};      // c98
 			float lower[4] = {};      // c99
@@ -307,9 +311,9 @@ namespace comp::game::atmosphere
 
 		bool split_probe(const ambient_source& s, probe_split& out)
 		{
-			std::array<std::array<float, 3>, 6> faces;
-			if (!shared::common::ffp_state::get().cube_face_averages(s.probe, faces))
+			if (!s.has_faces)
 				return false;
+			const auto& faces = s.faces;
 			static const float normals[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
 			const float* l = s.shadow_dir;
 			const float len = std::sqrt(l[0] * l[0] + l[1] * l[1] + l[2] * l[2]);
@@ -679,6 +683,7 @@ namespace comp::game::atmosphere
 		}
 		ambient_source a;
 		a.probe = probe;
+		a.has_faces = shared::common::ffp_state::get().cube_face_averages(probe, a.faces) ? 1 : 0;
 		std::memcpy(a.scale, &ps_const[86 * 4], sizeof(a.scale));
 		std::memcpy(a.upper, &ps_const[98 * 4], sizeof(a.upper));
 		std::memcpy(a.lower, &ps_const[99 * 4], sizeof(a.lower));
@@ -944,14 +949,13 @@ namespace comp::game::atmosphere
 			std::array<std::array<float, 3>, 6> cube;
 			ambient_cube(g_ambient_ready, split, cube);
 			// A menu's view has no sun to split off (its shaders read no c175): the game's light is the probe's own faces.
-			if (std::array<std::array<float, 3>, 6> faces; shared::common::ffp_state::get().menu_is_path_traced() &&
-				shared::common::ffp_state::get().cube_face_averages(g_ambient_ready.probe, faces))
+			if (shared::common::ffp_state::get().menu_is_path_traced() && g_ambient_ready.has_faces)
 				for (int f = 0; f < 6; f++)
 					for (int c = 0; c < 3; c++)
 					{
 						const auto& s = g_ambient_ready;
 						const float hemi = f == 2 ? s.upper[c] : f == 3 ? s.lower[c] : 0.5f * (s.upper[c] + s.lower[c]);
-						cube[f][c] = g_menu_ambient_scale * g_menu_diffuse * (s.scale[c] * faces[f][c] + hemi);
+						cube[f][c] = g_menu_ambient_scale * g_menu_diffuse * (s.scale[c] * s.faces[f][c] + hemi);
 					}
 			g_ambient_gamma = cube;
 			g_have_ambient_gamma = true;
@@ -1113,6 +1117,7 @@ namespace comp::game::atmosphere
 	{
 		ambient_source s;
 		s.probe = probe;
+		s.has_faces = shared::common::ffp_state::get().cube_face_averages(probe, s.faces) ? 1 : 0;
 		for (int c = 0; c < 3; c++)
 		{
 			s.scale[c] = scale[c];

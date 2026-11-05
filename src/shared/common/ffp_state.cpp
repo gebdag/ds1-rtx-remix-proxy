@@ -3102,10 +3102,13 @@ namespace shared::common
 
 	bool ffp_state::cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces)
 	{
-		if (auto it = cube_faces_.find(texture); it != cube_faces_.end())
 		{
-			faces = it->second;
-			return true;
+			std::shared_lock lock(known_cubes_mutex_);
+			if (auto it = cube_faces_.find(texture); it != cube_faces_.end())
+			{
+				faces = it->second;
+				return true;
+			}
 		}
 		if (!texture || texture->GetType() != D3DRTYPE_CUBETEXTURE)
 			return false;
@@ -3163,6 +3166,7 @@ namespace shared::common
 			const double n = 255.0 * desc.Width * desc.Height;
 			faces[f] = { static_cast<float>(sum[0] / n), static_cast<float>(sum[1] / n), static_cast<float>(sum[2] / n) };
 		}
+		std::unique_lock lock(known_cubes_mutex_);
 		cube_faces_[texture] = faces;
 		return true;
 	}

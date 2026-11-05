@@ -208,6 +208,16 @@ namespace shared::common
 		{
 			std::unique_lock lock(known_cubes_mutex_);
 			known_cubes_.insert(cube);
+			known_cube_vtable_ = *reinterpret_cast<const uint32_t*>(cube);
+			// A new cube at a freed one's address does not have its faces. Textures can be created off the render thread.
+			cube_faces_.erase(cube);
+		}
+		// What a live cube's first word holds. The registry keeps cubes the game has since freed: a destroyed one holds its base class's table,
+		// and a call through that is a pure call, which ends the process past any __except.
+		uint32_t known_cube_vtable() const
+		{
+			std::shared_lock lock(known_cubes_mutex_);
+			return known_cube_vtable_;
 		}
 		IDirect3DBaseTexture9* known_cube(uint32_t address) const
 		{
@@ -216,7 +226,11 @@ namespace shared::common
 			return known_cubes_.contains(cube) ? cube : nullptr;
 		}
 		// A new map's cubes can sit at an old one's addresses.
-		void forget_cube_faces() { cube_faces_.clear(); }
+		void forget_cube_faces()
+		{
+			std::unique_lock lock(known_cubes_mutex_);
+			cube_faces_.clear();
+		}
 
 		// The texture bound on stage 11: the irradiance probe of DS1's HemEnv shaders.
 		IDirect3DBaseTexture9* probe_texture() const { return probe_texture_; }
@@ -794,6 +808,7 @@ namespace shared::common
 		IDirect3DBaseTexture9* probe_texture_ = nullptr;
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<std::array<float, 3>, 6>> cube_faces_;
 		std::unordered_set<IDirect3DBaseTexture9*> known_cubes_;
+		uint32_t known_cube_vtable_ = 0;
 		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking
