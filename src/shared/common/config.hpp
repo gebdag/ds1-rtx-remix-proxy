@@ -291,6 +291,7 @@ namespace shared::common
 			// game's reach). Range / UseGameRange apply to the inverse-square light only.
 			float falloff_range_scale = 1.0f;
 			float falloff_max_colour = 0.0f; // the strongest channel the game's colour may reach, 0 = no limit
+			bool falloff_gamma_add = true;   // its colour as it comes out added to the area's ambient in gamma, as the game adds it
 			// How Offset is applied: 0 world axes (x, y, z); 1 view: turns with the camera
 			// heading (right, up, forward); 2 character: turns with the body (right, up,
 			// forward). View and character use the heading only, so the light stays level.

@@ -842,6 +842,8 @@ namespace comp::game::atmosphere
 					&gl->menu_key[3], &gl->menu_key[4], &gl->menu_key[5], &gl->menu_key[6]);
 		}
 		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
+		else if (key == "Lights.PlayerIntensity") { if (auto* gl = game_lights::get()) gl->set_player_intensity(static_cast<float>(std::atof(value.c_str()))); }
+		else if (key == "Lights.PlayerGammaAdd") { if (auto* gl = game_lights::get()) gl->set_player_gamma_add(b); }
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }

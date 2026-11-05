@@ -128,6 +128,8 @@ namespace comp
 
 		// Live diagnostics (atmosphere.cpp set_proxy_option).
 		void set_emitter_radius(float r) { emitter_radius_ = r; }
+		void set_player_intensity(float v) { player_cfg_.falloff_intensity = std::max(v, 0.0f); }
+		void set_player_gamma_add(bool on) { player_cfg_.falloff_gamma_add = on; }
 		void set_kind_enabled(int k, bool on) { if (k >= 0 && k < static_cast<int>(light_kind::count)) kind_enabled_[k] = on; }
 
 		// A path traced menu view's light (proxy.MenuScene.Key): position, radiance, radius. Off-screen, front left and above.

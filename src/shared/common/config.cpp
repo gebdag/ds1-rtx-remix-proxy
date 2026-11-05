@@ -268,6 +268,7 @@ namespace shared::common
 		player_light.radius = std::max(0.01f, get_float("PlayerLight", "Radius", 0.5f));
 		player_light.intensity = std::max(0.0f, get_float("PlayerLight", "Intensity", 1.0f));
 		player_light.falloff_intensity = std::max(0.0f, get_float("PlayerLight", "FalloffIntensity", 1.0f));
+		player_light.falloff_gamma_add = get_bool("PlayerLight", "FalloffGammaAdd", true);
 		player_light.falloff_range_scale = std::max(0.01f, get_float("PlayerLight", "FalloffRangeScale", 1.0f));
 		get_float3("PlayerLight", "Offset", player_light.offset);
 		{

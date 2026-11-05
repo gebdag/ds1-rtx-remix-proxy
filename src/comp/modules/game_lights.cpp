@@ -1239,6 +1239,30 @@ namespace comp
 				std::pow(std::max(colour[1] * limit, 0.0f), 2.2f) * scale,
 				std::pow(std::max(colour[2] * limit, 0.0f), 2.2f) * scale,
 			};
+			// The game adds this light to the surface's ambient in gamma, before the albedo: (ambient + colour * att)^2.2 on
+			// screen. Alone and linearised, a strong tint keeps all of its saturation: Lost Izalith's (1.2, 2, 2) came out
+			// teal on the player, where the game's stays close to white on top of its ambient of about (1.25, 1.2, 1.03).
+			// What it adds to that ambient gives its hue, at the same luminance, so this does not change its brightness.
+			const float side[3] = { 1.0f, 0.0f, 0.0f };
+			if (float base[3]; c.falloff_gamma_add && game::atmosphere::ambient_toward(side, base))
+			{
+				constexpr float kAtt = 0.7f;   // about the middle of the falloff, where it meets the body and the ground nearby
+				constexpr float kLuma[3] = { 0.2126f, 0.7152f, 0.0722f };
+				float added[3], plain = 0.0f, shaped = 0.0f;
+				for (int i = 0; i < 3; i++)
+				{
+					const float lit = std::max(colour[i] * limit, 0.0f) * kAtt;
+					const float floor = std::max(base[i], 0.0f);
+					added[i] = std::pow(floor + lit, 2.2f) - std::pow(floor, 2.2f);
+					plain += kLuma[i] * std::pow(lit, 2.2f);
+					shaped += kLuma[i] * added[i];
+				}
+				if (shaped > 1e-5f)
+				{
+					const float keep = plain / shaped / std::pow(kAtt, 2.2f) * scale;
+					radiance = { added[0] * keep, added[1] * keep, added[2] * keep };
+				}
+			}
 			falloff_table += std::format("{:x}:{:.4g}:{:.4g};", string_hash64("ds1_player_light"), game_begin, game_end);
 		}
 		else
@@ -1451,6 +1475,7 @@ namespace comp
 		ok &= cfg.set_string("PlayerLight", "Radius", std::format("{:.3f}", p.radius));
 		ok &= cfg.set_string("PlayerLight", "Intensity", std::format("{:.3f}", p.intensity));
 		ok &= cfg.set_string("PlayerLight", "FalloffIntensity", std::format("{:.3f}", p.falloff_intensity));
+		ok &= cfg.set_string("PlayerLight", "FalloffGammaAdd", p.falloff_gamma_add ? "1" : "0");
 		ok &= cfg.set_string("PlayerLight", "FalloffRangeScale", std::format("{:.3f}", p.falloff_range_scale));
 		ok &= cfg.set_string("PlayerLight", "OffsetFrame", kFrameNames[std::clamp(p.offset_frame, 0, 2)]);
 		ok &= cfg.set_string("PlayerLight", "Offset", format_float3(p.offset));
@@ -1545,6 +1570,7 @@ namespace comp
 		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 1.0f));
 		p.falloff_range_scale = std::max(0.01f, cfg.get_float("PlayerLight", "FalloffRangeScale", 1.0f));
 		p.falloff_max_colour = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffMaxColour", 0.0f));
+		p.falloff_gamma_add = cfg.get_bool("PlayerLight", "FalloffGammaAdd", true);
 		const auto frame = cfg.get_string("PlayerLight", "OffsetFrame", "View");
 		p.offset_frame = _stricmp(frame.c_str(), "World") == 0 ? 0 : _stricmp(frame.c_str(), "Character") == 0 ? 2 : 1;
 		p.offset[0] = p.offset[1] = p.offset[2] = 0.0f;
@@ -2411,6 +2437,7 @@ namespace comp
 			form_label("Brightness", "1 = the game's brightness. Saved as [PlayerLight] FalloffIntensity,\n"
 				"apart from the inverse-square brightness.");
 			ImGui::SliderFloat("##pl_fint", &c.falloff_intensity, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
+			ImGui::Checkbox("Colour as the game mixes it with ambient##pl_gadd", &c.falloff_gamma_add);
 		}
 		else
 		{
