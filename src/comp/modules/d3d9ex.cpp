@@ -29,6 +29,7 @@ using comp::tracer;
 #include "../game/lightmap_sun.hpp"
 #include "../game/ffx_instances.hpp"
 #include "../game/hud_scale.hpp"
+#include "../game/eye_sprites.hpp"
 #include "game_lights.hpp"
 #include "lookdev_capture.hpp"
 
@@ -504,6 +505,9 @@ namespace {
 			frame = ffp.frame_count();
 			drawn = fallback = 0;
 		}
+		static std::vector<std::uint8_t> eye_copy;
+		vertices = comp::game::eye_sprites::adjust(ffp.cur_texture(0), vertices, stride, min_index, num_verts, ffp.frame_count(),
+			ffp.cur_decl_color_offset(), eye_copy);
 		const bool ok = ffp.draw_sprite_up(dev, prim, prim_count, min_index, num_verts,
 			indices, index_format, vertices, stride, cls != sfx_class::LitSprite, hr);
 		(ok ? drawn : fallback)++;

@@ -782,6 +782,10 @@ namespace shared::common
 		int cur_decl_normal_off_ = 0;
 		int cur_decl_normal_type_ = -1;
 		int cur_decl_color_off_ = 0;
+	public:
+		// The vertex colour's byte offset in the current declaration, -1 without one.
+		int cur_decl_color_offset() const { return cur_decl_color_type_ == D3DDECLTYPE_D3DCOLOR ? cur_decl_color_off_ : -1; }
+	private:
 		int cur_decl_color_type_ = -1;
 
 		// VS constant register layout — Dark Souls PTDE
