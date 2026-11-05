@@ -162,6 +162,9 @@ namespace comp::game::atmosphere
 		constexpr DWORD kSelfLitMarker = 0xD5000000;
 		constexpr float kSelfLitMin = 3.0f;
 		constexpr float kSelfLitRange = 16.0f;
+		// The light of a self-lit draw facing straight down, when it differs: stage 2 (no lava draw fades by its view), read with stage 3's.
+		constexpr DWORD kSelfLitBelowMarker = 0xD9000000;
+		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
 
@@ -541,17 +544,23 @@ namespace comp::game::atmosphere
 
 	namespace
 	{
-		// A lava draw's light, c100 * (c86 * probe(+Y) + c98), gamma space (see tag_self_lit).
-		bool lava_colour(const float* ps_const, IDirect3DBaseTexture9* probe, float value[3])
+		// A lava draw's light, gamma space (see tag_self_lit): c100 * (c86 * probe + lerp(c99, c98, N.y * 0.5 + 0.5)), per pixel in
+		// the game. Both ends go to the runtime, which takes the pixel's own normal: lava facing up gets c98 and lava overhead
+		// c99, (2.43, 4, 4) at c100 2.75 in Lost Izalith, which clips its ceiling veins to yellow. No single value suits both.
+		bool lava_colour(const float* ps_const, IDirect3DBaseTexture9* probe, float value[3], float below[3])
 		{
 			std::array<std::array<float, 3>, 6> faces {};
 			const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
 			const float* scale = &ps_const[86 * 4];
 			const float* upper = &ps_const[98 * 4];
+			const float* lower = &ps_const[99 * 4];
 			const float* diffuse = &ps_const[100 * 4];
 			for (int c = 0; c < 3; c++)
+			{
 				value[c] = std::max(diffuse[c] * ((probed ? faces[2][c] : 0.0f) * scale[c] + upper[c]), 0.0f);
-			return std::max({ value[0], value[1], value[2] }) > 0.0f;
+				below[c] = std::max(diffuse[c] * ((probed ? faces[3][c] : 0.0f) * scale[c] + lower[c]), 0.0f);
+			}
+			return std::max({ value[0], value[1], value[2], below[0], below[1], below[2] }) > 0.0f;
 		}
 	}
 
@@ -609,6 +618,7 @@ namespace comp::game::atmosphere
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect)
 	{
 		DWORD tag = 0;
+		g_self_lit_below_tag = 0;
 		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
 		// (m18_ao, c100 7) is an ordinary surface Remix lights, and the tag would add its c100 glow on top of that
 		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
@@ -629,11 +639,17 @@ namespace comp::game::atmosphere
 			for (int c = 0; c < 3; c++)
 				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(diffuse[c] * (lit_effect ? lit_effect_light(ps_const, c) : 1.0f), 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 		}
-		else if (float value[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value) : self_lit_colour(ps_const, value)))
+		else if (float value[3], below[3]; ambient && ps_const && (lava ? lava_colour(ps_const, probe, value, below) : self_lit_colour(ps_const, value)))
 		{
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
 				tag |= static_cast<DWORD>(std::lround(std::min(value[c] / kSelfLitRange, 1.0f) * 255.0f)) << (16 - 8 * c);
+			if (lava)
+			{
+				g_self_lit_below_tag = kSelfLitBelowMarker;
+				for (int c = 0; c < 3; c++)
+					g_self_lit_below_tag |= static_cast<DWORD>(std::lround(std::min(below[c] / kSelfLitRange, 1.0f) * 255.0f)) << (16 - 8 * c);
+			}
 		}
 		// Or a character the game lights past its texture (c100 above 1: Seath 1.5-3, Bed of Chaos's body 1.7;
 		// every other character is 1 or below, frames across 158 captures): the game's ambient on it, as its
@@ -664,6 +680,9 @@ namespace comp::game::atmosphere
 			const long scale = std::clamp(std::lround(c176[1] * 16.0f), 0L, 255L);
 			tag = kViewFadeMarker | static_cast<DWORD>(offset) << 8 | static_cast<DWORD>(scale);
 		}
+		// tag_self_lit, just before this for every draw, sets it or clears it.
+		if (g_self_lit_below_tag)
+			tag = g_self_lit_below_tag;
 		if (tag != g_view_fade_tag_set)
 		{
 			dev->SetTextureStageState(2, D3DTSS_CONSTANT, tag);
