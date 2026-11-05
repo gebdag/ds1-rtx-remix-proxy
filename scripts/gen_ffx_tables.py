@@ -26,6 +26,12 @@ OUT = pathlib.Path(__file__).resolve().parent.parent / "assets" / "ffx"
 PERSISTENT = ("map-placed", "character idle/aura", "status visual", "world object")
 
 
+# Effects the fit lights but must not. FFX 193: one faint 1.6 m glow for 0.2 s (s01035, peak brightness 0.14), nothing
+# the eye follows, on hits: the light then looks like it comes from nowhere (measured 2026-11-05: it was the only blue
+# light of a session of hitting enemies). 190 and 188 have the same sprite in other colours; not seen, so left.
+NO_LIGHT = {"193"}
+
+
 def rows(name):
     with open(ANALYSIS / name, encoding="utf-8", newline="") as f:
         return list(csv.DictReader(f))
@@ -52,7 +58,7 @@ def main():
     count = 0
     sources = {r["ffx_id"]: r["source"] for r in rows("ffx_catalogue.csv")}
     for r in rows("unlit_effect_lights.csv"):
-        if r["light"] != "yes":
+        if r["light"] != "yes" or r["ffx_id"] in NO_LIGHT:
             continue
         rgb = "\t".join(f"{float(v):.4g}" for v in r["rgb"].split())
         end = float(r["dwindle_end"])
