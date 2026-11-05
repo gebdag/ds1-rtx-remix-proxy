@@ -33,6 +33,9 @@ namespace comp::game::lightmap_sun
 	// A draw of a body part: its vertices carry their bind position in their colour, and it gets wet
 	// (skinning::expand_skin_vertex, rtx_dark_souls_ripples.h in the runtime).
 	constexpr DWORD kWetBodyMarker = 0xD2000002;
+	// The same, for what armour covers (the head under a helmet, the bare body under a chest piece): it gets wet too,
+	// but water does not reach it, so nothing bounces or drips off it.
+	constexpr DWORD kWetBodyCoveredMarker = 0xD2000003;
 
 	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped,
 	// kSkinnedMarker / kSkinnedCardMarker when it is skinned, else none.

@@ -326,6 +326,25 @@ namespace comp::game::lightmap_sun
 		}
 	}
 
+	namespace
+	{
+		// Whether armour covers this body draw. The game draws the head (FaceGen face and scalp: no normal map, so no s2) and the bare
+		// body (bd_m_body_*) under what is worn. Armour that goes by no name does not count: then these stay as they are.
+		unsigned int g_helmet_frame = 0, g_chest_frame = 0;
+
+		bool is_covered_body(ffp_state& ffp, unsigned int frame)
+		{
+			const auto name = texture_names::name_of(ffp.cur_texture(0));
+			const bool bare_body = name.find("_body") != std::string::npos;
+			if (name.rfind("hd_", 0) == 0)
+				g_helmet_frame = frame;
+			else if (name.rfind("bd_", 0) == 0 && !bare_body)
+				g_chest_frame = frame;
+			const auto recent = [&](unsigned int seen) { return seen && frame - seen <= 2; };
+			return bare_body ? recent(g_chest_frame) : !(ffp.cur_ps_sampler_mask() & (1u << 2)) && recent(g_helmet_frame);
+		}
+	}
+
 	void tag_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index,
 		UINT prim_count, unsigned int frame)
 	{
@@ -354,7 +373,7 @@ namespace comp::game::lightmap_sun
 			const bool fading = ps && ps[139 * 4 + 3] < 0.999f;
 			const bool card = blend && test && dest == D3DBLEND_INVSRCALPHA &&
 				!(ffp.cur_ps_sampler_mask() & (1u << 2)) && !fading;
-			tag = card ? kSkinnedCardMarker : !blend && texture_names::is_body_part(ffp.cur_texture(0)) ? kWetBodyMarker : kSkinnedMarker;
+			tag = card ? kSkinnedCardMarker : !blend && texture_names::is_body_part(ffp.cur_texture(0)) ? (is_covered_body(ffp, frame) ? kWetBodyCoveredMarker : kWetBodyMarker) : kSkinnedMarker;
 		}
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
 		IDirect3DVertexBuffer9* vb = ffp.stream_vb(0);
