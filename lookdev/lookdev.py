@@ -289,6 +289,9 @@ def cmd_host(args):
     print(f"proxy {PROXY_BUILD} ({datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime):%H:%M:%S}) -> {PROXY_IN_GAME.name}")
     deploy_game_proxy()
     source = ["--live"] if args.live else [str(cap)]
+    # DS1_HOST_DROP=i,j leaves those draws out of the replay (host --drop), also for shots.py.
+    if os.environ.get("DS1_HOST_DROP"):
+        source += ["--drop", os.environ["DS1_HOST_DROP"]]
     keep_host_logs()
     # A GPU crash writes a dump there and logs its reason (a hang, or a page fault and the resource), active shaders included.
     env = dict(os.environ, DXVK_ENABLE_AFTERMATH="1", DXVK_ENABLE_AFTERMATH_RESOURCE_TRACKING="1", DXVK_AFTERMATH_DUMP_PATH=str(HOST_LOGS).replace("\\", "/"))
