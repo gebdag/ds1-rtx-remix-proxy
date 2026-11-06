@@ -25,6 +25,8 @@ namespace comp
 		void destroy_all_handles();
 		void draw_light_instances();
 		void tab_imgui();
+		// For screenshots of the sun's panel (live option proxy.Lights.SelectSun).
+		void select_sun();
 		void draw_pos_hud();
 
 		static void remix_draw_callback();
@@ -241,6 +243,7 @@ namespace comp
 		// UI pieces.
 		void list_imgui();
 		void sources_imgui();
+		void own_sun_imgui();
 		void scales_imgui();
 		void table_imgui();
 		void selected_imgui();

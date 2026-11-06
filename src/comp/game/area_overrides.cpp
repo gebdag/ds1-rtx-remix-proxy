@@ -7,6 +7,7 @@
 #include "shared/common/config.hpp"
 #include "shared/common/remix_api.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <format>
 #include <map>
@@ -145,6 +146,86 @@ namespace comp::game::area_overrides
 				out += (out.empty() ? "" : ", ") + n;
 			return out.empty() ? "none" : out;
 		}
+	}
+
+	namespace
+	{
+		std::string sun_section(const std::string& map) { return "F4 sun " + map; }
+
+		// The file's lines without the panel's sections of this map.
+		std::vector<std::string> lines_without_sun(const std::string& map, bool& ok)
+		{
+			std::vector<std::string> lines;
+			std::ifstream in(file_path());
+			// No file yet is fine. One that is there and cannot be read must not be written over.
+			ok = in.is_open() || GetFileAttributesA(file_path().c_str()) == INVALID_FILE_ATTRIBUTES;
+			std::string line;
+			bool dropping = false;
+			const auto wanted = "[" + sun_section(map);
+			while (std::getline(in, line))
+			{
+				const auto t = trim(line);
+				if (!t.empty() && t.front() == '[')
+					dropping = t.rfind(wanted, 0) == 0;
+				// The panel writes no comments: one here belongs to what follows.
+				else if (!t.empty() && (t.front() == ';' || t.front() == '#'))
+					dropping = false;
+				if (!dropping)
+					lines.push_back(line);
+			}
+			while (!lines.empty() && trim(lines.back()).empty())
+				lines.pop_back();
+			return lines;
+		}
+
+		bool write_lines(const std::vector<std::string>& lines)
+		{
+			// To the side first, so a failure leaves the file as it was.
+			const auto side = file_path() + ".tmp";
+			{
+				std::ofstream out(side, std::ios::trunc);
+				for (const auto& l : lines)
+					out << l << "\n";
+				if (!out.good())
+					return false;
+			}
+			return MoveFileExA(side.c_str(), file_path().c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+		}
+	}
+
+	bool save_sun(const std::string& map, const float* box_min, const float* box_max, const float* colour, const float* direction)
+	{
+		bool ok = false;
+		if (map.empty())
+			return false;
+		auto lines = lines_without_sun(map, ok);
+		if (!ok)
+			return false;
+		lines.emplace_back("");
+		lines.push_back(std::format("[{}]", sun_section(map)));
+		lines.push_back("map = " + map);
+		if (box_min && box_max)
+			lines.push_back(std::format("box = {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f}", box_min[0], box_min[1], box_min[2], box_max[0], box_max[1], box_max[2]));
+		lines.push_back(std::format("proxy.Sun.Colour = {:.3f},{:.3f},{:.3f}", colour[0], colour[1], colour[2]));
+		lines.push_back(std::format("proxy.Sun.Direction = {:.4f},{:.4f},{:.4f}", direction[0], direction[1], direction[2]));
+		return write_lines(lines);
+	}
+
+	bool remove_sun(const std::string& map)
+	{
+		bool ok = false;
+		if (map.empty())
+			return false;
+		const auto lines = lines_without_sun(map, ok);
+		return ok && write_lines(lines);
+	}
+
+	bool has_saved_sun(const std::string& map)
+	{
+		if (map.empty())
+			return false;
+		const auto wanted = sun_section(map);
+		return std::any_of(g_areas.begin(), g_areas.end(), [&](const area& a) { return a.name.rfind(wanted, 0) == 0; });
 	}
 
 	void frame_update(unsigned int frame)

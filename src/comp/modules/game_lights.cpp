@@ -11,6 +11,7 @@
 #include "../game/map_sun.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
+#include "../game/area_overrides.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
@@ -74,16 +75,16 @@ namespace comp
 		// Section heading per kind in the grouped list.
 		const char* const kKindSection[] = {
 			"Sun", "Player",
-			"Map lights (MSB Light events)",
-			"Map lights (bank entities)",
+			"Map lights",
+			"Map entity lights",
 			"Character lights",
-			"Effect lights (spells, items, SFX)",
-			"Stand-ins (synthesized for unlit flames)",
-			"Effect stand-ins (lightning bolts)",
-			"Unlit effects (lights from the effect table)",
-			"Custom lights (rtx_comp\\lights\\<map>.custom.txt)",
-			"Mesh lights (rtx_comp\\lights\\mesh_lights.txt)",
-			"Engine slots without parameters (never drawn)",
+			"Effect lights",
+			"Added fire lights",
+			"Added lightning lights",
+			"Added effect lights",
+			"Custom lights",
+			"Lantern and lamp lights",
+			"Not drawn: no light data",
 		};
 		static_assert(std::size(kKindSection) == static_cast<size_t>(kind::count));
 
@@ -93,13 +94,13 @@ namespace comp
 			using st = game_lights::row_state;
 			switch (s)
 			{
-			case st::on: return "drawn";
+			case st::on: return "on";
 			case st::rejected: return "Remix refused";
-			case st::lights_off: return "off";
+			case st::lights_off: return "all lights off";
 			case st::no_params: return "no parameters";
 			case st::effect_off: return "effect not shown";
-			case st::source_off: return "source off";
-			case st::disabled: return "switched off";
+			case st::source_off: return "group off";
+			case st::disabled: return "turned off";
 			case st::solo_other: return "hidden by solo";
 			case st::over_limit: return "over the limit";
 			case st::characters: return "characters only";
@@ -1659,6 +1660,12 @@ namespace comp
 		static_assert(std::size(kKindHelp) == static_cast<size_t>(kind::count));
 	}
 
+	void game_lights::select_sun()
+	{
+		selected_ = KEY_SUN;
+		selection_.clear();
+	}
+
 	void game_lights::tab_imgui()
 	{
 		list_imgui();
@@ -1688,7 +1695,7 @@ namespace comp
 			revert_to_saved();
 		tip("Throws away unsaved changes and reloads the saved settings and per-light edits.");
 		ImGui::SameLine();
-		if (ImGui::Button("Reset per-light edits"))
+		if (ImGui::Button("Clear single-light edits"))
 		{
 			overrides_.clear();
 			decoupled_.clear();
@@ -1722,7 +1729,7 @@ namespace comp
 				ImGui::SetNextItemOpen(true);
 			return ImGui::CollapsingHeader(label, flags);
 		};
-		if (header("Light sources"))
+		if (header("Turn groups on or off"))
 			sources_imgui();
 		if (header("Brightness and reach of point lights"))
 			scales_imgui();
@@ -1742,13 +1749,104 @@ namespace comp
 			diagnostics_imgui();
 	}
 
+	void game_lights::own_sun_imgui()
+	{
+		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(), sun_fallback_colour);
+		{
+			const unsigned map_id = game::map_lights::current_map_id();
+			const auto map_name = game::map_lights::current_map_name();
+			const auto& authored = game::map_sun::get(map_id);
+			const auto& map_values = authored.authored ? authored : seen_sun_;
+			const bool saved = game::area_overrides::has_saved_sun(map_name);
+			if (map_values.has_sun)
+				ImGui::TextUnformatted("This map has a sun.");
+			else
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "This map has no sun.");
+
+			bool own = sun_colour_set && sun_direction_set;
+			form_checkbox("Set my own colour and direction", "##sun_own", &own,
+				"Not saved until you press a Save button; unsaved settings are lost when you enter another area.\n"
+				"Turning this off deletes a saved sun for this map.\n"
+				"Lightmaps still dim it on lightmapped surfaces, as they do the game's sun.");
+			if (own != (sun_colour_set && sun_direction_set))
+			{
+				sun_colour_set = sun_direction_set = own;
+				if (!own && saved)
+					game::area_overrides::remove_sun(map_name);
+				if (own)
+				{
+					// From what is there now, so turning it on changes nothing until it is edited.
+					const bool from_map = map_values.has_sun;
+					for (int c = 0; c < 3; ++c)
+					{
+						sun_colour[c] = from_map ? map_values.lobe[c] : 0.3f;
+						sun_direction[c] = from_map ? map_values.direction[c] : sun.key.dir[c];
+					}
+					if (!from_map && !sun.valid)
+					{
+						sun_direction[0] = -0.5f;
+						sun_direction[1] = -0.7f;
+						sun_direction[2] = -0.5f;
+					}
+				}
+			}
+			if (own)
+			{
+				form_label("Colour", "In the game's gamma space, as the banks give it. A sun of Anor Londo's strength is about 0.7, 0.5, 0.4.");
+				ImGui::ColorEdit3("##sun_own_colour", sun_colour, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+
+				const float length = std::max(std::sqrt(sun_direction[0] * sun_direction[0] + sun_direction[1] * sun_direction[1] + sun_direction[2] * sun_direction[2]), 1e-5f);
+				float elevation = std::asin(std::clamp(-sun_direction[1] / length, -1.0f, 1.0f)) * kRadToDeg;
+				float heading = std::atan2(-sun_direction[0], -sun_direction[2]) * kRadToDeg;
+				form_label("Elevation", "Degrees above the horizon. 90 is straight overhead.");
+				bool moved = ImGui::SliderFloat("##sun_own_elevation", &elevation, 1.0f, 90.0f, "%.1f deg");
+				form_label("Heading", "Degrees around the horizon.");
+				moved = ImGui::SliderFloat("##sun_own_heading", &heading, -180.0f, 180.0f, "%.1f deg") || moved;
+				if (moved)
+				{
+					const float e = elevation / kRadToDeg, h = heading / kRadToDeg;
+					sun_direction[0] = -std::cos(e) * std::sin(h);
+					sun_direction[1] = -std::sin(e);
+					sun_direction[2] = -std::cos(e) * std::cos(h);
+				}
+
+				static float box_reach = 30.0f;
+				if (ImGui::Button("Save for this map"))
+					game::area_overrides::save_sun(map_name, nullptr, nullptr, sun_colour, sun_direction);
+				ImGui::SameLine();
+				float x = 0.0f, depth = 0.0f, up = 0.0f;
+				const bool have_position = game::camera::get_char_pos(x, depth, up) && !(x == 0.0f && depth == 0.0f && up == 0.0f);
+				ImGui::BeginDisabled(!have_position);
+				if (ImGui::Button("Save for this area"))
+				{
+					const float box_min[3] = { x - box_reach, up - box_reach, depth - box_reach };
+					const float box_max[3] = { x + box_reach, up + box_reach, depth + box_reach };
+					game::area_overrides::save_sun(map_name, box_min, box_max, sun_colour, sun_direction);
+				}
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+				ImGui::SliderFloat("##sun_own_box", &box_reach, 2.0f, 200.0f, "%.0f m around you");
+				tip("Saves to rtx_comp\\settings\\area_overrides.ini, which you can also edit by hand. Each map keeps one saved sun.\n"
+					"An area's sun applies while you are inside it.");
+			}
+			if (saved)
+			{
+				ImGui::TextDisabled("A custom sun is saved for this map.");
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Delete"))
+					game::area_overrides::remove_sun(map_name);
+			}
+		}
+	}
+
 	void game_lights::sources_imgui()
 	{
 		ImGui::Checkbox("Draw point lights", &enabled);
 		tip("Every light in the list except the sun and the player light, which have their own switch below.");
 		ImGui::SameLine(0.0f, ImGui::GetFontSize() * 2.0f);
 		ImGui::Checkbox("Use the game's falloff", &game_falloff_);
-		tip("For the sources ticked under 'Game falloff': full strength out to dwindle begin, then linearly\n"
+		tip("For the groups ticked under 'Game-style fade': full strength out to dwindle begin, then linearly\n"
 			"to zero at dwindle end, as the game lights them. Off: inverse square for every light.");
 
 		int counts[static_cast<int>(kind::count)] = {};
@@ -1766,7 +1864,7 @@ namespace comp
 		{
 			ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableSetupColumn("Draw");
-			ImGui::TableSetupColumn("Game falloff");
+			ImGui::TableSetupColumn("Game-style fade");
 			ImGui::TableSetupColumn("Drawn now");
 			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 			ImGui::TableNextColumn();
@@ -1776,7 +1874,7 @@ namespace comp
 			ImGui::TableHeader("Draw");
 			tip("Saved with Save: Sun, Player and Stand-ins. The other switches last for this session.");
 			ImGui::TableNextColumn();
-			ImGui::TableHeader("Game falloff");
+			ImGui::TableHeader("Game-style fade");
 			tip("Lit with the game's falloff instead of inverse square (needs 'Use the game's falloff'). This session.");
 			ImGui::TableNextColumn();
 			ImGui::TableHeader("Drawn now");
@@ -1918,7 +2016,7 @@ namespace comp
 		sun_row.name = "Sun";
 		{
 			static const char* kDirSource[] = { "no direction yet", "shadow light c175", "map light 0 c92", "character light 0 c92" };
-			sun_row.origin = kDirSource[static_cast<int>(sun.dir_from)];
+			sun_row.origin = sun_colour_set && sun_direction_set ? "Custom sun" : kDirSource[static_cast<int>(sun.dir_from)];
 		}
 		std::memcpy(sun_row.colour, sun.key.colour, sizeof(sun_row.colour));
 		if (sun_handle_)
@@ -1954,32 +2052,47 @@ namespace comp
 		player_row.state = player_row.drawn ? row_state::on : player_seen_ ? row_state::lights_off : row_state::no_params;
 
 		const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-			ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
-		if (ImGui::BeginTable("##light_list", 7, flags, ImVec2(0.0f, ImGui::GetFontSize() * 22.0f)))
+			ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Hideable;
+		if (ImGui::BeginTable("##light_list", 7, flags, ImVec2(0.0f, ImGui::GetFontSize() * 14.0f)))
 		{
 			ImGui::TableSetupScrollFreeze(0, 1);
-			ImGui::TableSetupColumn("Light", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+			ImGui::TableSetupColumn("Light", ImGuiTableColumnFlags_WidthStretch, 4.0f);
 			const float em = ImGui::GetFontSize();
 			ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, em * 9.0f);
 			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 14.0f);
 			ImGui::TableSetupColumn("Distance", ImGuiTableColumnFlags_WidthFixed, em * 4.5f);
-			ImGui::TableSetupColumn("Game colour", ImGuiTableColumnFlags_WidthFixed, em * 9.0f);
+			ImGui::TableSetupColumn("Game colour", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide, em * 9.0f);
 			ImGui::TableSetupColumn("Reach (m)", ImGuiTableColumnFlags_WidthFixed, em * 5.5f);
-			ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+			ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultHide, 3.0f);
 			ImGui::TableHeadersRow();
 
+			// A band across the table: what follows belongs to it, level with every other row.
+			const ImU32 band_colour = ImGui::GetColorU32(ImVec4(0.26f, 0.38f, 0.58f, 0.55f));
+			const ImU32 sub_band_colour = ImGui::GetColorU32(ImVec4(0.26f, 0.38f, 0.58f, 0.22f));
+
+			ImGui::TableNextRow();
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, band_colour);
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted("Sun and player");
 			list_row_imgui(sun_row);
 			list_row_imgui(player_row);
 
-			// A collapsible heading row with how many of its lights are drawn.
-			auto section = [](const std::string& label, const light_row* const* first, const light_row* const* last,
-				bool open_by_default, const char* id)
+			// A collapsible band with how many of its lights are drawn. Its rows are not indented: a light under a band is a light like the sun or the player's.
+			auto section = [&](const std::string& label, const light_row* const* first, const light_row* const* last,
+				bool open_by_default, const char* id, bool top)
 			{
 				const auto on = std::count_if(first, last, [](const light_row* r) { return r->state == row_state::on; });
 				ImGui::TableNextRow();
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, top ? band_colour : sub_band_colour);
 				ImGui::TableNextColumn();
-				return ImGui::TreeNodeEx(std::format("{}  ({} of {} drawn)###{}", label, on, last - first, id).c_str(),
-					ImGuiTreeNodeFlags_SpanAllColumns | (open_by_default ? ImGuiTreeNodeFlags_DefaultOpen : 0));
+				// The menu's wide frame padding would put the band's text deeper than the lights under it.
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, ImGui::GetStyle().FramePadding.y));
+				const bool open = ImGui::TreeNodeEx(std::format("{}###{}", label, id).c_str(),
+					ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_NoTreePushOnOpen | (open_by_default ? ImGuiTreeNodeFlags_DefaultOpen : 0));
+				ImGui::PopStyleVar();
+				ImGui::TableNextColumn();
+				ImGui::TextDisabled("%d of %d on", static_cast<int>(on), static_cast<int>(last - first));
+				return open;
 			};
 
 			if (!group_rows_)
@@ -1996,7 +2109,7 @@ namespace comp
 					while (end < rows.size() && rows[end]->kind == k)
 						++end;
 					if (section(kKindSection[static_cast<int>(k)], &rows[i], &rows[0] + end, k != kind::unresolved,
-						std::format("kind{}", static_cast<int>(k)).c_str()))
+						std::format("kind{}", static_cast<int>(k)).c_str(), true))
 					{
 						for (size_t g = i; g < end;)
 						{
@@ -2009,21 +2122,20 @@ namespace comp
 									list_row_imgui(*rows[r]);
 							}
 							else if (section(rows[g]->group, &rows[g], &rows[0] + g_end, true,
-								std::format("group{}{}", static_cast<int>(k), rows[g]->group).c_str()))
+								std::format("group{}{}", static_cast<int>(k), rows[g]->group).c_str(), false))
 							{
 								for (size_t r = g; r < g_end; ++r)
 									list_row_imgui(*rows[r]);
-								ImGui::TreePop();
 							}
 							g = g_end;
 						}
-						ImGui::TreePop();
 					}
 					i = end;
 				}
 			}
 			ImGui::EndTable();
 		}
+		ImGui::TextDisabled("Click a light to change it below. Right-click the header row for more columns.");
 		row_order_.swap(row_order_next_);
 	}
 
@@ -2120,9 +2232,9 @@ namespace comp
 	void game_lights::solo_flash_imgui(uint64_t key)
 	{
 		bool solo = solo_ == key;
-		if (form_checkbox("Solo", "##solo", &solo, "Draw only this light, to see what it lights. Every other light shows 'hidden by solo'."))
+		if (form_checkbox("Show only this light", "##solo", &solo, "Draw only this light, to see what it lights. Every other light shows 'hidden by solo'."))
 			solo_ = solo ? key : 0;
-		form_checkbox("Flash to find it", "##flash", &flash_selected_, "Makes the selected light 20 times brighter while ticked.");
+		form_checkbox("Flash this light", "##flash", &flash_selected_, "Makes the selected light 20 times brighter while ticked.");
 	}
 
 	void game_lights::custom_lights_imgui()
@@ -2331,7 +2443,7 @@ namespace comp
 		if (!sun.valid)
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "No draw has given a sun direction for %u frames.", sun.frames_since_seen);
 		else if (sun_handle_)
-			ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Drawn.");
+			ImGui::TextUnformatted("");
 		else
 			ImGui::TextDisabled("Not drawn.");
 		tip("Direction: the game's shadow light (pixel shader c175, ShadowBank), which every shadowed\n"
@@ -2339,14 +2451,17 @@ namespace comp
 			"irradiance probe's sun, else the last one seen, else the fallback colour. Each frame the draws\n"
 			"reading them vote, weighted by primitive count.");
 
-		form_checkbox("Draw the sun", "##sun_on", &sun_enabled, "Saved as [Sun] Enabled.");
-		form_label("Brightness", "1 = the game's. Saved as [Sun] IntensityScale.");
+		form_checkbox("Draw the sun", "##sun_on", &sun_enabled, nullptr);
+		form_label("Brightness", "1 is the game's brightness.");
 		ImGui::SliderFloat("##sun_int", &sun_intensity_scale, 0.0f, 20.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
-		form_label("Size in the sky", "Angular diameter: bigger = softer shadows. The real sun is 0.53 deg. Saved as [Sun] AngularDiameter.");
+		form_label("Size in the sky", "Bigger gives softer shadows. The real sun is 0.53 degrees.");
 		ImGui::SliderFloat("##sun_size", &sun_angular_diameter, 0.05f, 10.0f, "%.2f deg");
-		form_label("Colour when the game gives none", "Used while no draw supplies a sun colour. Saved as [Sun] FallbackColour.");
+		form_label("Fallback colour", "Used when the game gives no sun colour.");
 		ImGui::ColorEdit3("##sun_fallback", sun_fallback_colour, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
 		solo_flash_imgui(KEY_SUN);
+
+		ImGui::Spacing();
+		own_sun_imgui();
 
 		ImGui::SeparatorText("What the game gives");
 		auto show_light = [](const char* name, const game::sun_light::light& l)
@@ -2563,7 +2678,10 @@ namespace comp
 		if (r.kind == kind::sun) ImGui::TextDisabled("-");
 		else ImGui::Text("%.1f m", r.distance);
 		ImGui::TableNextColumn();
-		ImGui::Text("%.2f %.2f %.2f", r.colour[0], r.colour[1], r.colour[2]);
+		if (r.colour[0] + r.colour[1] + r.colour[2] > 0.0f)
+			ImGui::Text("%.2f %.2f %.2f", r.colour[0], r.colour[1], r.colour[2]);
+		else
+			ImGui::TextDisabled("-");
 		ImGui::TableNextColumn();
 		if (r.range_end > 0.0f) ImGui::Text("%.1f-%.1f", r.range_begin, r.range_end);
 		else ImGui::TextDisabled("-");

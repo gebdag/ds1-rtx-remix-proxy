@@ -870,6 +870,7 @@ namespace comp::game::atmosphere
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }
+		else if (key == "Lights.SelectSun") { if (auto* gl = game_lights::get()) gl->select_sun(); }
 		// Menu.Tab=<name>: opens the F4 menu on that tab (lookdev screenshots of the UI); "Lights+" also
 		// opens every section of the Lights tab. Menu.Tab=0 closes the menu.
 		else if (key == "Menu.Tab")
