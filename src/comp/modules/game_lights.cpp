@@ -766,11 +766,12 @@ namespace comp
 
 			// The green light seen when the player is hit (not every time): every green-dominant light of an effect that
 			// comes on within 5 m of the player is logged once, with what made it, so the effect can be named and fixed.
-			if ((row.kind == kind::fx_direct || row.kind == kind::effect || row.kind == kind::ffx_table || row.kind == kind::synthetic) &&
-				row.distance > 0.0f && row.distance < 5.0f && row.colour[1] > 1.3f * row.colour[0] && row.colour[1] > 1.3f * row.colour[2])
+			if (row.kind != kind::custom && row.kind != kind::mesh && row.kind != kind::sun && row.kind != kind::player &&
+				row.distance > 0.0f && row.distance < 5.0f && row.colour[1] > 1.2f * row.colour[0] && row.colour[1] > 0.9f * row.colour[2])
 			{
+				// By slot and effect: a slot reused by another effect is logged again.
 				static std::unordered_set<uint64_t> logged_green;
-				if (logged_green.size() < 200 && logged_green.insert(row.ident()).second)
+				if (logged_green.size() < 200 && logged_green.insert(row.ident() ^ (static_cast<uint64_t>(static_cast<uint32_t>(src.ffx_id)) << 32)).second)
 					shared::common::log("GreenLight", std::format("{} '{}' ffx {} slot {} colour ({:.3f}, {:.3f}, {:.3f}) reach {:.1f}-{:.1f} m, {:.1f} m from the player at ({:.1f}, {:.1f}, {:.1f}) frame {}",
 						kKindSource[static_cast<int>(row.kind)], row.name, src.ffx_id, src.slot, row.colour[0], row.colour[1], row.colour[2],
 						row.range_begin, row.range_end, row.distance, src.x, src.y, src.z, shared::common::ffp_state::get().frame_count()));
@@ -1025,6 +1026,9 @@ namespace comp
 			// A colour and direction set in the panel but not saved belong to the map they were set in.
 			if (seen_sun_map_ != 0)
 				read_own_sun();
+			// Solo on the last map's sun would leave every light dark here.
+			if (solo_ == sun_map_key(seen_sun_map_))
+				solo_ = 0;
 			seen_sun_map_ = sun_map;
 			seen_sun_ = {};
 			seen_sun_strength_ = 0.0f;
@@ -1074,7 +1078,7 @@ namespace comp
 			linear[c] = std::pow(base + std::max(key_colour[c], 0.0f), 2.2f) - std::pow(base, 2.2f);
 		}
 
-		const float mult = sun_intensity_scale * edit_multiplier(sun_map_key(sun_map));
+		const float mult = sun_intensity_scale * edit_multiplier(sun_map_key(sun_map), KEY_SUN);
 		remixapi_Float3D radiance = {
 			linear[0] * mult,
 			linear[1] * mult,
@@ -1793,15 +1797,21 @@ namespace comp
 		const auto* o = find_override(row.key);
 		for (int c = 0; c < 3; ++c)
 			l.pos[c] = row.pos[c] + (o ? o->offset[c] : 0.0f);
+		// A custom light's copy a little above it: at its exact spot it would share its key (kind and position) and so its edits.
+		if (row.kind == kind::custom)
+			l.pos[1] += 0.25f;
 		const float* colour = o && o->recolour ? o->colour : row.colour;
-		const float peak = std::max({ colour[0], colour[1], colour[2], 1e-4f });
+		const float peak = std::max({ colour[0], colour[1], colour[2] });
+		const bool lit = peak > 1e-3f;
 		for (int c = 0; c < 3; ++c)
-			l.colour[c] = std::clamp(colour[c] / peak, 0.0f, 1.0f);
-		// The game's falloff and reach, as bright as the row is drawn (its colour's peak times its edit).
+			l.colour[c] = lit ? std::clamp(colour[c] / peak, 0.0f, 1.0f) : 1.0f;
+		// The game's falloff and reach, as bright as the row is drawn (its colour's peak times its edit); a light the game
+		// gave no parameters a plain torch's (0.5-4 m, 1).
 		l.game_falloff = true;
-		l.dwindle_begin = std::max(row.range_begin, 0.01f);
-		l.dwindle_end = std::max(row.range_end, l.dwindle_begin + 0.01f);
-		l.intensity = peak * (o ? o->multiplier : 1.0f);
+		const bool reach = row.range_end > row.range_begin && row.range_end > 0.05f;
+		l.dwindle_begin = reach ? std::max(row.range_begin, 0.01f) : 0.5f;
+		l.dwindle_end = reach ? row.range_end : 4.0f;
+		l.intensity = (lit ? peak : 1.0f) * (o ? o->multiplier : 1.0f);
 		lights.push_back(l);
 		game::custom_lights::mark_dirty();
 		custom_selected_ = static_cast<int>(lights.size()) - 1;
@@ -2254,6 +2264,8 @@ namespace comp
 			const auto* o = find_override(key);
 			mixed |= (o ? o->disabled : false) != first.disabled || (o ? o->multiplier : 1.0f) != first.multiplier ||
 				(o ? o->recolour : false) != first.recolour;
+			for (int c = 0; c < 3; ++c)
+				mixed |= (o ? o->offset[c] : 0.0f) != first.offset[c];
 		}
 		if (mixed)
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "These differ: the values below are the first light's.");
