@@ -37,6 +37,10 @@ namespace comp::game::sky_meshes
 	// in different meshes (Firelink's m0100B2A10, mesh0 in front of mesh1's stone wall).
 	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// True when this indexed draw is a mesh listed in rtx_comp\sky\no_shadow_meshes.txt: a face no view shows that only shuts
+	// light out (the Asylum's duplicate wall face in front of the wall under its cell windows). Lighting rays pass it.
+	bool is_no_shadow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// True when this indexed draw is a mesh listed in rtx_comp\sky\emitter_meshes.txt: a character that gives off a
 	// little light the game bakes into nothing (the crystal lizard), see game/effect_lights.hpp.
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);

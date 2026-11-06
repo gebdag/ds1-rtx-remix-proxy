@@ -866,7 +866,9 @@ namespace comp
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
 					// A lamp holds its light inside: lighting rays pass it (game/mesh_lights.hpp).
 					const bool lamp = game::mesh_lights::is_lamp(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
-					if (lamp)
+					// So do the faces in rtx_comp\sky\no_shadow_meshes.txt (game/sky_meshes.hpp): same marker.
+					const bool no_shadow = !water_draw && game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+					if (lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
 					game::effect_lights::observe_draw(dev,
@@ -955,7 +957,7 @@ namespace comp
 						ffp.clear_draw_tint(dev);
 					if (effect)
 						ffp.clear_sp_effect(dev);
-					if (inside_out || lamp)
+					if (inside_out || lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				}
 				else

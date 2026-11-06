@@ -1,0 +1,7 @@
+# Dark Souls map meshes that cast no shadow in Remix: lighting rays pass them (Surface::isDs1NoShadow), the camera still sees them.
+# For faces no view shows that only shut light out. Hand-kept: <index FNV-1a 64> <index count> <source>  (hashes as in thin_wall_meshes.txt)
+#
+# Undead Asylum, under the cell windows: m0300B1A18 mesh9 (m19_b_wall_05) stands 5.1 cm in front of m0010B1A18 mesh11's wall and faces
+# it, so the corridor sees through it (culled) to that wall and to the strip of floor between the two. Every light ray from that floor met
+# mesh9 and the strip showed as a black line along the wall's foot (frame_20261106_115049, draw 512). mesh11 still casts the wall's shadow.
+4bd3fc480980e512 6045 m18_01_00_00/m0300B1A18/mesh9/lod0

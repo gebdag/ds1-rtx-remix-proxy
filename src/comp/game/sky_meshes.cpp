@@ -13,7 +13,7 @@ namespace comp::game::sky_meshes
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow };
 
 		struct range_key
 		{
@@ -93,6 +93,8 @@ namespace comp::game::sky_meshes
 			load_table_locked("sky_meshes.txt", kind::sky, "sky mesh", "sky layers stay world geometry");
 			load_table_locked("shell_meshes.txt", kind::shell, "blended shell", "blended shells stay decals");
 			load_table_locked("glass_meshes.txt", kind::glass, "window glass", "window glass is not split");
+			// Before the thin walls: a face listed in both casts no shadow at all.
+			load_table_locked("no_shadow_meshes.txt", kind::no_shadow, "no-shadow", "every map mesh casts shadows");
 			// Last: a face set already listed as another kind keeps it.
 			load_table_locked("thin_wall_meshes.txt", kind::thin_wall, "thin wall", "walls split across meshes stay single-sided");
 			load_table_locked("emitter_meshes.txt", kind::emitter, "light emitter", "no character lights");
@@ -129,7 +131,7 @@ namespace comp::game::sky_meshes
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
-					it->second.k == kind::thin_wall ? "thin wall" : "light emitter";
+					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : "light emitter";
 				shared::common::log("SkyMeshes", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -183,6 +185,11 @@ namespace comp::game::sky_meshes
 	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
 		return lookup(ib, type, start_index, prim_count).k == kind::thin_wall;
+	}
+
+	bool is_no_shadow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		return lookup(ib, type, start_index, prim_count).k == kind::no_shadow;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
