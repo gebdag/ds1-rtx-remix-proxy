@@ -43,6 +43,8 @@ namespace shared::globals
 
 	extern bool imgui_is_rendering;
 	extern bool imgui_menu_open;
+	// The Remix runtime's menu (Alt+X), which holds the game's input.
+	extern bool remix_menu_open;
 	// A tab of the F4 menu to bring to the front on the next frame (live option proxy.Menu.Tab), else empty.
 	extern std::string imgui_select_tab;
 	// Open every section of the Lights tab on the next frame (live option proxy.Menu.Tab=Lights+).

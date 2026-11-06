@@ -42,7 +42,7 @@ namespace comp::game::input_customizer
 	static bool menu_holds_input()
 	{
 		return (shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)
-			|| shared::globals::input_frozen;
+			|| shared::globals::input_frozen || shared::globals::remix_menu_open;
 	}
 
 	// Only the mod's own import comes here; DirectInput and the bridge keep the real data.

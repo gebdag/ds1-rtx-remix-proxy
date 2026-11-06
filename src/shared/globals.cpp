@@ -55,6 +55,7 @@ namespace shared::globals
 
 	bool imgui_is_rendering = false;
 	bool imgui_menu_open = false;
+	bool remix_menu_open = false;
 	std::string imgui_select_tab;
 	bool imgui_open_light_sections = false;
 	bool imgui_allow_input_bypass = false;

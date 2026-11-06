@@ -45,8 +45,26 @@ namespace comp
 		game::waterfall::observe_sprites(points, count);
 	}
 
+	// The Remix menu (Alt+X) holds the game's input, as the F4 menu does. The bridge says when it is open: it keeps hooks of the game's from seeing its messages.
+	void read_remix_menu_state()
+	{
+		using ui_active_t = int(__stdcall*)();
+		static const auto ui_active = []
+		{
+			const HMODULE bridge = GetModuleHandleA(shared::common::config::get().remix.dll_name.c_str());
+			return bridge ? reinterpret_cast<ui_active_t>(GetProcAddress(bridge, "ds1_remix_ui_active")) : nullptr;
+		}();
+		if (!ui_active)
+			return;
+		const bool open = ui_active() != 0;
+		if (open != shared::globals::remix_menu_open)
+			shared::common::log("Input", open ? "Remix menu open: game input held" : "Remix menu closed: game input back");
+		shared::globals::remix_menu_open = open;
+	}
+
 	void on_begin_scene_cb()
 	{
+		read_remix_menu_state();
 		if (!tex_addons::initialized) {
 			tex_addons::init_texture_addons();
 		}

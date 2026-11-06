@@ -243,7 +243,7 @@ namespace shared::common
 		}
 
 		// Lookdev input freeze: the game sees no keys or mouse at all (ImGui was fed above).
-		if (shared::globals::input_frozen || (!do_not_clear && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)) {
+		if (shared::globals::input_frozen || shared::globals::remix_menu_open || (!do_not_clear && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)) {
 			memset(lpvData, 0, cbData);
 		}
 
