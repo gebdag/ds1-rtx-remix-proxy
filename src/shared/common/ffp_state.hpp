@@ -203,6 +203,10 @@ namespace shared::common
 		// Mean RGB of each face of a cube texture's top level (+X, -X, +Y, -Y, +Z, -Z), cached
 		// per texture. 8888 cubes only (DS1's irradiance probes); false for anything else.
 		bool cube_face_averages(IDirect3DBaseTexture9* texture, std::array<std::array<float, 3>, 6>& faces);
+		// A sprite batch, to whoever would take it over instead of having it drawn (the fog gates).
+		// What becomes of a sprite batch: as usual, taken (not drawn), or drawn with a marker for stage 4's D3DTSS_CONSTANT (returned, anything above 1).
+		using sprite_batch_fn = DWORD(*)(IDirect3DBaseTexture9* texture, const void* vertices, UINT stride, UINT position_offset, UINT colour_offset, UINT count);
+		void set_sprite_batch_taker(sprite_batch_fn fn) { sprite_batch_fn_ = fn; }
 		// Cube textures the device created, by address: the game reaches its probes through handles of its own.
 		void note_cube(IDirect3DBaseTexture9* cube)
 		{
@@ -819,6 +823,7 @@ namespace shared::common
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<std::array<float, 3>, 6>> cube_faces_;
 		std::unordered_set<IDirect3DBaseTexture9*> known_cubes_;
 		uint32_t known_cube_vtable_ = 0;
+		sprite_batch_fn sprite_batch_fn_ = nullptr;
 		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking

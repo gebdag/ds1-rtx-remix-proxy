@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "game/waterfall.hpp"
+#include "game/fog_gates.hpp"
 
 #include "modules/imgui.hpp"
 #include "modules/renderer.hpp"
@@ -93,6 +94,12 @@ namespace comp
 		// Where the runtime's water ripple field is centred (rtx.ds1Ripple.playerPosition).
 		game::water_ripples::frame_update();
 
+		// The fog gates seen, for the runtime's volume (rtx.ds1FogGate.*).
+		game::fog_gates::frame_update();
+
+		// Whether the player stands in falling water (rtx.ds1Wet.fall*).
+		game::waterfall::frame_update(shared::common::ffp_state::get().frame_count());
+
 		// Settings that belong to the area the player is in (rtx_comp\\area_overrides.ini).
 		game::area_overrides::frame_update(shared::common::ffp_state::get().frame_count());
 
@@ -107,6 +114,7 @@ namespace comp
 				return id != 0 && ((id >> 24) & 0xFF) < 99; // the bound of map_lights' current_map_name
 			});
 			ffp.set_sprite_observer(observe_sprites);
+			ffp.set_sprite_batch_taker(game::fog_gates::observe_batch);
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}

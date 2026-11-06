@@ -2299,6 +2299,15 @@ namespace shared::common
 				base, cam[0], cam[1], cam[2], offset ? "on" : "off", ox, oy, oz, world[12], world[13], world[14]));
 		}
 
+		const DWORD batch_verdict = sprite_batch_fn_ && unlit && indices && !points && cur_decl_has_color_
+			? sprite_batch_fn_(cur_texture_[0], vertices, stride, cur_decl_pos_off_, cur_decl_color_off_, min_index + num_verts) : 0;
+		if (batch_verdict == 1)
+		{
+			hr = S_OK;
+			return true;
+		}
+		const DWORD batch_marker = batch_verdict > 1 ? batch_verdict : 0;
+
 		// Repack: position, colour, uv.
 		UINT count = points ? prim_count * 6
 			: indices ? min_index + num_verts
@@ -2549,6 +2558,8 @@ namespace shared::common
 		const bool unfogged = !masked && sprite_dest == D3DBLEND_INVSRCALPHA && (vs_const_[159 * 4 + 1] == 0.0f || (vs_const_[135 * 4 + 3] == 0.0f && ps_const_[4 * 4 + 3] == 0.0f));
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged ? kUnhazedUnlitMarker : kUnlitMarker);
+		if (batch_marker)
+			dev->SetTextureStageState(4, D3DTSS_CONSTANT, batch_marker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		// A sprite whose shader never reads the scene depth (SimpleSpriteType0: a message's runes, laid on the
@@ -2644,6 +2655,8 @@ namespace shared::common
 		if (game_rt) game_rt->Release();
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+		if (batch_marker)
+			dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 		if (feathered)
 			dev->SetTextureStageState(2, D3DTSS_CONSTANT, stage2_constant);
 		if (debug_opaque)

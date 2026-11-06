@@ -37,7 +37,8 @@ extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 namespace comp
 {
 	WNDPROC g_game_wndproc = nullptr;
-	
+
+
 	LRESULT __stdcall wnd_proc_hk(HWND window, UINT message_type, WPARAM wparam, LPARAM lparam)
 	{
 		game::input_customizer::on_window_message(window);

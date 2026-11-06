@@ -272,6 +272,9 @@ namespace shared::common
 			float effect_table_scale = 1.0f; // [Lights] EffectTableScale, the colour of table effect lights: fire 1.8x in light, as the game's own fire lights
 		} lights;
 
+		// [FogGate] Enable: fog gates as the runtime's volume instead of the game's sprites (game/fog_gates.hpp).
+		bool fog_gate_enable = false; // a prototype, off for now
+
 		// The light the game hangs on the player's head (a LerpBank point light on a
 		// character dummy-poly, coloured by the current area's POINT_LIGHT_BANK). It is
 		// split out of the harvested lights so it can be tuned on its own; [Lights]
