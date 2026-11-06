@@ -1,0 +1,11 @@
+# Custom lights for m13_00_00_00 (the Catacombs). F4 > Lights > Custom lights edits and saves this file.
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
+#
+# The light from above: the game's 15 light shafts (sky model m9900B0A13) fan from about 47 -28 306 down to a 25 m spread
+# around 45 -58 255, along -0.20 -0.57 -0.80. Three wide, fully soft spots with 6 m emitters along the middle of that fan fill
+# the upper cave evenly (one narrow spot read as a spotlight). Volumetric.
+39.5 -43.0 279.0 8 12 215 230 255 600 Catacombs_fill_left remix 11 0.00 6.0 1.00 spot -0.198 -0.572 -0.796 170 1.00
+45.5 -41.4 284.0 8 12 215 230 255 600 Catacombs_fill_mid remix 11 0.00 6.0 1.00 spot -0.198 -0.572 -0.796 170 1.00
+51.5 -43.0 279.0 8 12 215 230 255 600 Catacombs_fill_right remix 11 0.00 6.0 1.00 spot -0.198 -0.572 -0.796 170 1.00

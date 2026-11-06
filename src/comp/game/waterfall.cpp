@@ -363,8 +363,75 @@ namespace comp::game::waterfall
 		}
 	}
 
+	namespace
+	{
+		// The player's current animation: [[[[0x12E29E8] + 0x10] + 0x38] + 0x46C] + 0x60 (the root global resolved by
+		// its pattern). The bonfire interactions, rest and kindle, are 7700, 7710, 7720 and 7725 (FFX 90012/90015/90016 hang off them in
+		// c0000's TAE); the range takes 7700 to 7729.
+		constexpr DWORD kAnimBase = 0x012E29E8;
+		constexpr int kBonfireAnimFirst = 7700, kBonfireAnimLast = 7729;
+
+		bool read_dword(DWORD addr, DWORD& out)
+		{
+			__try { out = *reinterpret_cast<const DWORD*>(addr); return true; }
+			__except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+		}
+
+		int player_animation()
+		{
+			DWORD p = 0;
+			if (!read_dword(kAnimBase, p) || !p || !read_dword(p + 0x10, p) || !p || !read_dword(p + 0x38, p) || !p ||
+				!read_dword(p + 0x46C, p) || !p || !read_dword(p + 0x60, p))
+				return -1;
+			return static_cast<int>(p);
+		}
+
+		// Resting at a bonfire restores the player, and so does a warp or a load: the body is cleared of water, mud and lava. The
+		// runtime clears on every new value of rtx.ds1Wet.clearEvent.
+		void body_clear_update()
+		{
+			static bool was_at_bonfire = false;
+			static int count = 0, sent = 0;
+			static float last_pos[3] = {};
+			static bool have_pos = false;
+			// Not on a change of map id: that is the block the player stands in, which changes on walking over a seamless seam.
+			// A warp, a load or a death moves the player far in one step, which the position check below sees.
+			bool clear = false;
+			if (!shared::globals::lookdev_host)
+			{
+				const int anim = player_animation();
+				const bool at_bonfire = anim >= kBonfireAnimFirst && anim <= kBonfireAnimLast;
+				if (at_bonfire && !was_at_bonfire)
+				{
+					clear = true;
+					log("BodyClear", std::format("bonfire animation {}", anim));
+				}
+				was_at_bonfire = at_bonfire;
+				float x = 0.0f, depth = 0.0f, up = 0.0f;
+				if (camera::get_char_pos(x, depth, up) && !(x == 0.0f && depth == 0.0f && up == 0.0f))
+				{
+					// A warp inside the map: far further in one step than the player can move.
+					constexpr float kWarp = 30.0f;
+					if (have_pos && (x - last_pos[0]) * (x - last_pos[0]) + (depth - last_pos[2]) * (depth - last_pos[2]) + (up - last_pos[1]) * (up - last_pos[1]) > kWarp * kWarp)
+						clear = true;
+					last_pos[0] = x;
+					last_pos[1] = up;
+					last_pos[2] = depth;
+					have_pos = true;
+				}
+			}
+			if (clear)
+				count++;
+			auto& bridge = shared::common::remix_api::get().m_bridge;
+			if (count != sent && bridge.SetConfigVariable &&
+				bridge.SetConfigVariable("rtx.ds1Wet.clearEvent", std::to_string(count).c_str()) == REMIXAPI_ERROR_CODE_SUCCESS)
+				sent = count;
+		}
+	}
+
 	void frame_update(unsigned int frame)
 	{
+		body_clear_update();
 		if (g_sprites_this_frame >= kSpritesInContact)
 			g_sprite_time = GetTickCount();
 		g_sprites_this_frame = 0;
