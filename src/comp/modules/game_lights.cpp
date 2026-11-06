@@ -826,10 +826,12 @@ namespace comp
 				const float scale = intensity_scale * falloff * mult;
 				radiance = { colour[0] * scale, colour[1] * scale, colour[2] * scale };
 			}
+			// The list's own offset (Move) on top: shared by every light of a group, as its other edits are.
+			const float* moved = o ? o->offset : nullptr;
 			const remixapi_Float3D position = {
-				src.x + manual_offset_[0],
-				src.y + manual_offset_[1],
-				src.z + manual_offset_[2],
+				src.x + manual_offset_[0] + (moved ? moved[0] : 0.0f),
+				src.y + manual_offset_[1] + (moved ? moved[1] : 0.0f),
+				src.z + manual_offset_[2] + (moved ? moved[2] : 0.0f),
 			};
 
 			if (radiance.x <= 0.0f && radiance.y <= 0.0f && radiance.z <= 0.0f)
@@ -1420,6 +1422,10 @@ namespace comp
 			o.recolour = recolour != 0;
 			std::string include;
 			o.include_map = (in >> include) && include == "1";
+			// "move x y z" after include_map (files from before it have the name there).
+			std::string word;
+			if ((in >> word) && word == "move" && !(in >> o.offset[0] >> o.offset[1] >> o.offset[2]))
+				o.offset[0] = o.offset[1] = o.offset[2] = 0.0f;
 			overrides_[std::stoull(key_text, nullptr, 16)] = o;
 		}
 		return true;
@@ -1446,8 +1452,8 @@ namespace comp
 				saved.emplace_back(key, &o);
 		std::sort(saved.begin(), saved.end());
 		for (const auto& [key, o] : saved)
-			s += std::format("{:016x} {} {:.3f} {} {} {}\n", key, o->disabled ? 1 : 0, o->multiplier,
-				o->recolour ? 1 : 0, format_float3(o->colour), o->include_map ? 1 : 0);
+			s += std::format("{:016x} {} {:.3f} {} {} {} move {:.3f} {:.3f} {:.3f}\n", key, o->disabled ? 1 : 0, o->multiplier,
+				o->recolour ? 1 : 0, format_float3(o->colour), o->include_map ? 1 : 0, o->offset[0], o->offset[1], o->offset[2]);
 		std::vector<uint64_t> decoupled(decoupled_.begin(), decoupled_.end());
 		std::sort(decoupled.begin(), decoupled.end());
 		for (const uint64_t key : decoupled)
@@ -1499,7 +1505,7 @@ namespace comp
 			std::ofstream file(path, std::ios::trunc);
 			if (file)
 			{
-				file << "# Per-light edits from F4 -> Lights. key disabled multiplier recolour r g b include_map  name\n";
+				file << "# Per-light edits from F4 -> Lights. key disabled multiplier recolour r g b include_map move dx dy dz  name\n";
 				for (const auto& [key, o] : overrides_)
 				{
 					if (o.is_default() || (key & kSessionKeyBit) != 0)
@@ -1507,8 +1513,9 @@ namespace comp
 					std::string name;
 					for (const auto& r : rows_)
 						if (r.key == key) name = r.name;
-					file << std::format("{:016x} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {}  {}\n", key, o.disabled ? 1 : 0,
-						o.multiplier, o.recolour ? 1 : 0, o.colour[0], o.colour[1], o.colour[2], o.include_map ? 1 : 0, name);
+					file << std::format("{:016x} {} {:.3f} {} {:.3f} {:.3f} {:.3f} {} move {:.3f} {:.3f} {:.3f}  {}\n", key, o.disabled ? 1 : 0,
+						o.multiplier, o.recolour ? 1 : 0, o.colour[0], o.colour[1], o.colour[2], o.include_map ? 1 : 0,
+						o.offset[0], o.offset[1], o.offset[2], name);
 				}
 				for (const uint64_t key : decoupled_)
 					file << std::format("decoupled {:016x}\n", key);
@@ -1763,6 +1770,30 @@ namespace comp
 			for (float& d : sun_direction)
 				d /= std::max(length, 1e-6f);
 		}
+	}
+
+	void game_lights::duplicate_as_custom(const light_row& row)
+	{
+		auto& lights = game::custom_lights::edit();
+		game::custom_lights::light l;
+		l.name = row.name.empty() ? "copy" : row.name + "_copy";
+		std::replace(l.name.begin(), l.name.end(), ' ', '_');
+		const auto* o = find_override(row.key);
+		for (int c = 0; c < 3; ++c)
+			l.pos[c] = row.pos[c] + (o ? o->offset[c] : 0.0f);
+		const float* colour = o && o->recolour ? o->colour : row.colour;
+		const float peak = std::max({ colour[0], colour[1], colour[2], 1e-4f });
+		for (int c = 0; c < 3; ++c)
+			l.colour[c] = std::clamp(colour[c] / peak, 0.0f, 1.0f);
+		// The game's falloff and reach, as bright as the row is drawn (its colour's peak times its edit).
+		l.game_falloff = true;
+		l.dwindle_begin = std::max(row.range_begin, 0.01f);
+		l.dwindle_end = std::max(row.range_end, l.dwindle_begin + 0.01f);
+		l.intensity = peak * (o ? o->multiplier : 1.0f);
+		lights.push_back(l);
+		game::custom_lights::mark_dirty();
+		custom_selected_ = static_cast<int>(lights.size()) - 1;
+		open_custom_ = true;
 	}
 
 	void game_lights::own_sun_imgui()
@@ -2238,11 +2269,22 @@ namespace comp
 				for (const uint64_t key : keys)
 					std::memcpy(overrides_[key].colour, first.colour, sizeof(first.colour));
 		}
+		form_label("Move", "Metres from where the game puts each of them (x, height, z), the same for all. Saved with Save.");
+		if (ImGui::DragFloat3("##multi_offset", first.offset, 0.01f, -20.0f, 20.0f, "%.2f"))
+			for (const uint64_t key : keys)
+				std::memcpy(overrides_[key].offset, first.offset, sizeof(first.offset));
 		form_checkbox("Flash to find them", "##multi_flash", &flash_selected_, "Makes the selected lights 20 times brighter while ticked.");
 		if (ImGui::Button("Reset these"))
 			for (const uint64_t key : keys)
 				overrides_.erase(key);
-		tip("Clears their own switch, brightness and colour. Saved only with Save.");
+		tip("Clears their own switch, brightness, colour and move. Saved only with Save.");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!have_clipboard_);
+		if (ImGui::Button("Paste onto these"))
+			for (const uint64_t key : keys)
+				overrides_[key] = clipboard_;
+		ImGui::EndDisabled();
+		tip("Gives all of them the copied light's switch, brightness, colour and move.");
 	}
 
 	// Solo and flash work on every light, the pinned ones included.
@@ -2787,6 +2829,10 @@ namespace comp
 				"lightmap. Ticked, Remix draws it as a normal light, which lights the walls and floor too.");
 		form_label("Brightness", "This light only, on top of the source brightness. 0 = off.");
 		ImGui::SliderFloat("##pt_mult", &o.multiplier, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
+		form_label("Move", row.group_key && !row.decoupled
+			? "Metres from where the game puts it (x, height, z). Shared by every light of its group (all of this effect's).\nSaved with Save."
+			: "Metres from where the game puts it (x, height, z). Saved with Save.");
+		ImGui::DragFloat3("##pt_offset", o.offset, 0.01f, -20.0f, 20.0f, "%.2f");
 		if (form_checkbox("Own colour", "##pt_recolour", &o.recolour, "Replace the game's colour with your own.") && o.recolour)
 			std::memcpy(o.colour, row.colour, sizeof(o.colour));
 		if (o.recolour)
@@ -2795,6 +2841,24 @@ namespace comp
 			ImGui::ColorEdit3("##pt_colour", o.colour, ImGuiColorEditFlags_Float);
 		}
 		solo_flash_imgui(row.key);
+
+		if (ImGui::Button("Copy"))
+		{
+			clipboard_ = o;
+			have_clipboard_ = true;
+		}
+		tip("Copies this light's switch, brightness, colour and move, to paste onto others.");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!have_clipboard_);
+		if (ImGui::Button("Paste"))
+			o = clipboard_;
+		ImGui::EndDisabled();
+		tip("Gives this light the copied switch, brightness, colour and move.");
+		ImGui::SameLine();
+		if (ImGui::Button("Duplicate"))
+			duplicate_as_custom(row);
+		tip("Makes a custom light for this map at this light's spot, with its colour and reach on the game's falloff,\n"
+			"to move or change on its own. Save it under 'Custom lights for this map'.");
 
 		if (row.kind == kind::custom)
 		{

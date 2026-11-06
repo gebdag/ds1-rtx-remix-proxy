@@ -180,7 +180,11 @@ namespace comp
 			bool recolour = false;
 			float colour[3] = { 1.0f, 1.0f, 1.0f };
 			bool include_map = false;   // a character-only light drawn anyway (row_state::characters)
-			bool is_default() const { return !disabled && multiplier == 1.0f && !recolour && !include_map; }
+			float offset[3] = {};       // moved from where the game puts it, metres (a bonfire's light off its flame)
+			bool is_default() const
+			{
+				return !disabled && multiplier == 1.0f && !recolour && !include_map && offset[0] == 0.0f && offset[1] == 0.0f && offset[2] == 0.0f;
+			}
 		};
 
 		// A row of the list, rebuilt every frame by sync_lights.
@@ -304,6 +308,11 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
+		// Copy / Paste of a light's edits in the list.
+		light_override clipboard_;
+		bool have_clipboard_ = false;
+		// Duplicate: a custom light made from a row (its spot, colour and reach).
+		void duplicate_as_custom(const light_row& row);
 		std::unordered_set<uint64_t> decoupled_;   // own_key of the lights edited apart from their group, saved
 		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, true, true, true, true, true };
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
