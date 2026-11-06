@@ -764,6 +764,18 @@ namespace comp
 			}
 			++active;
 
+			// The green light seen when the player is hit (not every time): every green-dominant light of an effect that
+			// comes on within 5 m of the player is logged once, with what made it, so the effect can be named and fixed.
+			if ((row.kind == kind::fx_direct || row.kind == kind::effect || row.kind == kind::ffx_table || row.kind == kind::synthetic) &&
+				row.distance > 0.0f && row.distance < 5.0f && row.colour[1] > 1.3f * row.colour[0] && row.colour[1] > 1.3f * row.colour[2])
+			{
+				static std::unordered_set<uint64_t> logged_green;
+				if (logged_green.size() < 200 && logged_green.insert(row.ident()).second)
+					shared::common::log("GreenLight", std::format("{} '{}' ffx {} slot {} colour ({:.3f}, {:.3f}, {:.3f}) reach {:.1f}-{:.1f} m, {:.1f} m from the player at ({:.1f}, {:.1f}, {:.1f}) frame {}",
+						kKindSource[static_cast<int>(row.kind)], row.name, src.ffx_id, src.slot, row.colour[0], row.colour[1], row.colour[2],
+						row.range_begin, row.range_end, row.distance, src.x, src.y, src.z, shared::common::ffp_state::get().frame_count()));
+			}
+
 			// Remix takes radiance and an emitter size rather than a falloff distance, so
 			// the engine's dwindle end sets how much energy the light needs to still read
 			// at that range (inverse-square). The emitter is the flame, emitter_radius_:
