@@ -15,7 +15,7 @@ namespace comp::game::frustum_culling
 	struct light_blocker_settings
 	{
 		float min_size = 8.0f;     // bounding diameter a shape needs to count as a blocker
-		float near_range = 40.0f;  // blockers this close to the camera are always kept
+		float near_range = 50.0f;  // blockers this close to the camera are always kept
 		float sun_reach = 200.0f;  // how far a blocker's shadow is swept along the sun
 	};
 

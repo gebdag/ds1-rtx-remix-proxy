@@ -241,7 +241,7 @@ namespace shared::common
 			float frustum_relaxation_radius = 0.0f;
 			bool keep_light_blockers = true;
 			float light_blocker_min_size = 8.0f;
-			float light_blocker_near_range = 40.0f;
+			float light_blocker_near_range = 50.0f;
 			float light_blocker_sun_reach = 200.0f;
 		} culling;
 

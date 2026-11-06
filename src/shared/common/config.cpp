@@ -239,7 +239,7 @@ namespace shared::common
 		culling.frustum_relaxation_radius = std::max(0.0f, get_float("Culling", "FrustumRelaxationRadius", 0.0f));
 		culling.keep_light_blockers = get_bool("Culling", "KeepLightBlockers", true);
 		culling.light_blocker_min_size = std::max(0.0f, get_float("Culling", "LightBlockerMinSize", 8.0f));
-		culling.light_blocker_near_range = std::max(0.0f, get_float("Culling", "LightBlockerNearRange", 40.0f));
+		culling.light_blocker_near_range = std::max(0.0f, get_float("Culling", "LightBlockerNearRange", 50.0f));
 		culling.light_blocker_sun_reach = std::max(0.0f, get_float("Culling", "LightBlockerSunReach", 200.0f));
 
 		// [Tracer]
