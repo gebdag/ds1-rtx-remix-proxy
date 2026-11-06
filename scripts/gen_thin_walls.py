@@ -36,6 +36,16 @@ GAP_MAX, GAP_MIN, FACING, MIN_SHARE, MIN_AREA = 0.5, 0.01, 0.95, 0.1, 1.0
 CROSS_MODEL = {
     ('m18_01_00_00', 'm0300B1A18', 9),
     ('m18_01_00_00', 'm0010B1A18', 11),
+    # From scripts/scan_cross_model_thin_walls.py --verify (2026-11-06): meshes whose area is >= 10% and >= 1 m^2 covered,
+    # sampled, by a facing surface of another placed piece 1-50 cm in front (the rule above, across models). The scan's
+    # smaller strips (under 10%, the Asylum pair's kind) are not listed: many are props standing on floors.
+    ('m10_01_00_00', 'm2280B1A10', 2), ('m10_01_00_00', 'm2350B1A10', 3), ('m10_01_00_00', 'm2390B1A10', 3),
+    ('m10_01_00_00', 'm2500B1A10', 1), ('m10_01_00_00', 'm2500B1A10', 11), ('m10_01_00_00', 'm3001B1A10', 1),
+    ('m10_01_00_00', 'm3140B1A10', 5), ('m10_01_00_00', 'm3140B1A10', 6), ('m10_02_00_00', 'm2120B2A10', 6),
+    ('m12_01_00_00', 'm9050B1A12', 7), ('m13_00_00_00', 'm0813B0A13', 0), ('m14_00_00_00', 'm0160B0A14', 0),
+    ('m15_01_00_00', 'm3313B1A15', 0), ('m15_01_00_00', 'm3500B1A15', 7), ('m17_00_00_00', 'm2142B0A17', 1),
+    ('m17_00_00_00', 'm2143B0A17', 1), ('m17_00_00_00', 'm2145B0A17', 1), ('m17_00_00_00', 'm2408B0A17', 2),
+    ('m18_01_00_00', 'm0210B1A18', 3), ('m18_01_00_00', 'm0210B1A18', 5),
 }
 CHUNK = 2048
 

@@ -249,7 +249,10 @@ def build(map_stem, radius, keep_sub, wanted):
         "#",
         "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  category  name",
     ]
+    placements = len(unlit)
     unlit = cluster(unlit)
+    if len(unlit) != placements:
+        header.insert(5, f"# {placements} placements merged into {len(unlit)} lights (CLUSTER: one light per clump).")
     def profile(f):
         return EFFECT_PROFILE.get(f, (begin, end, pct))
     body = [f"{p[0]:.4f} {p[1]:.4f} {p[2]:.4f}  {profile(f)[0]:.2f} {profile(f)[1]:.2f}  "

@@ -3,6 +3,7 @@
 #
 # 110 flame placement(s) here; 0 already have an
 # MSB Light event within 6 units and are left to the engine.
+# 110 placements merged into 53 lights (CLUSTER: one light per clump).
 # Colour and falloff: m13_PointLightBank row 39 (standard torch row 39).
 # Colour of FFX 512: the effect's own (EFFECT_COLOUR).
 #
