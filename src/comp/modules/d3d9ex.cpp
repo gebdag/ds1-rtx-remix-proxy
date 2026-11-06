@@ -324,15 +324,15 @@ namespace {
 		}
 	}
 
-	// Per render target: the full size the game last set its viewport at on it when that was a remembered size the proxy
-	// changed (SetViewport), and the size it became; cleared at every device creation and Reset. The game's other scissor
-	// rects on that target are in the same remembered pixels: a message's text box, (394, 144, 1264, 202) at 1280x720, cut
-	// its text away at 1920x1080. They scale with it (scaled_scissor). A target the game set no remembered viewport on keeps
-	// its scissors as they are.
+	// The render targets the game set a remembered full viewport on (SetViewport changed it to the target's size): the ones
+	// it draws its menus and HUD into; cleared at every device creation and Reset. The game's partial scissor rects there are
+	// in its fixed 1280x720 UI space (a message's text box, (394, 144, 1264, 202), cut its text away at 1920x1080) and scale
+	// to the target (scaled_scissor). Not by that viewport: on the menu target the game sets the desktop size it created the
+	// device at (3840x2160), which halved the menus' scissors at 1920x1080 (the menu cut off, the fade dark in one quarter).
 	struct remembered_viewport
 	{
-		UINT game_width = 0, game_height = 0;
-		UINT target_width = 0, target_height = 0;
+		RECT last_scaled {}; // what the last scaled rect became: set again as it is (a Get and Set), it is not scaled twice
+		bool have_last = false;
 	};
 	std::unordered_map<IDirect3DSurface9*, remembered_viewport> s_remembered_viewports;
 
@@ -379,20 +379,33 @@ namespace {
 		return true;
 	}
 
-	// True when the current target is the one the remembered viewport was changed for: the scaled rect.
+	// A partial scissor in the game's UI space on one of those targets: the rect scaled to the target. A rect covering the
+	// whole target, one outside the UI space, or the very rect the last scaling made pass as they are.
 	bool scaled_scissor(IDirect3DDevice9* dev, const RECT& rect, RECT& scaled)
 	{
-		const auto it = s_remembered_viewports.find(current_target(dev));
+		constexpr LONG kUiWidth = 1280, kUiHeight = 720;
+		IDirect3DSurface9* target = current_target(dev);
+		const auto it = s_remembered_viewports.find(target);
 		if (it == s_remembered_viewports.end())
 			return false;
-		const auto& v = it->second;
-		if (!v.game_width || !v.game_height || rect.right > static_cast<LONG>(v.game_width) || rect.bottom > static_cast<LONG>(v.game_height))
+		D3DSURFACE_DESC desc {};
+		if (FAILED(target->GetDesc(&desc)) || (desc.Width == static_cast<UINT>(kUiWidth) && desc.Height == static_cast<UINT>(kUiHeight)))
 			return false;
-		const double sx = double(v.target_width) / v.game_width, sy = double(v.target_height) / v.game_height;
+		if (rect.left <= 0 && rect.top <= 0 && rect.right >= static_cast<LONG>(desc.Width) && rect.bottom >= static_cast<LONG>(desc.Height))
+			return false;
+		auto& v = it->second;
+		if (v.have_last && rect.left == v.last_scaled.left && rect.top == v.last_scaled.top &&
+			rect.right == v.last_scaled.right && rect.bottom == v.last_scaled.bottom)
+			return false;
+		if (rect.left < 0 || rect.top < 0 || rect.right > kUiWidth || rect.bottom > kUiHeight)
+			return false;
+		const double sx = double(desc.Width) / kUiWidth, sy = double(desc.Height) / kUiHeight;
 		scaled.left = static_cast<LONG>(std::lround(rect.left * sx));
 		scaled.top = static_cast<LONG>(std::lround(rect.top * sy));
 		scaled.right = static_cast<LONG>(std::lround(rect.right * sx));
 		scaled.bottom = static_cast<LONG>(std::lround(rect.bottom * sy));
+		v.last_scaled = scaled;
+		v.have_last = true;
 		return true;
 	}
 
@@ -1141,7 +1154,7 @@ namespace comp
 			viewport.Width = target_width;
 			viewport.Height = target_height;
 			if (auto* target = current_target(m_pIDirect3DDevice9))
-				s_remembered_viewports[target] = { pViewport->Width, pViewport->Height, target_width, target_height };
+				s_remembered_viewports.try_emplace(target);
 			return m_pIDirect3DDevice9->SetViewport(&viewport);
 		}
 		return m_pIDirect3DDevice9->SetViewport(pViewport);
