@@ -18,6 +18,14 @@ namespace comp::game::custom_lights
 		std::string g_status = "no map loaded";
 		bool g_loaded = false;
 		bool g_dirty = false;
+		std::vector<light> g_saved; // the file's lights, by file_index
+
+		void remember_saved()
+		{
+			for (size_t i = 0; i < g_lights.size(); ++i)
+				g_lights[i].file_index = static_cast<int>(i);
+			g_saved = g_lights;
+		}
 
 		bool parse(const std::string& line, light& l)
 		{
@@ -64,6 +72,7 @@ namespace comp::game::custom_lights
 		void load()
 		{
 			g_lights.clear();
+			g_saved.clear();
 			g_dirty = false;
 			g_loaded = true;
 			g_map = map_lights::current_map_name();
@@ -93,6 +102,7 @@ namespace comp::game::custom_lights
 				else
 					++rejected;
 			}
+			remember_saved();
 			g_status = rejected ? std::format("{} light(s), {} malformed line(s) skipped", g_lights.size(), rejected)
 				: std::format("{} light(s)", g_lights.size());
 			shared::common::log("CustomLights", std::format("{}: {}", g_path, g_status));
@@ -185,11 +195,17 @@ namespace comp::game::custom_lights
 			file << '\n';
 		}
 		g_dirty = false;
+		remember_saved();
 		g_status = std::format("{} light(s) saved", g_lights.size());
 		return true;
 	}
 
 	void reload() { load(); }
+
+	const light* saved(const light& l)
+	{
+		return l.file_index >= 0 && l.file_index < static_cast<int>(g_saved.size()) ? &g_saved[l.file_index] : nullptr;
+	}
 	const std::string& path() { ensure_current(); return g_path; }
 	const std::string& status() { return g_status; }
 	bool dirty() { return g_dirty; }

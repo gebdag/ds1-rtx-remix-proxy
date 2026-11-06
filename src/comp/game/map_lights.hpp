@@ -61,6 +61,8 @@ namespace comp::game::map_lights
 	const std::vector<category>& categories();
 	void set_category(size_t index, float intensity, float radius, bool on, bool follows_effect);
 	void reset_categories();
+	// A category as categories.txt has it (when it was last read or saved), nullptr when the file has none.
+	const category* saved_category(const std::string& name);
 
 	// The sprite observer (ffp_state::set_sprite_observer): where effects were drawn, how opaque.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);

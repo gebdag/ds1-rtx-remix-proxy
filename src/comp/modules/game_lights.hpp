@@ -236,6 +236,8 @@ namespace comp
 		// Row construction and per-light edits.
 		light_row make_row(const game::point_lights::light& l, const float* player) const;
 		const light_override* find_override(uint64_t key) const;
+		// The edit as light_overrides.txt has it (last read or saved), nullptr for none.
+		const light_override* find_saved_override(uint64_t key) const;
 		float edit_multiplier(uint64_t key, uint64_t ident = 0) const;   // solo / flash / override, 0 = off
 
 		// Settings persistence: [Lights], [Sun], [PlayerLight] in the INI, overrides
@@ -308,6 +310,7 @@ namespace comp
 		// The list.
 		std::vector<light_row> rows_;
 		std::unordered_map<uint64_t, light_override> overrides_;
+		std::unordered_map<uint64_t, light_override> saved_overrides_; // light_overrides.txt as last read or saved
 		// Copy / Paste of a light's edits in the list.
 		light_override clipboard_;
 		bool have_clipboard_ = false;
@@ -320,6 +323,7 @@ namespace comp
 		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no
 		// parameters, stay out.
 		bool kind_game_falloff_[static_cast<int>(light_kind::count)] = { false, true, true, true, true, true, true, true, true, true, true, false };
+		bool kind_game_falloff_initial_[static_cast<int>(light_kind::count)] = {}; // the above at start, for Default
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
 		uint64_t selected_ = KEY_SUN;              // the last row clicked

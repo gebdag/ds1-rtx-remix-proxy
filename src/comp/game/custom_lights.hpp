@@ -42,6 +42,8 @@ namespace comp::game::custom_lights
 		float cone_deg = 30.0f;
 		float softness = 0.2f;
 		float focus = 0.0f;                         // Remix lights only
+		// Which light of the file this is (saved()), -1 for one added since it was read or saved.
+		int file_index = -1;
 	};
 
 	// Slot ids of the lights get() hands out, kFirstSlot + their index in edit(): past the engine's slots,
@@ -55,6 +57,8 @@ namespace comp::game::custom_lights
 
 	bool save();
 	void reload();
+	// The light as the file has it (when it was last read or saved), nullptr for one added since.
+	const light* saved(const light& l);
 	const std::string& path();
 	const std::string& status();
 	// True when edit() differs from the file.

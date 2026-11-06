@@ -142,9 +142,13 @@ namespace comp::game::map_lights
 		return s_categories.size() - 1;
 	}
 
+	// categories.txt as last read or saved.
+	static std::vector<category> s_saved_categories;
+
 	static void load_categories()
 	{
 		s_categories_loaded = true;
+		s_saved_categories.clear();
 		s_categories_path = lights_dir() + "categories.txt";
 
 		std::ifstream file(s_categories_path);
@@ -172,6 +176,7 @@ namespace comp::game::map_lights
 			c.enabled = on != 0;
 			c.follows_effect = follows != 0;
 			c.effect_alpha = effect_alpha > 0.0f ? effect_alpha : 1.0f;
+			s_saved_categories.push_back(c);
 		}
 	}
 
@@ -196,7 +201,16 @@ namespace comp::game::map_lights
 		for (const auto& c : s_categories)
 			file << std::format("{}  {:.3f}  {:.3f}  {}  {}  {:.3f}\n",
 				c.name, c.intensity, c.radius, c.enabled ? 1 : 0, c.follows_effect ? 1 : 0, c.effect_alpha);
+		s_saved_categories = s_categories;
 		return true;
+	}
+
+	const category* saved_category(const std::string& name)
+	{
+		for (const auto& c : s_saved_categories)
+			if (c.name == name)
+				return &c;
+		return nullptr;
 	}
 
 	// ----------------------------------------------------------------- map tables
