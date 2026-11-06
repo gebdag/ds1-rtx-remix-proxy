@@ -39,10 +39,10 @@ namespace comp
 
 		float fire_light_scale = 1.0f;
 		unsigned lightmap_bound_map_id_ = 0;
-		// A map with no named sun row: the strongest sun the game has drawn with there.
+		// A map with no named sun row: the sun the game draws with there now.
 		unsigned seen_sun_map_ = 0;
 		int seen_sun_frames_ = 0;
-		float seen_sun_strength_ = 0.0f;
+		bool seen_map_light_ = false; // the map's geometry has shown its own key light (map c95) since the map was entered
 		game::map_sun::values seen_sun_;
 		bool turned_off_as_character_only(const game::point_lights::light& l) const;
 		float effect_table_scale = 1.0f; // [Lights] EffectTableScale, the colour of table effect lights: fire 1.8x in light, as the game's own fire lights

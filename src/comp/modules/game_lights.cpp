@@ -1031,8 +1031,8 @@ namespace comp
 				solo_ = 0;
 			seen_sun_map_ = sun_map;
 			seen_sun_ = {};
-			seen_sun_strength_ = 0.0f;
 			seen_sun_frames_ = 0;
+			seen_map_light_ = false;
 		}
 		// Not in the first moments of a map, while its draws can still carry the last one's values.
 		constexpr int kSeenSunAfterFrames = 60;
@@ -1043,13 +1043,20 @@ namespace comp
 		// have no sun row (Firelink, whose game sun is black) kept that white as its sun.
 		const bool colour_measured = sun.colour_from != game::sun_light::colour_source::fallback &&
 			sun.colour_from != game::sun_light::colour_source::last_seen;
-		if (!authored.authored && sun.valid && colour_measured && seen_sun_frames_ >= kSeenSunAfterFrames)
+		// A map whose banks have no sun row follows the game's sun as it is drawn now, as every map did before the banks were read. Kept at the
+		// strongest ever seen (adb0e30), anything that showed for a moment stayed for good: the probe's lobe or a character's key light became
+		// Firelink's white sun, where the game's own is black. Once the map's own geometry has shown its key light (map c95), only that counts:
+		// in views where its vote falls short the probe's or a character's would take over for those frames and the sun would come and go.
+		// The last value counted holds until the next.
+		if (!authored.authored)
 		{
-			const float facing[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
-			const float strength = 0.2126f * sun.key.colour[0] + 0.7152f * sun.key.colour[1] + 0.0722f * sun.key.colour[2];
-			if (strength > seen_sun_strength_ || !seen_sun_.has_sun)
+			const bool from_map = sun.colour_from == game::sun_light::colour_source::map_c95;
+			if (!sun.valid)
+				seen_sun_.has_sun = false;
+			else if (colour_measured && seen_sun_frames_ >= kSeenSunAfterFrames && (from_map || !seen_map_light_))
 			{
-				seen_sun_strength_ = strength;
+				seen_map_light_ = seen_map_light_ || from_map;
+				const float facing[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
 				seen_sun_.has_sun = true;
 				std::memcpy(seen_sun_.direction, sun.key.dir, sizeof(seen_sun_.direction));
 				std::memcpy(seen_sun_.lobe, sun.key.colour, sizeof(seen_sun_.lobe));
