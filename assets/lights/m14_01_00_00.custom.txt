@@ -1,0 +1,7 @@
+# Custom lights for m14_01_00_00 (Demon Ruins, Lost Izalith). F4 > Lights > Custom lights edits and saves this file.
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
+#
+# Bed of Chaos: the arena has no light of its own, the game lights it by ambient alone. One warm light over the boss, not as bright as the game's ambient.
+552.0 -412.0 418.0 8 12 255 150 70 100 BedOfChaos_centre remix 90 0.00 3.000 1.00
