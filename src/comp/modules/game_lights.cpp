@@ -1015,7 +1015,11 @@ namespace comp
 		if (seen_sun_frames_ < kSeenSunAfterFrames)
 			seen_sun_frames_++;
 		float ambient[3] = {};
-		if (!authored.authored && sun.valid && seen_sun_frames_ >= kSeenSunAfterFrames)
+		// Only a colour the game draws with now: otherwise current() hands over [Sun] FallbackColour or the last map's colour, and a map whose banks
+		// have no sun row (Firelink, whose game sun is black) kept that white as its sun.
+		const bool colour_measured = sun.colour_from != game::sun_light::colour_source::fallback &&
+			sun.colour_from != game::sun_light::colour_source::last_seen;
+		if (!authored.authored && sun.valid && colour_measured && seen_sun_frames_ >= kSeenSunAfterFrames)
 		{
 			const float facing[3] = { -sun.key.dir[0], -sun.key.dir[1], -sun.key.dir[2] };
 			const float strength = 0.2126f * sun.key.colour[0] + 0.7152f * sun.key.colour[1] + 0.0722f * sun.key.colour[2];
