@@ -1,4 +1,5 @@
 #include "std_include.hpp"
+#include "../game/cutscenes.hpp"
 #include "imgui.hpp"
 
 #include "imgui_internal.h"
@@ -94,6 +95,10 @@ namespace comp
 			m_menu_scale = std::clamp(std::round((m_menu_scale + notches * 0.1f) * 10.0f) / 10.0f, 0.5f, 3.0f);
 			return true;
 		}
+
+		// The game's time stopped and restarted, for capturing a frame of a cutscene.
+		if (message_type == WM_KEYUP && wparam == VK_F7 && !shared::globals::lookdev_host)
+			game::cutscenes::toggle_freeze();
 
 		// DLSS 3D-Guided Neural Rendering on/off.
 		if (message_type == WM_KEYUP && wparam == VK_F1)
@@ -970,6 +975,7 @@ namespace comp
 			ADD_TAB("Perf", perf::tab_imgui);
 			ADD_TAB("Cheats", game::cheats::tab_imgui);
 			ADD_TAB("Debug", game::debug_tools::tab_imgui);
+			ADD_TAB("Cutscenes", game::cutscenes::tab_imgui);
 			ADD_TAB("Lights", tab_lights);
 			ADD_TAB("HUD", game::hud_scale::tab_imgui);
 			ADD_TAB("Dev", tab_dev);

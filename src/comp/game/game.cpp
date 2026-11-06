@@ -1,4 +1,5 @@
 #include "std_include.hpp"
+#include "cutscenes.hpp"
 #include "shared/common/flags.hpp"
 #include "camera.hpp"
 #include "cheats.hpp"
@@ -129,6 +130,7 @@ namespace comp::game
 		camera::init();
 		debug_tools::init();
 		cheats::init();
+		cutscenes::init();
 		input_customizer::init();
 	}
 
