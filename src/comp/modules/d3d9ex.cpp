@@ -329,10 +329,14 @@ namespace {
 	// in its fixed 1280x720 UI space (a message's text box, (394, 144, 1264, 202), cut its text away at 1920x1080) and scale
 	// to the target (scaled_scissor). Not by that viewport: on the menu target the game sets the desktop size it created the
 	// device at (3840x2160), which halved the menus' scissors at 1920x1080 (the menu cut off, the fade dark in one quarter).
+	// Also every render texture the game asked at its 1280x720 UI size and got at the present size (CreateTexture): with the
+	// device created at the game's own size the game sets no remembered viewport there (frame_20261106_114841: the message
+	// text cut away again), and its scissors are in the size it asked for.
 	struct remembered_viewport
 	{
 		RECT last_scaled {}; // what the last scaled rect became: set again as it is (a Get and Set), it is not scaled twice
 		bool have_last = false;
+		LONG ui_width = 1280, ui_height = 720; // the size the game believes the target has
 	};
 	std::unordered_map<IDirect3DSurface9*, remembered_viewport> s_remembered_viewports;
 
@@ -383,11 +387,11 @@ namespace {
 	// whole target, one outside the UI space, or the very rect the last scaling made pass as they are.
 	bool scaled_scissor(IDirect3DDevice9* dev, const RECT& rect, RECT& scaled)
 	{
-		constexpr LONG kUiWidth = 1280, kUiHeight = 720;
 		IDirect3DSurface9* target = current_target(dev);
 		const auto it = s_remembered_viewports.find(target);
 		if (it == s_remembered_viewports.end())
 			return false;
+		const LONG kUiWidth = it->second.ui_width, kUiHeight = it->second.ui_height;
 		D3DSURFACE_DESC desc {};
 		if (FAILED(target->GetDesc(&desc)) || (desc.Width == static_cast<UINT>(kUiWidth) && desc.Height == static_cast<UINT>(kUiHeight)))
 			return false;
@@ -892,6 +896,8 @@ namespace comp
 	{
 		TRACE_IF_ACTIVE(trace_CreateTexture, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
+		const UINT asked_width = Width, asked_height = Height;
+		bool ui_target = false;
 		// Only render and depth textures: the game fills the others (the 1280x720 video frames) itself at the size it
 		// asked for, and writes past the end of a smaller one.
 		if (res.render_width > 0 && res.render_height > 0 && Pool == D3DPOOL_DEFAULT && (Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
@@ -905,6 +911,10 @@ namespace comp
 			else if ((Width == 1280 && Height == 720) || res.was_present_size(Width, Height))
 			{
 				shared::common::log("Resolution", std::format("CreateTexture override {}x{} -> {}x{} (present)", Width, Height, res.present_width, res.present_height));
+				// Only the game's own 1280x720 request: after a Reset it asks again at the size it was given (a present size), whose
+				// scissors are no longer in 1280x720 space.
+				ui_target = (Usage & D3DUSAGE_RENDERTARGET) && Width == 1280 && Height == 720 &&
+					(res.present_width != Width || res.present_height != Height);
 				Width = res.present_width;
 				Height = res.present_height;
 			}
@@ -915,6 +925,24 @@ namespace comp
 			crash_context::note("Tex2D %ux%u L%u f=%s p=%u t=%u hr=%08X", Width, Height, Levels, format_tag(Format).c_str(), Pool, sw.ms(), hr);
 		else if (ppTexture && *ppTexture)
 		{
+			// Its scissors scale from the size the game asked for; any other render texture at a freed one's address does not.
+			if (Usage & D3DUSAGE_RENDERTARGET)
+			{
+				IDirect3DSurface9* surface = nullptr;
+				if (SUCCEEDED((*ppTexture)->GetSurfaceLevel(0, &surface)) && surface)
+				{
+					if (ui_target)
+					{
+						auto& v = s_remembered_viewports[surface];
+						v = {};
+						v.ui_width = static_cast<LONG>(asked_width);
+						v.ui_height = static_cast<LONG>(asked_height);
+					}
+					else
+						s_remembered_viewports.erase(surface);
+					surface->Release();
+				}
+			}
 			game::texture_names::on_device_created(*ppTexture);  // D3DX names its textures after this returns
 			shared::common::ffp_state::get().on_texture_created(*ppTexture);
 		}
@@ -982,6 +1010,8 @@ namespace comp
 		const auto hr = m_pIDirect3DDevice9->CreateRenderTarget(Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
 		if (FAILED(hr))
 			crash_context::note("RT %ux%u f=%s t=%u hr=%08X", Width, Height, format_tag(Format).c_str(), sw.ms(), hr);
+		else if (ppSurface && *ppSurface)
+			s_remembered_viewports.erase(*ppSurface); // a new target at a freed one's address
 		return hr;
 	}
 
