@@ -1,12 +1,10 @@
-# Custom lights for m13_01_00_00 (Tomb of the Giants). F4 > Lights > Custom lights edits and saves this file.
+# Hand-placed lights for m13_01_00_00 (F4 > Lights > Custom lights writes this file).
 # x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
 #   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
 # With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
-#
-# Gravelord Nito's arena: x -174..-107, z -68..-21, floor y -265. Few and faint, so the far stalagmites and walls can be made out; the game's light here is much brighter.
--165 -257 -56 8 12 170 190 230 100 Nito_01 remix 40 0.00 2.500 1.00
--165 -257 -30 8 12 170 190 230 100 Nito_02 remix 40 0.00 2.500 1.00
--142 -257 -52 8 12 170 190 230 100 Nito_03 remix 40 0.00 2.500 1.00
--140 -257 -28 8 12 170 190 230 100 Nito_04 remix 40 0.00 2.500 1.00
--118 -257 -38 8 12 170 190 230 100 Nito_05 remix 40 0.00 2.500 1.00
--128 -257 -26 8 12 170 190 230 100 Nito_06 remix 40 0.00 2.500 1.00
+-159.260 -258.400 -54.240  8.000 12.000  170 190 230  100  Nito_01  remix 40.000 0.00 0.980 1.00
+-161.040 -256.400 -31.780  8.000 12.000  170 190 230  100  Nito_02  remix 40.000 0.00 1.035 1.00
+-137.660 -258.800 -39.540  8.000 12.000  170 190 230  100  Nito_03  remix 40.000 0.00 0.685 1.00
+-146.000 -260.560 -26.660  8.000 12.000  170 190 230  100  Nito_04  remix 40.000 0.00 0.740 1.00
+-145.800 -259.500 -45.940  8.000 12.000  170 190 230  100  Nito_05  remix 40.000 0.00 0.485 1.00
+-128.420 -259.040 -31.000  8.000 12.000  170 190 230  100  Nito_06  remix 40.000 0.00 0.685 1.00
