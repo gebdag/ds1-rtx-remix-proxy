@@ -525,6 +525,30 @@ namespace {
 		const bool ok = ffp.draw_sprite_up(dev, prim, prim_count, min_index, num_verts,
 			indices, index_format, vertices, stride, cls != sfx_class::LitSprite, hr);
 		(ok ? drawn : fallback)++;
+		// TEMPORARY: the Darksign's ground ring. Removed once it is explained.
+		if (comp::game::texture_names::name_of(ffp.cur_texture(0)) == "s00050")
+		{
+			static uint32_t ring_frame = 0;
+			if (ffp.frame_count() >= ring_frame)
+			{
+				ring_frame = ffp.frame_count() + 5;
+				const auto* v = static_cast<const float*>(vertices);
+				const auto* c = ffp.ps_const_data() + 139 * 4;
+				DWORD blend = 0, src = 0, dst = 0, z = 0;
+				dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+				dev->GetRenderState(D3DRS_SRCBLEND, &src);
+				dev->GetRenderState(D3DRS_DESTBLEND, &dst);
+				dev->GetRenderState(D3DRS_ZENABLE, &z);
+				float ox = 0, oy = 0, oz = 0;
+				const bool offset = ffp.world_offset(ox, oy, oz);
+				const auto* bytes = static_cast<const unsigned char*>(vertices);
+				const DWORD colour = stride == 48 ? *reinterpret_cast<const DWORD*>(bytes + 24) : 0;
+				const float feather = stride == 48 ? *reinterpret_cast<const float*>(bytes + 40) : 0.0f;
+				const auto* e = ffp.ps_const_data() + 135 * 4;
+				shared::common::log("RingTest", std::format("frame {} class {} drawn {} hr {:#x} prims {} stride {} first vertex ({:.3f}, {:.3f}, {:.3f}) colour {:#010x} feather {:.2f} c135 ({:.3f}, {:.3f}) c139 ({:.2f}, {:.2f}, {:.2f}, {:.2f}) blend {} {} {} z {} world offset {} ({:.2f}, {:.2f}, {:.2f})",
+					ffp.frame_count(), static_cast<int>(cls), ok, static_cast<uint32_t>(hr), prim_count, stride, v[0], v[1], v[2], colour, feather, e[0], e[1], c[0], c[1], c[2], c[3], blend, src, dst, z, offset, ox, oy, oz));
+			}
+		}
 		return ok;
 	}
 

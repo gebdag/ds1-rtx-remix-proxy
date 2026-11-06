@@ -23,7 +23,11 @@ MAP = 'm17_00_00_00'
 # lanterns, so every fill is a spot down onto the floor and lower walls. The upper tiers are left to their lanterns.
 # The pillar between the halls, at (302, 547), is near black in the game and has a shiny material: each low spot stands on the far side
 # of its hall, with the pillar outside its cone even at the soft edge.
-ROOMS = [('Archives_gears', (425.0, 300.0, 545.0), 3.0, 190.0, 10.0),
+ROOMS = [('Archives_tower_wall_n', (405.0, 250.0, 565.5), 2.0, 15.0, 60.0),
+         ('Archives_tower_wall_e', (405.5, 250.0, 565.0), 2.0, 15.0, 60.0),
+         ('Archives_tower_wall_s', (405.0, 250.0, 564.5), 2.0, 15.0, 60.0),
+         ('Archives_tower_wall_w', (404.5, 250.0, 565.0), 2.0, 15.0, 60.0),
+         ('Archives_gears', (382.0, 237.0, 541.0), 1.5, 2000.0, 20.0),
          ('Archives_elevator_room', (236.0, 211.0, 481.0), 2.5, 3.0, 60.0),
          ('Archives_stair_hall', (260.0, 283.0, 505.0), 2.0, 4.0, 50.0),
          ('Archives_hall_1', (278.5, 340.0, 523.5), 9.0, 85.0, 35.0),
@@ -43,10 +47,8 @@ ROOMS = [('Archives_gears', (425.0, 300.0, 545.0), 3.0, 190.0, 10.0),
          ('Archives_stair_landing', (313.0, 368.0, 527.5), 0.5, 8.0, 0.0),
          # The jail tower: the dome's pale light down the shaft, a spot so the dome itself stays out of it, and a low one for the floors its
          # galleries shade. Blue as the area's ambient: the book walls are yellow, and any paler light turns them olive.
-         ('Archives_tower_dome', (405.0, 277.0, 565.0), 4.0, 14.0, 75.0),
-         ('Archives_tower_low', (405.0, 250.0, 565.0), 3.0, 6.0, 0.0),
          ('Archives_jail_cells', (376.0, 249.0, 533.0), 1.0, 5.0, 0.0),
-         ('Archives_tower_foot', (384.0, 236.0, 546.0), 2.5, 1.2, 0.0),
+         ('Archives_tower_foot', (387.5, 236.5, 549.5), 2.5, 1.2, 0.0),
          # The hidden library below the halls.
          ('Archives_ladder_shaft', (317.0, 297.0, 595.0), 1.5, 6.0, 0.0),
          ('Archives_library_2', (305.0, 295.0, 590.0), 3.0, 10.0, 0.0),
@@ -67,10 +69,11 @@ ROOM_COLOUR = {'Archives_elevator_top': '215 220 255', 'Archives_chest_room_1': 
                'Archives_tower_dome': '130 180 255', 'Archives_tower_low': '130 180 255', 'Archives_jail_cells': '215 220 255',
                'Archives_tower_foot': '215 220 255', 'Archives_ladder_shaft': '225 225 240', 'Archives_library_2': '225 225 240',
                'Archives_library_3': '225 225 240', 'Archives_library_low': '225 225 240', 'Archives_library_under': '225 225 240',
-               'Archives_gears': '255 235 205'}
+               'Archives_gears': '255 250 240', 'Archives_tower_wall_n': '255 225 180', 'Archives_tower_wall_e': '255 225 180', 'Archives_tower_wall_s': '255 225 180', 'Archives_tower_wall_w': '255 225 180'}
 # A spot that does not point straight down: name -> direction. The gears at the tower's foot, (404, 231, 565), lit from high on the far
 # wall. The game has them in a pool of light; from straight above that pool would catch the player as well.
-ROOM_DIRECTION = {'Archives_gears': (-0.284, -0.919, 0.27)}
+ROOM_DIRECTION = {'Archives_tower_wall_n': (0.0, 0.0, 1.0), 'Archives_tower_wall_e': (1.0, 0.0, 0.0), 'Archives_tower_wall_s': (0.0, 0.0, -1.0), 'Archives_tower_wall_w': (-1.0, 0.0, 0.0),
+                  'Archives_gears': (0.693, -0.17, 0.701)}
 
 
 def main():
