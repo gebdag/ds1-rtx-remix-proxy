@@ -63,6 +63,9 @@ namespace comp
 		// A follows-effect stand-in below this level is not drawn (its effect has faded out).
 		constexpr float kEffectLevelOff = 0.002f;
 		constexpr uint64_t kSessionKeyBit = 0x4000000000000000ull;
+		// The sun's edits in the list (brightness, on/off, colour) are the current map's: "SUN" | map id. The top two bits clear, so
+		// never a row key (top bit set) and saved (no session bit). A sun set to 0.1x in one map starts at 1x in the next.
+		uint64_t sun_map_key(unsigned map_id) { return 0x1355'4E00'0000'0000ull | map_id; }
 		constexpr float kRadToDeg = 57.2957795f;
 
 		// Short source name per kind (switches, the selected light's heading), in section order.
@@ -1005,6 +1008,9 @@ namespace comp
 		const auto& authored = game::map_sun::get(sun_map);
 		if (sun_map != seen_sun_map_)
 		{
+			// A colour and direction set in the panel but not saved belong to the map they were set in.
+			if (seen_sun_map_ != 0)
+				read_own_sun();
 			seen_sun_map_ = sun_map;
 			seen_sun_ = {};
 			seen_sun_strength_ = 0.0f;
@@ -1054,7 +1060,7 @@ namespace comp
 			linear[c] = std::pow(base + std::max(key_colour[c], 0.0f), 2.2f) - std::pow(base, 2.2f);
 		}
 
-		const float mult = sun_intensity_scale * edit_multiplier(KEY_SUN);
+		const float mult = sun_intensity_scale * edit_multiplier(sun_map_key(sun_map));
 		remixapi_Float3D radiance = {
 			linear[0] * mult,
 			linear[1] * mult,
@@ -1553,15 +1559,7 @@ namespace comp
 		sun_intensity_scale = cfg.get_float("Sun", "IntensityScale", 1.0f);
 		sun_angular_diameter = cfg.get_float("Sun", "AngularDiameter", 0.53f);
 		cfg.get_float3("Sun", "FallbackColour", sun_fallback_colour);
-		sun_colour_set = cfg.get_float3("Sun", "Colour", sun_colour);
-		sun_direction_set = cfg.get_float3("Sun", "Direction", sun_direction);
-		if (sun_direction_set)
-		{
-			const float length = std::sqrt(sun_direction[0] * sun_direction[0] + sun_direction[1] * sun_direction[1] + sun_direction[2] * sun_direction[2]);
-			sun_direction_set = length > 0.0f;
-			for (float& d : sun_direction)
-				d /= std::max(length, 1e-6f);
-		}
+		read_own_sun();
 
 		auto& p = player_cfg_;
 		p.enabled = cfg.get_bool("PlayerLight", "Enabled", true);
@@ -1751,6 +1749,20 @@ namespace comp
 			custom_lights_imgui();
 		if (header("Diagnostics"))
 			diagnostics_imgui();
+	}
+
+	void game_lights::read_own_sun()
+	{
+		auto& cfg = shared::common::config::get();
+		sun_colour_set = cfg.get_float3("Sun", "Colour", sun_colour);
+		sun_direction_set = cfg.get_float3("Sun", "Direction", sun_direction);
+		if (sun_direction_set)
+		{
+			const float length = std::sqrt(sun_direction[0] * sun_direction[0] + sun_direction[1] * sun_direction[1] + sun_direction[2] * sun_direction[2]);
+			sun_direction_set = length > 0.0f;
+			for (float& d : sun_direction)
+				d /= std::max(length, 1e-6f);
+		}
 	}
 
 	void game_lights::own_sun_imgui()
@@ -2015,7 +2027,8 @@ namespace comp
 
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(), sun_fallback_colour);
 		light_row sun_row;
-		sun_row.key = KEY_SUN;
+		sun_row.key = sun_map_key(game::map_lights::current_map_id());
+		sun_row.id = KEY_SUN;
 		sun_row.kind = kind::sun;
 		sun_row.name = "Sun";
 		{
@@ -2455,14 +2468,22 @@ namespace comp
 			"irradiance probe's sun, else the last one seen, else the fallback colour. Each frame the draws\n"
 			"reading them vote, weighted by primitive count.");
 
-		form_checkbox("Draw the sun", "##sun_on", &sun_enabled, nullptr);
-		form_label("Brightness", "1 is the game's brightness.");
+		{
+			auto& here = overrides_[sun_map_key(game::map_lights::current_map_id())];
+			bool draw_here = !here.disabled;
+			if (form_checkbox("Draw the sun on this map", "##sun_on_map", &draw_here, "This map only; saved with Save. Another map keeps its own."))
+				here.disabled = !draw_here;
+			form_label("Brightness on this map", "This map only, 1 is the game's brightness; saved with Save. Every other map starts at 1.");
+			ImGui::SliderFloat("##sun_int_map", &here.multiplier, 0.0f, 20.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
+		}
+		form_checkbox("Draw the sun (all maps)", "##sun_on", &sun_enabled, nullptr);
+		form_label("Brightness (all maps)", "On every map, on top of each map's own. 1 is the game's brightness.");
 		ImGui::SliderFloat("##sun_int", &sun_intensity_scale, 0.0f, 20.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
 		form_label("Size in the sky", "Bigger gives softer shadows. The real sun is 0.53 degrees.");
 		ImGui::SliderFloat("##sun_size", &sun_angular_diameter, 0.05f, 10.0f, "%.2f deg");
 		form_label("Fallback colour", "Used when the game gives no sun colour.");
 		ImGui::ColorEdit3("##sun_fallback", sun_fallback_colour, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
-		solo_flash_imgui(KEY_SUN);
+		solo_flash_imgui(sun_map_key(game::map_lights::current_map_id()));
 
 		ImGui::Spacing();
 		own_sun_imgui();

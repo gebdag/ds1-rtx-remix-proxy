@@ -127,6 +127,8 @@ namespace comp
 		void observe_draw_lights(const float* ps_const, int light_count, bool character);
 		// The INI's values changed under the running game (game/area_overrides): takes them, keeps per-light edits.
 		void reread_settings();
+		// The sun's own colour and direction as the settings give them now (the INI, and an area's saved sun on top).
+		void read_own_sun();
 
 		// Live diagnostics (atmosphere.cpp set_proxy_option).
 		void set_emitter_radius(float r) { emitter_radius_ = r; }
