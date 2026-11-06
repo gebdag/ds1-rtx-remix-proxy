@@ -65,9 +65,29 @@ namespace comp
 
 		// The game's diffuse for this draw is an atmospheric or backdrop layer
 		// (mist, fog, clouds, light shafts, backdrop cards) by its TPF name.
+		// The Catacombs' light shafts are the last 106 triangles of its sky draw (m13_sky, sky model m9900B0A13: a dome of
+		// strip entries 0-822, then 15 beams from entry 823, vertices 230-285). As sky they showed only where the view reached
+		// the sky, behind the cave. The draw goes to the sky as before, then the beams again as a light shaft
+		// (on_draw_indexed_prim): s_force_shaft is set for that second draw.
+		constexpr UINT kCatacombsSkyPrims = 929;
+		constexpr UINT kCatacombsBeamStart = 823;
+		bool s_force_shaft = false;
+		bool s_beam_split = false;
+
+		bool is_catacombs_sky_with_beams(D3DPRIMITIVETYPE type, UINT prim_count)
+		{
+			if (type != D3DPT_TRIANGLESTRIP || prim_count != kCatacombsSkyPrims)
+				return false;
+			auto& ffp = shared::common::ffp_state::get();
+			const int stage = shared::common::config::get().ffp.albedo_stage;
+			return game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(stage))) == "m13_sky";
+		}
+
 		// A light shaft mesh (texture_names::is_light_shaft), not skinned.
 		bool is_light_shaft_draw()
 		{
+			if (s_force_shaft)
+				return true;
 			auto& ffp = shared::common::ffp_state::get();
 			const int stage = shared::common::config::get().ffp.albedo_stage;
 			return !ffp.cur_decl_is_skinned() && game::texture_names::is_light_shaft(ffp.cur_texture(static_cast<UINT>(stage)));
@@ -75,6 +95,8 @@ namespace comp
 
 		bool is_atmospheric_layer()
 		{
+			if (s_force_shaft)
+				return false;
 			auto& ffp = shared::common::ffp_state::get();
 			const int stage = shared::common::config::get().ffp.albedo_stage;
 			return game::texture_names::is_atmospheric(ffp.cur_texture(static_cast<UINT>(stage)));
@@ -417,6 +439,24 @@ namespace comp
 			return dev->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		}
 
+		// The Catacombs' sky draw: as it is, then its beams as a light shaft, culling off (the sub-strip starts on an odd
+		// triangle, which turns its winding).
+		if (!s_beam_split && is_catacombs_sky_with_beams(PrimitiveType, primCount))
+		{
+			s_beam_split = true;
+			const HRESULT sky_hr = on_draw_indexed_prim(dev, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			DWORD cull = D3DCULL_CCW;
+			dev->GetRenderState(D3DRS_CULLMODE, &cull);
+			dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+			s_force_shaft = true;
+			on_draw_indexed_prim(dev, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices,
+				startIndex + kCatacombsBeamStart, primCount - kCatacombsBeamStart);
+			s_force_shaft = false;
+			dev->SetRenderState(D3DRS_CULLMODE, cull);
+			s_beam_split = false;
+			return sky_hr;
+		}
+
 		auto& ctx = setup_context(dev);
 		const auto im = imgui::get();
 		auto& ffp = shared::common::ffp_state::get();
@@ -581,7 +621,7 @@ namespace comp
 		// conversion would all drop. The water reflection pass redraws the dome
 		// from the mirrored ReflectCamera; it is the only pass with a user clip
 		// plane, and its copy must stay out of the sky.
-		const bool sky_draw = !water_draw && ffp.view_proj_valid() && !ffp.cur_decl_is_skinned() &&
+		const bool sky_draw = !s_force_shaft && !water_draw && ffp.view_proj_valid() && !ffp.cur_decl_is_skinned() &&
 			shared::common::config::get().sky.mark_sky_draws &&
 			(is_sky_layer_draw(dev, PrimitiveType, startIndex, primCount) || is_backdrop_layer(dev));
 
