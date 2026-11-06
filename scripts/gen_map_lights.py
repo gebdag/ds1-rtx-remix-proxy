@@ -61,7 +61,18 @@ EXTRA_FFX = {
 # Effects that are not torches carry their own colour, which wins over the map's torch row:
 # the constant colour keys of the effect's FFX colour block (sfx\*.ffx, R/G/B keyframes).
 #   540: Tomb of the Giants' lantern-reactive halo, R 0.392 G 0.824 B 1.0 (both colour blocks).
-EFFECT_COLOUR = {540: (100, 210, 255)}
+EFFECT_COLOUR = {540: (100, 210, 255), 512: (255, 170, 90)}
+
+# Effects whose placements come in clumps: placements within this many metres become one light at their centre, so a
+# lamp is one light (and one row in F4 > Lights) rather than several stacked at one spot.
+#   512: the Catacombs' niche candles, 2-10 flames per candle holder (frame_20261106_002406: each niche lit far past the
+#        game's small warm glow by up to ten torch-strength lights).
+CLUSTER = {512: 1.2}
+
+# Effects that are not torches keep their own falloff and strength (dwindle begin, end, intensityPct) instead of the map's
+# torch row.
+#   512: a few candles: a short, soft warm glow round the holder.
+EFFECT_PROFILE = {512: (0.3, 2.5, 90)}
 
 AREA_NAMES = {
     "m10_00": "Depths", "m10_01": "Undead Burg / Parish", "m10_02": "Firelink Shrine",
@@ -178,6 +189,31 @@ def short_name(msb_name):
     return re.sub(r"_+", "_", name).strip("_") or "unnamed"
 
 
+def cluster(flames):
+    """Placements of a CLUSTER effect within its distance of each other (chained), as one at their centre, named after the
+    first."""
+    out, done = [], set()
+    for i, (n, f, p) in enumerate(flames):
+        if i in done:
+            continue
+        reach = CLUSTER.get(f)
+        if not reach:
+            out.append((n, f, p))
+            continue
+        group, stack = [i], [i]
+        done.add(i)
+        while stack:
+            a = flames[stack.pop()][2]
+            for j, (_n2, f2, p2) in enumerate(flames):
+                if j not in done and f2 == f and sum((x - y) ** 2 for x, y in zip(a, p2)) <= reach * reach:
+                    done.add(j)
+                    group.append(j)
+                    stack.append(j)
+        centre = tuple(sum(flames[j][2][k] for j in group) / len(group) for k in range(3))
+        out.append((n, f, centre))
+    return out
+
+
 def build(map_stem, radius, keep_sub, wanted):
     sfx, lights = read_events(MSB_DIR / f"{map_stem}.msb")
     flames = [(n, f, p) for n, f, p in sfx if f in wanted]
@@ -213,8 +249,11 @@ def build(map_stem, radius, keep_sub, wanted):
         "#",
         "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  category  name",
     ]
-    body = [f"{p[0]:.4f} {p[1]:.4f} {p[2]:.4f}  {begin:.2f} {end:.2f}  "
-            f"{' '.join(map(str, EFFECT_COLOUR.get(f, (r, g, b))))}  {pct}  {wanted[f]}  {short_name(n)}"
+    unlit = cluster(unlit)
+    def profile(f):
+        return EFFECT_PROFILE.get(f, (begin, end, pct))
+    body = [f"{p[0]:.4f} {p[1]:.4f} {p[2]:.4f}  {profile(f)[0]:.2f} {profile(f)[1]:.2f}  "
+            f"{' '.join(map(str, EFFECT_COLOUR.get(f, (r, g, b))))}  {profile(f)[2]}  {wanted[f]}  {short_name(n)}"
             for n, f, p in unlit]
     return header + body, len(flames), len(unlit), f"{prefix} row {row_id}"
 
