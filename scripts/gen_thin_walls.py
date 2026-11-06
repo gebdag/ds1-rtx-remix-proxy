@@ -28,6 +28,15 @@ import numpy as np
 from gen_sky_meshes import diffuse_name, fnv1a64
 
 GAP_MAX, GAP_MIN, FACING, MIN_SHARE, MIN_AREA = 0.5, 0.01, 0.95, 0.1, 1.0
+
+# Thin walls whose two faces are in different models, which the pairing within a model cannot find: (map, model, mesh).
+# Undead Asylum corridor: m0300B1A18 mesh9 (m19_b_wall_05) rises 0.8 m through the floor 5.1 cm in front of m0010B1A18
+# mesh11's wall (m19_b_wall_02), facing it; lighting rays from the wall met it and the band under a cell window went black
+# under the player light (frame_20261105_224454, draws 378 and 323).
+CROSS_MODEL = {
+    ('m18_01_00_00', 'm0300B1A18', 9),
+    ('m18_01_00_00', 'm0010B1A18', 11),
+}
 CHUNK = 2048
 
 
@@ -119,7 +128,8 @@ def main():
                 if f is None or f['total'] <= 0 or not f['cull']:
                     continue
                 share = paired_area(f, whole)
-                if share < MIN_AREA or share < MIN_SHARE * f['total']:
+                cross = (map_id, model, i) in CROSS_MODEL
+                if not cross and (share < MIN_AREA or share < MIN_SHARE * f['total']):
                     continue
                 own = paired_area(f, f)
                 self_only += own >= MIN_AREA and own >= MIN_SHARE * f['total']
