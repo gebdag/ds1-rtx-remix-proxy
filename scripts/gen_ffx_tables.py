@@ -28,8 +28,10 @@ PERSISTENT = ("map-placed", "character idle/aura", "status visual", "world objec
 
 # Effects the fit lights but must not. FFX 193: one faint 1.6 m glow for 0.2 s (s01035, peak brightness 0.14), nothing
 # the eye follows, on hits: the light then looks like it comes from nowhere (measured 2026-11-05: it was the only blue
-# light of a session of hitting enemies). 190 and 188 have the same sprite in other colours; not seen, so left.
-NO_LIGHT = {"193"}
+# light of a session of hitting enemies). 190, the same sprite in green (0.69, 0.98, 0.69, 2.7 m, "environment/impact"):
+# the user saw a green light when the player was hit, now and then (2026-11-06), and it is the table's only green impact
+# light. 188 (the same sprite, orange, "item use") is not a hit, so left.
+NO_LIGHT = {"193", "190"}
 
 
 def rows(name):
