@@ -74,9 +74,14 @@ namespace comp
 		bool s_force_shaft = false;
 		bool s_beam_split = false;
 
-		bool is_catacombs_sky_with_beams(D3DPRIMITIVETYPE type, UINT prim_count)
+		bool is_catacombs_sky_with_beams(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT prim_count)
 		{
 			if (type != D3DPT_TRIANGLESTRIP || prim_count != kCatacombsSkyPrims)
+				return false;
+			// Not the water reflection's redraw of the sky (the only pass with a clip plane), as for sky draws.
+			DWORD clip_planes = 0;
+			dev->GetRenderState(D3DRS_CLIPPLANEENABLE, &clip_planes);
+			if (clip_planes != 0)
 				return false;
 			auto& ffp = shared::common::ffp_state::get();
 			const int stage = shared::common::config::get().ffp.albedo_stage;
@@ -441,7 +446,7 @@ namespace comp
 
 		// The Catacombs' sky draw: as it is, then its beams as a light shaft, culling off (the sub-strip starts on an odd
 		// triangle, which turns its winding).
-		if (!s_beam_split && is_catacombs_sky_with_beams(PrimitiveType, primCount))
+		if (!s_beam_split && is_catacombs_sky_with_beams(dev, PrimitiveType, primCount))
 		{
 			s_beam_split = true;
 			const HRESULT sky_hr = on_draw_indexed_prim(dev, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
