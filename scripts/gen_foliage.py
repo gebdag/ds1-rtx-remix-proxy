@@ -21,6 +21,9 @@ Only hashes a capture proved (PROVEN), plus those the user approved in the game 
 nothing else gets worse. A texture name can have several copies (map, object, other areas' folders) with their own
 hashes; each copy is proven on its own, by the hash the capture uploads.
 
+A texture only partly made of leaves (MASKED) gets a thickness mask (subsurface_thickness_texture: the measurement
+distance per texel, 0 = no transmission) from the triangles its model's named bones drive, and the hue of those texels.
+
 One hue per texture is a compromise where a card mixes leaves with flowers (m10_grass_14/15: dark leaves, white petals,
 so their transmission comes out near grey); a per-texel single scattering texture would follow both.
 
@@ -70,6 +73,16 @@ USER_APPROVED = {
     "9A6A6FA96E1F3A77": "m15_tree_01", "68A09E87F54336C5": "m15_tree_04", "B371E9901947C69B": "m15_tree_04",
     "F5EEB66B183BA916": "m15_tree_04",
 }
+# Textures only partly leaves: Remix hash -> (texture name, model under unpacked/, bone name part). Moonlight Butterfly (c3230):
+# one atlas for body and wings, only the wing membranes transmit (user's request, 2026-11-07; Remix already draws these
+# wings brighter than the game).
+MASKED = {
+    "4AA48A4508A90EE5": ("c3230", "chr/c3230/c3230.flver", "wing"),
+}
+UNPACKED = Path(r"<game dir>\DATA\unpacked")
+FLVER_TOOLS = r"<other project>\tools"
+PBR_TOOLS = r"<workspace>\Vibe-Reverse-Engineering\pbr_tools"
+MASK_DIR = "assets/thin_opaque"
 SCALE = 0.55        # hue scale of transmittance and single scattering albedo
 DISTANCE = 0.5      # subsurface_measurement_distance (> 0.05: diffuse reflection keeps its full weight)
 MIN_COVER, MAX_COVER = 0.02, 0.9   # share of texels with alpha > 0.5: leaf cards are cut out, bark is not
@@ -85,6 +98,64 @@ def leaf_hue(path):
     c = a[..., :3][keep]
     lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4).mean(0)
     return cover, lin / max(float(lin.max()), 1e-6)
+
+
+def bone_mask(model, bone_part, size):
+    """Texels (H x W bool) of the model's triangles whose vertices are mostly driven by bones named with bone_part; texels
+    other triangles also cover are left out."""
+    sys.path.insert(0, FLVER_TOOLS)
+    from bbformats.flver import read_flver
+    from PIL import ImageDraw
+    f = read_flver((UNPACKED / model).read_bytes())
+    names = [b.name.lower() for b in f.bones]
+    w, h = size
+    hit, other = Image.new("L", size, 0), Image.new("L", size, 0)
+    draw_hit, draw_other = ImageDraw.Draw(hit), ImageDraw.Draw(other)
+    first = lambda v: np.asarray(v[0] if isinstance(v, list) else v)
+    for m in f.meshes:
+        uv = first(m.vertices["uv"])[:, :2]
+        bi = first(m.vertices["bone_indices"]).astype(int)
+        bw = first(m.vertices["bone_weights"]).astype(float)
+        top = bi[np.arange(len(bi)), bw.argmax(1)]
+        local = getattr(m, "bone_indices", None)
+        bones = np.asarray(local)[top] if local is not None and len(local) else top
+        driven = np.array([bone_part in names[b] for b in bones])
+        tris = m.lod0().triangles()
+        for t in tris[(tris < len(uv)).all(1)]:
+            points = [(float(uv[i, 0] * w), float(uv[i, 1] * h)) for i in t]
+            (draw_hit if driven[t].sum() >= 2 else draw_other).polygon(points, fill=255)
+    return (np.asarray(hit) > 0) & ~(np.asarray(other) > 0)
+
+
+def write_thickness(mask, name):
+    """The mask as a BC4 thickness texture (DISTANCE inside, 0 outside) in z_pbr; returns its path in the layer."""
+    import tempfile
+    sys.path.insert(0, PBR_TOOLS)
+    import build_pbr
+    g = np.where(mask, int(round(DISTANCE * 255)), 0).astype(np.uint8)
+    rgba = np.stack([g, g, g, np.full_like(g, 255)], -1)
+    dst = Z_PBR / MASK_DIR / f"{name}_thickness.dds"
+    with tempfile.TemporaryDirectory() as tmp:
+        build_pbr._compress([rgba], dst, "BC4_UNORM", tmp, 0)
+    return f"./{MASK_DIR}/{name}_thickness.dds"
+
+
+def masked_picks(write):
+    entries = json.load(open(INDEX))["entries"]
+    out = []
+    for h, (stem, model, bone_part) in sorted(MASKED.items()):
+        e = entries[h]
+        if e["stem"].lower() != stem:
+            sys.exit(f"masked {h} is labelled {stem} but the index names it {e['stem']}")
+        a = np.asarray(Image.open(e["path"]).convert("RGBA"), np.float32) / 255.0
+        mask = bone_mask(model, bone_part, (a.shape[1], a.shape[0]))
+        c = a[..., :3][mask & (a[..., 3] > 0.5)]
+        lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4).mean(0)
+        hue = lin / max(float(lin.max()), 1e-6)
+        thickness = write_thickness(mask, stem) if write else None
+        out.append((h, stem, hue, thickness))
+        print(f"{h} {stem:24s} masked to '{bone_part}' bones ({mask.mean():.2f} of texels) hue {np.round(hue, 2)}")
+    return out
 
 
 def is_leaf_name(entry):
@@ -105,18 +176,19 @@ def picks(every):
             if not every:
                 sys.exit(f"listed {h} {e['stem']} is not a cut-out card (cover {cover:.2f})")
             continue
-        out.append((h, e["stem"], hue))
+        out.append((h, e["stem"], hue, None))
         print(f"{h} {e['stem']:24s} cover {cover:.2f} hue {np.round(hue, 2)}")
     return out
 
 
 def layer_text(materials):
     out = ['#usda 1.0\n(\n    upAxis = "Y"\n)\n\nover "RootNode"\n{\n    over "Looks"\n    {\n']
-    for h, stem, hue in materials:
+    for h, stem, hue, thickness in materials:
         tr = ", ".join(f"{v * SCALE:.3f}" for v in np.maximum(hue, 0.25))
         ssa = ", ".join(f"{v * SCALE:.3f}" for v in hue)
         out.append(f'        over "mat_{h}"  # {stem}\n        {{\n            over "Shader"\n            {{\n'
                    f'                float inputs:subsurface_measurement_distance = {DISTANCE}\n'
+                   + (f'                asset inputs:subsurface_thickness_texture = @{thickness}@\n' if thickness else '') +
                    f'                color3f inputs:subsurface_transmittance_color = ({tr})\n'
                    f'                color3f inputs:subsurface_single_scattering_albedo = ({ssa})\n'
                    f'            }}\n        }}\n')
@@ -139,7 +211,7 @@ def register_layer():
 
 
 def main():
-    materials = picks("--all" in sys.argv)
+    materials = picks("--all" in sys.argv) + masked_picks("--list" not in sys.argv)
     print(len(materials), "materials")
     if "--list" in sys.argv:
         return
