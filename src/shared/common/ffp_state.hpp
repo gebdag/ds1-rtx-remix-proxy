@@ -776,6 +776,10 @@ namespace shared::common
 		// texture bound. Gives Remix a constant texture hash to remap.
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
 		IDirect3DTexture9* white_sprite_tex_ = nullptr;
+		// Hit spark bursts seen lately (draw_sprite_up): where, the frame they first showed and the last frame they did. Remix
+		// particles spawn only in a burst's first frame; its later frames' streaks only hide.
+		struct spark_burst { float x, y, z; UINT first_frame, last_frame; };
+		std::vector<spark_burst> spark_bursts_;
 
 		// Vertex declaration tracking
 		IDirect3DVertexDeclaration9* last_decl_ = nullptr;

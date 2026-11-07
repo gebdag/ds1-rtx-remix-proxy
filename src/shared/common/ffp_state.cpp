@@ -2514,10 +2514,13 @@ namespace shared::common
 		// shader samples nothing). Both by the game's own vertex colour too (before the exposure scale above, which moves with the eye):
 		// the bloodstain's motes are (130, 255, 180), b/g 0.71, where the Moonlight Butterfly's magic on the same texture is
 		// (150, 255, 200), b/g 0.78; a hit's streaks come as an orange batch (255, 160, 50) and a paler one (255, 200, 100).
-		// A streak is a quad: two corners at each end. Its ends get u = -1 and +1 (it samples nothing, so u is free): a spark flies
-		// from the streak's middle towards the end on its side, the streaks crossing the hit's centre.
+		// A streak is a quad: two corners at each end, laid along one spark's flight (the game rebuilds them every frame from its
+		// particles). Its ends get u = -1 and +1 (it samples nothing, so u is free). Remix spawns a hit's sparks once, in the first
+		// frame its streaks show: every streak is moved so its middle sits on the burst's centre, and a spark flies from there
+		// towards the end on its side. Later frames of the same burst are tagged to hide without spawning (the sparks already fly).
 		constexpr DWORD kMotesMarker = 0xD4000007;
 		constexpr DWORD kSparksMarker = 0xD4000008;
+		constexpr DWORD kSparksHideMarker = 0xD4000009;
 		DWORD effect_marker = 0;
 		if (!batch_marker && unlit && !points && !masked && count >= 3 && cur_decl_has_color_)
 		{
@@ -2544,26 +2547,82 @@ namespace shared::common
 						const double dx = out[a].x - out[b].x, dy = out[a].y - out[b].y, dz = out[a].z - out[b].z;
 						return dx * dx + dy * dy + dz * dz;
 					};
-					bool streaks = true;
-					for (UINT q = 0; q < count && streaks; q += 4)
+					// Whether these streaks are a burst's first frame: no burst within kBurstReach seen in the last kBurstGap frames. A burst
+					// that keeps showing past kBurstFrames counts as new again (the game's sparks last well under a second; a replayed capture
+					// draws one frame for ever). In the first frame every streak is moved so its middle sits on the burst's centre, where the
+					// sparks start.
+					auto spark_burst_first_frame = [&](sprite_vertex* quads, UINT n)
+					{
+						static constexpr float kBurstReach = 1.5f;     // world units (metres) a burst may move between its frames
+						static constexpr UINT kBurstGap = 6;          // frames a burst may go unseen and still be the same
+						static constexpr UINT kBurstFrames = 60;      // frames after which a burst still showing counts as new
+						const UINT frame = frame_count_;
+						float centre[3] = {};
+						for (UINT k = 0; k < n; k++)
+						{
+							centre[0] += quads[k].x / n;
+							centre[1] += quads[k].y / n;
+							centre[2] += quads[k].z / n;
+						}
+						auto near_centre = [&](const spark_burst& b)
+						{
+							const float dx = b.x - centre[0], dy = b.y - centre[1], dz = b.z - centre[2];
+							return dx * dx + dy * dy + dz * dz <= kBurstReach * kBurstReach;
+						};
+						std::erase_if(spark_bursts_, [&](const spark_burst& b) { return frame - b.last_frame > kBurstGap; });
+						const auto known = std::find_if(spark_bursts_.begin(), spark_bursts_.end(), near_centre);
+						bool first = true;
+						if (known != spark_bursts_.end())
+						{
+							// The other batch of a burst's first frame (an orange and a pale draw) is first too.
+							if (known->last_frame != frame && frame - known->first_frame > kBurstFrames)
+								known->first_frame = frame;
+							first = known->first_frame == frame;
+							known->x = centre[0];
+							known->y = centre[1];
+							known->z = centre[2];
+							known->last_frame = frame;
+						}
+						else
+							spark_bursts_.push_back({ centre[0], centre[1], centre[2], frame, frame });
+						if (!first)
+							return false;
+						for (UINT q = 0; q + 3 < n; q += 4)
+						{
+							float mid[3] = {};
+							for (UINT k = q; k < q + 4; k++)
+							{
+								mid[0] += quads[k].x * 0.25f;
+								mid[1] += quads[k].y * 0.25f;
+								mid[2] += quads[k].z * 0.25f;
+							}
+							for (UINT k = q; k < q + 4; k++)
+							{
+								quads[k].x += centre[0] - mid[0];
+								quads[k].y += centre[1] - mid[1];
+								quads[k].z += centre[2] - mid[2];
+							}
+						}
+						return true;
+					};
+					// Streaks: most quads far longer than wide (at least 4 times, squared 16). A slow spark's streak is short and
+					// nearly square (length 1.5-2 times its width): it still has its ends, so it is kept with the draw.
+					UINT long_quads = 0;
+					for (UINT q = 0; q < count; q += 4)
 					{
 						const double d01 = dist2(q, q + 1), d02 = dist2(q, q + 2), d03 = dist2(q, q + 3);
 						const UINT mate = d01 <= d02 && d01 <= d03 ? q + 1 : d02 <= d03 ? q + 2 : q + 3;
 						const double width = std::min({ d01, d02, d03 }), length = std::max({ d01, d02, d03 });
-						// A streak: far longer than wide.
-						if (!(length > width * 16.0))
-						{
-							streaks = false;
-							break;
-						}
+						if (length > width * 16.0)
+							long_quads++;
 						for (UINT k = q; k < q + 4; k++)
 						{
 							out[k].u = (k == q || k == mate) ? -1.0f : 1.0f;
 							out[k].v = 0.0f;
 						}
 					}
-					if (streaks)
-						effect_marker = kSparksMarker;
+					if (long_quads * 4 >= (count / 4) * 3)
+						effect_marker = spark_burst_first_frame(out, count) ? kSparksMarker : kSparksHideMarker;
 				}
 			}
 		}
