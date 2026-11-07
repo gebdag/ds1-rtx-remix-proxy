@@ -17,7 +17,7 @@ The layer is a z_pbr sublayer, not a mod of its own: Remix takes a texture's mat
 hash, so a separate mod would drop z_pbr's high-res albedo and normal maps for these leaves. pbr_tools/
 build_pbr.py keeps foliage.usda in z_pbr's sublayers; this script adds it to the current mod.usda if missing.
 
-Only hashes a capture proved (PROVEN) are written: in those captures the plants move towards the game's look and
+Only hashes a capture proved (PROVEN), plus the user's in-game test set (USER_TEST), are written: in those captures the plants move towards the game's look and
 nothing else gets worse. A texture name can have several copies (map, object, other areas' folders) with their own
 hashes; each copy is proven on its own, by the hash the capture uploads.
 
@@ -54,6 +54,22 @@ PROVEN = {
     "BE798D0C7579B50F": "m10_grass_00", "1CAB90B15D1AAD7E": "m10_grass_diteal", "20C1D68DA46295D6": "m10_ivy_01",
     "898339D99DA7C2E9": "m10_01_grass_01", "E5B975B00D7C6319": "m10_01_tree_02", "7F86267370401636": "m10_01_tree_05",
 }
+# Not proven, written for an in-game test on the user's request (2026-11-07): Darkroot (m12_00) and Royal Wood / Oolacile
+# (m12_01) leaves, map/m12 copies plus the m15_tree_04 copies Darkroot draws. In captures these canopies came out brighter
+# than the game (frame_20261101_225235: 21.1 game, 23.6 without, 32.1 with).
+USER_TEST = {
+    "97D9264B99B5A592": "m12_00_leaf_01", "7B6C68F699946078": "m12_00_leaf_02", "1DA22CB8590E9422": "m12_00_leaf_03",
+    "E0B772F779343B03": "m12_00_tree_05", "F8CBA5C287706719": "m12_dlc_flower_01", "0B73BC006A0E7473": "m12_dlc_flower_02",
+    "3690CBFEDF027476": "m12_dlc_grass_01", "84983DA40448A699": "m12_dlc_grass_02", "9E27E2A5BB6596E8": "m12_dlc_grass_19",
+    "7D670475EAAB0225": "m12_dlc_grass_20", "14D698256D49E4C3": "m12_dlc_m10_01_grass_10",
+    "F08A2C3A2CC910D8": "m12_dlc_m15_tree_04", "AA0B10A229DC8A09": "m12_dlc_tree_04", "4130D7C3E33EC50B": "m12_dlc_tree_05",
+    "58A983497F45651B": "m12_grass_01", "0D4A4F3191DC5ACE": "m12_grass_04", "8C6D048C671D1E3B": "m12_grass_05",
+    "027410C040EFA07E": "m12_grass_06", "10C2EB7343BB5D1C": "m12_grass_14", "5E6EF61336340305": "m12_grass_15",
+    "2AEB94AEE985F103": "m12_grass_18", "9E560E01B855CB51": "m12_grass_19", "200EB0FC0652B3C2": "m12_grass_20",
+    "161FFCB06D189E9F": "m12_ivy_01", "38673BD39852E891": "m12_ivy_diteal_01", "E6038802825B41E6": "m12_n_plant_03",
+    "9A6A6FA96E1F3A77": "m15_tree_01", "68A09E87F54336C5": "m15_tree_04", "B371E9901947C69B": "m15_tree_04",
+    "F5EEB66B183BA916": "m15_tree_04",
+}
 SCALE = 0.55        # hue scale of transmittance and single scattering albedo
 DISTANCE = 0.5      # subsurface_measurement_distance (> 0.05: diffuse reflection keeps its full weight)
 MIN_COVER, MAX_COVER = 0.02, 0.9   # share of texels with alpha > 0.5: leaf cards are cut out, bark is not
@@ -77,16 +93,17 @@ def is_leaf_name(entry):
 
 def picks(every):
     entries = json.load(open(INDEX))["entries"]
-    hashes = sorted(h for h, e in entries.items() if is_leaf_name(e)) if every else sorted(PROVEN)
+    listed = {**PROVEN, **USER_TEST}
+    hashes = sorted(h for h, e in entries.items() if is_leaf_name(e)) if every else sorted(listed)
     out = []
     for h in hashes:
         e = entries[h]
-        if not every and e["stem"].lower() != PROVEN[h]:
-            sys.exit(f"proven {h} is labelled {PROVEN[h]} but the index names it {e['stem']}")
+        if not every and e["stem"].lower() != listed[h]:
+            sys.exit(f"listed {h} is labelled {listed[h]} but the index names it {e['stem']}")
         cover, hue = leaf_hue(e["path"])
         if hue is None:
             if not every:
-                sys.exit(f"proven {h} {e['stem']} is not a cut-out card (cover {cover:.2f})")
+                sys.exit(f"listed {h} {e['stem']} is not a cut-out card (cover {cover:.2f})")
             continue
         out.append((h, e["stem"], hue))
         print(f"{h} {e['stem']:24s} cover {cover:.2f} hue {np.round(hue, 2)}")
