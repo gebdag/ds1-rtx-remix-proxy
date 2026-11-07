@@ -343,5 +343,19 @@ namespace comp
 		char filter_[64] = {};
 		std::string saved_text_;
 		std::string save_status_;
+		// The pending-save list under Save (pending_imgui): every INI setting Save writes with its file value as last read or
+		// saved, the decoupled set as saved, and the items ticked out of the next save ("ini:Section.Key", "light:<key>",
+		// "decoupled:<key>", "cat:<name>"), which Save leaves as the files have them.
+		struct ini_value { const char* section; const char* key; const char* label; std::string value; };
+		std::vector<ini_value> ini_values() const;
+		std::unordered_map<std::string, std::string> saved_ini_values_;
+		std::unordered_set<uint64_t> saved_decoupled_;
+		std::unordered_set<std::string> save_skip_;
+		void remember_saved();
+		void pending_imgui();
+		// The tab's height never shrinks while the menu is open: a page scrolled down would otherwise jump under the cursor
+		// when a toggle takes rows away.
+		float content_height_max_ = 0.0f;
+		int content_height_frame_ = -10;
 	};
 }

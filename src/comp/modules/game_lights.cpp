@@ -248,7 +248,7 @@ namespace comp
 		std::memcpy(sun_fallback_colour, cfg.sun.fallback_colour, sizeof(sun_fallback_colour));
 
 		load_overrides();
-		saved_text_ = serialize();
+		remember_saved();
 	}
 
 	game_lights::~game_lights()
@@ -482,8 +482,8 @@ namespace comp
 			return;
 		fprintf(f, "=== rows %zu\n", rows_.size());
 		for (const auto& r : rows_)
-			fprintf(f, "kind %d state %d slot %d %s | pos %.2f %.2f %.2f dist %.1f | colour %.3f %.3f %.3f range %.2f-%.2f | radiance %.3f %.3f %.3f %s\n",
-				static_cast<int>(r.kind), static_cast<int>(r.state), r.slot, r.name.c_str(), r.pos[0], r.pos[1], r.pos[2], r.distance,
+			fprintf(f, "key %016llx kind %d state %d slot %d %s | pos %.2f %.2f %.2f dist %.1f | colour %.3f %.3f %.3f range %.2f-%.2f | radiance %.3f %.3f %.3f %s\n",
+				static_cast<unsigned long long>(r.key), static_cast<int>(r.kind), static_cast<int>(r.state), r.slot, r.name.c_str(), r.pos[0], r.pos[1], r.pos[2], r.distance,
 				r.colour[0], r.colour[1], r.colour[2], r.range_begin, r.range_end, r.radiance[0], r.radiance[1], r.radiance[2], r.origin.c_str());
 		for (const auto& p : map_bound_)
 			fprintf(f, "map-bound %.2f %.2f %.2f\n", p[0], p[1], p[2]);
@@ -1542,6 +1542,7 @@ namespace comp
 		overrides_.clear();
 		saved_overrides_.clear();
 		decoupled_.clear();
+		saved_decoupled_.clear();
 		std::ifstream file(overrides_path());
 		if (!file)
 			return false;
@@ -1573,6 +1574,7 @@ namespace comp
 			overrides_[std::stoull(key_text, nullptr, 16)] = o;
 		}
 		saved_overrides_ = overrides_;
+		saved_decoupled_ = decoupled_;
 		return true;
 	}
 
@@ -1606,41 +1608,85 @@ namespace comp
 		return s;
 	}
 
+	// Every INI setting Save writes, as it would write it now.
+	std::vector<game_lights::ini_value> game_lights::ini_values() const
+	{
+		auto flag = [](bool v) { return std::string(v ? "1" : "0"); };
+		auto num = [](float v) { return std::format("{:.3f}", v); };
+		const auto& p = player_cfg_;
+		return {
+			{ "Lights", "Enabled", "Point lights on", flag(enabled) },
+			{ "Lights", "IntensityScale", "Point light brightness", num(intensity_scale) },
+			{ "Lights", "FireLightScale", "Fire light brightness", num(fire_light_scale) },
+			{ "Lights", "EffectTableScale", "Effect light brightness", num(effect_table_scale) },
+			{ "Lights", "RadiusScale", "Point light reach", num(radius_scale) },
+			{ "Lights", "GameFalloff", "The game's falloff", flag(game_falloff_) },
+			{ "Lights", "SkipCharacterOnly", "Character-only lights start off", flag(skip_characters_only_) },
+			{ "Lights", "ResolveEntityParams", "Read entity lights' parameters", flag(game::point_lights::resolve_entities()) },
+			{ "Lights", "SynthesizedLights", "Stand-in lights", flag(game::map_lights::enabled()) },
+			{ "Sun", "Enabled", "Sun on", flag(sun_enabled) },
+			{ "Sun", "IntensityScale", "Sun brightness", num(sun_intensity_scale) },
+			{ "Sun", "AngularDiameter", "Sun size", num(sun_angular_diameter) },
+			{ "Sun", "FallbackColour", "Sun colour when the game has none", format_float3(sun_fallback_colour) },
+			{ "PlayerLight", "Enabled", "Player light on", flag(p.enabled) },
+			{ "PlayerLight", "UseGameColour", "Player light: the game's colour", flag(p.use_game_colour) },
+			{ "PlayerLight", "Colour", "Player light colour", format_float3(p.colour) },
+			{ "PlayerLight", "UseGameRange", "Player light: the game's reach", flag(p.use_game_range) },
+			{ "PlayerLight", "Range", "Player light reach", num(p.range) },
+			{ "PlayerLight", "UseGameRadius", "Player light: the game's emitter size", flag(p.use_game_radius) },
+			{ "PlayerLight", "Radius", "Player light emitter size", num(p.radius) },
+			{ "PlayerLight", "Intensity", "Player light brightness", num(p.intensity) },
+			{ "PlayerLight", "FalloffIntensity", "Player light brightness (game falloff)", num(p.falloff_intensity) },
+			{ "PlayerLight", "FalloffGammaAdd", "Player light mixed as the game mixes it", flag(p.falloff_gamma_add) },
+			{ "PlayerLight", "FalloffRangeScale", "Player light reach (game falloff)", num(p.falloff_range_scale) },
+			{ "PlayerLight", "OffsetFrame", "Player light offset frame", kFrameNames[std::clamp(p.offset_frame, 0, 2)] },
+			{ "PlayerLight", "Offset", "Player light offset", format_float3(p.offset) },
+		};
+	}
+
+	// What the files hold now, for the pending-save list and "unsaved changes".
+	void game_lights::remember_saved()
+	{
+		saved_text_ = serialize();
+		saved_ini_values_.clear();
+		for (const auto& v : ini_values())
+			saved_ini_values_[std::string(v.section) + "." + v.key] = v.value;
+		save_skip_.clear();
+	}
+
+	// Writes everything that differs from the files, except what is ticked out in the list under Save: that stays as the
+	// files have it (and stays listed, unsaved).
 	bool game_lights::save_all()
 	{
 		auto& cfg = shared::common::config::get();
-		auto flag = [](bool v) { return std::string(v ? "1" : "0"); };
 		bool ok = true;
 
-		ok &= cfg.set_string("Lights", "Enabled", flag(enabled));
-		ok &= cfg.set_string("Lights", "IntensityScale", std::format("{:.3f}", intensity_scale));
-		ok &= cfg.set_string("Lights", "FireLightScale", std::format("{:.3f}", fire_light_scale));
-		ok &= cfg.set_string("Lights", "EffectTableScale", std::format("{:.3f}", effect_table_scale));
-		ok &= cfg.set_string("Lights", "RadiusScale", std::format("{:.3f}", radius_scale));
-		ok &= cfg.set_string("Lights", "GameFalloff", game_falloff_ ? "1" : "0");
-		ok &= cfg.set_string("Lights", "SkipCharacterOnly", skip_characters_only_ ? "1" : "0");
-		ok &= cfg.set_string("Lights", "ResolveEntityParams", flag(game::point_lights::resolve_entities()));
-		ok &= cfg.set_string("Lights", "SynthesizedLights", flag(game::map_lights::enabled()));
+		for (const auto& v : ini_values())
+		{
+			const std::string name = std::string(v.section) + "." + v.key;
+			if (save_skip_.count("ini:" + name))
+				continue;
+			ok &= cfg.set_string(v.section, v.key, v.value);
+			saved_ini_values_[name] = v.value;
+		}
 
-		ok &= cfg.set_string("Sun", "Enabled", flag(sun_enabled));
-		ok &= cfg.set_string("Sun", "IntensityScale", std::format("{:.3f}", sun_intensity_scale));
-		ok &= cfg.set_string("Sun", "AngularDiameter", std::format("{:.3f}", sun_angular_diameter));
-		ok &= cfg.set_string("Sun", "FallbackColour", format_float3(sun_fallback_colour));
-
-		const auto& p = player_cfg_;
-		ok &= cfg.set_string("PlayerLight", "Enabled", flag(p.enabled));
-		ok &= cfg.set_string("PlayerLight", "UseGameColour", flag(p.use_game_colour));
-		ok &= cfg.set_string("PlayerLight", "Colour", format_float3(p.colour));
-		ok &= cfg.set_string("PlayerLight", "UseGameRange", flag(p.use_game_range));
-		ok &= cfg.set_string("PlayerLight", "Range", std::format("{:.3f}", p.range));
-		ok &= cfg.set_string("PlayerLight", "UseGameRadius", flag(p.use_game_radius));
-		ok &= cfg.set_string("PlayerLight", "Radius", std::format("{:.3f}", p.radius));
-		ok &= cfg.set_string("PlayerLight", "Intensity", std::format("{:.3f}", p.intensity));
-		ok &= cfg.set_string("PlayerLight", "FalloffIntensity", std::format("{:.3f}", p.falloff_intensity));
-		ok &= cfg.set_string("PlayerLight", "FalloffGammaAdd", p.falloff_gamma_add ? "1" : "0");
-		ok &= cfg.set_string("PlayerLight", "FalloffRangeScale", std::format("{:.3f}", p.falloff_range_scale));
-		ok &= cfg.set_string("PlayerLight", "OffsetFrame", kFrameNames[std::clamp(p.offset_frame, 0, 2)]);
-		ok &= cfg.set_string("PlayerLight", "Offset", format_float3(p.offset));
+		// Per-light edits: the file's, with every light not ticked out taking its current edit.
+		auto skipped = [&](const char* prefix, uint64_t key) { return save_skip_.count(std::format("{}:{:016x}", prefix, key)) != 0; };
+		std::map<uint64_t, light_override> written(saved_overrides_.begin(), saved_overrides_.end());
+		for (const auto& [key, o] : overrides_)
+			if ((key & kSessionKeyBit) == 0 && !skipped("light", key))
+			{
+				if (o.is_default()) written.erase(key);
+				else written[key] = o;
+			}
+		for (const auto& [key, o] : saved_overrides_)
+			if (!overrides_.count(key) && !skipped("light", key))
+				written.erase(key);
+		std::unordered_set<uint64_t> written_decoupled = saved_decoupled_;
+		for (const uint64_t key : decoupled_)
+			if (!skipped("decoupled", key)) written_decoupled.insert(key);
+		for (const uint64_t key : saved_decoupled_)
+			if (!decoupled_.count(key) && !skipped("decoupled", key)) written_decoupled.erase(key);
 
 		// Overrides of static lights, with the row name as a comment for hand editing.
 		{
@@ -1651,10 +1697,8 @@ namespace comp
 			if (file)
 			{
 				file << "# Per-light edits from F4 -> Lights. key disabled multiplier recolour r g b include_map move dx dy dz  name\n";
-				for (const auto& [key, o] : overrides_)
+				for (const auto& [key, o] : written)
 				{
-					if (o.is_default() || (key & kSessionKeyBit) != 0)
-						continue;
 					std::string name;
 					for (const auto& r : rows_)
 						if (r.key == key) name = r.name;
@@ -1662,7 +1706,9 @@ namespace comp
 						o.multiplier, o.recolour ? 1 : 0, o.colour[0], o.colour[1], o.colour[2], o.include_map ? 1 : 0,
 						o.offset[0], o.offset[1], o.offset[2], name);
 				}
-				for (const uint64_t key : decoupled_)
+				std::vector<uint64_t> decoupled(written_decoupled.begin(), written_decoupled.end());
+				std::sort(decoupled.begin(), decoupled.end());
+				for (const uint64_t key : decoupled)
 					file << std::format("decoupled {:016x}\n", key);
 			}
 			else
@@ -1671,15 +1717,30 @@ namespace comp
 			}
 		}
 
+		// Categories ticked out are written as saved, then given back their current values.
+		struct held { size_t index; game::map_lights::category current; };
+		std::vector<held> holds;
+		const auto& categories = game::map_lights::categories();
+		for (size_t i = 0; i < categories.size(); ++i)
+		{
+			const auto* saved = game::map_lights::saved_category(categories[i].name);
+			if (saved && save_skip_.count("cat:" + categories[i].name))
+			{
+				holds.push_back({ i, categories[i] });
+				game::map_lights::set_category(i, saved->intensity, saved->radius, saved->enabled, saved->follows_effect);
+			}
+		}
 		ok &= game::map_lights::save_categories();
+		for (const auto& h : holds)
+			game::map_lights::set_category(h.index, h.current.intensity, h.current.radius, h.current.enabled, h.current.follows_effect);
 
 		saved_overrides_.clear();
-		for (const auto& [key, o] : overrides_)
-			if (!o.is_default() && (key & kSessionKeyBit) == 0)
-				saved_overrides_[key] = o;
+		for (const auto& [key, o] : written)
+			saved_overrides_[key] = o;
+		saved_decoupled_ = written_decoupled;
 		forget_saved_ini();
 		saved_text_ = serialize();
-		save_status_ = ok ? "saved" : "save FAILED (see console)";
+		save_status_ = ok ? (save_skip_.empty() ? "saved" : "saved (ticked-out items kept as they were)") : "save FAILED (see console)";
 		return ok;
 	}
 
@@ -1690,14 +1751,14 @@ namespace comp
 		load_overrides();
 		solo_ = 0;
 		flash_selected_ = false;
-		saved_text_ = serialize();
+		remember_saved();
 		save_status_ = "reverted to saved";
 	}
 
 	void game_lights::reread_settings()
 	{
 		read_settings();
-		saved_text_ = serialize();
+		remember_saved();
 	}
 
 	void game_lights::read_settings()
@@ -1740,6 +1801,13 @@ namespace comp
 
 	// ------------------------------------------------------------------ UI
 
+	// A per-light edit as the pending-save list describes it.
+	struct game_lights_override_view
+	{
+		bool present = false, disabled = false, recolour = false, include_map = false;
+		float multiplier = 1.0f, colour[3] = {}, offset[3] = {};
+	};
+
 	namespace
 	{
 		// Settings read as a form: each label in a fixed left column (its help on hover), its control after it.
@@ -1776,6 +1844,51 @@ namespace comp
 		bool near_equal(bool a, bool b) { return a == b; }
 		bool near_equal(int a, int b) { return a == b; }
 		bool near_equal3(const float* a, const float* b) { return near_equal(a[0], b[0]) && near_equal(a[1], b[1]) && near_equal(a[2], b[2]); }
+
+		// Two INI values alike: numbers (one or a comma list) compared as numbers, anything else as text.
+		bool same_values(const std::string& a, const std::string& b)
+		{
+			auto numbers = [](const std::string& s, std::vector<float>& out)
+			{
+				std::string t = s;
+				std::replace(t.begin(), t.end(), ',', ' ');
+				std::istringstream in(t);
+				std::string word;
+				while (in >> word)
+				{
+					char* end = nullptr;
+					const float v = std::strtof(word.c_str(), &end);
+					if (!end || *end)
+						return false;
+					out.push_back(v);
+				}
+				return !out.empty();
+			};
+			std::vector<float> x, y;
+			if (numbers(a, x) && numbers(b, y) && x.size() == y.size())
+			{
+				for (size_t i = 0; i < x.size(); ++i)
+					if (!near_equal(x[i], y[i]))
+						return false;
+				return true;
+			}
+			return _stricmp(a.c_str(), b.c_str()) == 0;
+		}
+
+		std::string describe_edit(const game_lights_override_view& o)
+		{
+			if (!o.present)
+				return "the game's own";
+			std::string s;
+			auto add = [&](const std::string& part) { s += (s.empty() ? "" : ", ") + part; };
+			if (o.disabled) add("off");
+			if (std::abs(o.multiplier - 1.0f) > 5e-4f) add(std::format("x{:.2f}", o.multiplier));
+			if (o.recolour) add(std::format("colour {:.2f} {:.2f} {:.2f}", o.colour[0], o.colour[1], o.colour[2]));
+			if (o.include_map) add("lights the map");
+			if (o.offset[0] != 0.0f || o.offset[1] != 0.0f || o.offset[2] != 0.0f)
+				add(std::format("moved {:.2f} {:.2f} {:.2f}", o.offset[0], o.offset[1], o.offset[2]));
+			return s.empty() ? "the game's own" : s;
+		}
 
 		// After a setting: "Saved" puts back what the INI or the light files hold, "Default" the game's own value (the
 		// shipped default for the settings of our own), each shown only while the setting differs from it. Saved is left
@@ -1918,11 +2031,7 @@ namespace comp
 			flash_selected_ = false;
 		}
 		tip("Clears every light's own switch, brightness and colour, and any solo. Saved only with Save.");
-		ImGui::SameLine();
-		if (serialize() != saved_text_)
-			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "unsaved changes");
-		else
-			ImGui::TextDisabled("%s", save_status_.empty() ? "no changes" : save_status_.c_str());
+		pending_imgui();
 		ImGui::Spacing();
 
 		const bool open_all = shared::globals::imgui_open_light_sections;
@@ -1962,6 +2071,165 @@ namespace comp
 			custom_lights_imgui();
 		if (header("Diagnostics"))
 			diagnostics_imgui();
+
+		// Never shorter than it has been since the menu opened (a gap of frames = it was closed): a toggle that takes rows
+		// away from a page scrolled down would otherwise pull everything down under the cursor.
+		const float end_y = ImGui::GetCursorPosY();
+		const int frame = ImGui::GetFrameCount();
+		if (frame - content_height_frame_ > 2)
+			content_height_max_ = 0.0f;
+		content_height_frame_ = frame;
+		content_height_max_ = std::max(content_height_max_, end_y);
+		if (end_y < content_height_max_)
+			ImGui::Dummy(ImVec2(1.0f, content_height_max_ - end_y));
+	}
+
+	// Under Save: every change Save would write, each with a tick (unticked: Save leaves it as the files have it) and a
+	// Revert. A box of fixed height, so a change never moves the rest of the menu.
+	void game_lights::pending_imgui()
+	{
+		struct item { std::string id, what, change; int revert = -1; };
+		std::vector<item> items;
+		std::vector<std::function<void()>> reverts;
+
+		for (const auto& v : ini_values())
+		{
+			const std::string name = std::string(v.section) + "." + v.key;
+			const auto it = saved_ini_values_.find(name);
+			const std::string saved = it == saved_ini_values_.end() ? std::string() : it->second;
+			if (same_values(saved, v.value))
+				continue;
+			items.push_back({ "ini:" + name, v.label, std::format("{} -> {}   [{}] {}", saved.empty() ? "unset" : saved, v.value, v.section, v.key) });
+		}
+
+		auto light_name = [&](uint64_t key)
+		{
+			for (const auto& r : rows_)
+				if (r.key == key)
+					return r.group.empty() || r.own_key == key ? r.name : std::format("{} (group '{}')", r.name, r.group);
+			return std::format("light {:016x} (not on this map)", key);
+		};
+		std::set<uint64_t> keys;
+		for (const auto& [key, o] : overrides_)
+			if ((key & kSessionKeyBit) == 0 && !o.is_default())
+				keys.insert(key);
+		for (const auto& [key, o] : saved_overrides_)
+			keys.insert(key);
+		for (const uint64_t key : keys)
+		{
+			const auto* cur = find_override(key);
+			const auto* saved = find_saved_override(key);
+			const light_override none {};
+			const auto& a = cur && (key & kSessionKeyBit) == 0 ? *cur : none;
+			const auto& b = saved ? *saved : none;
+			if (a.disabled == b.disabled && near_equal(a.multiplier, b.multiplier) && a.recolour == b.recolour &&
+				(!a.recolour || near_equal3(a.colour, b.colour)) && a.include_map == b.include_map && near_equal3(a.offset, b.offset))
+				continue;
+			auto view = [](const light_override& o, bool present)
+			{
+				game_lights_override_view v;
+				v.present = present && !o.is_default();
+				v.disabled = o.disabled; v.multiplier = o.multiplier; v.recolour = o.recolour; v.include_map = o.include_map;
+				std::memcpy(v.colour, o.colour, sizeof(v.colour));
+				std::memcpy(v.offset, o.offset, sizeof(v.offset));
+				return v;
+			};
+			reverts.push_back([this, key]()
+			{
+				if (const auto* s = find_saved_override(key)) overrides_[key] = *s;
+				else overrides_.erase(key);
+			});
+			items.push_back({ std::format("light:{:016x}", key), light_name(key),
+				std::format("{} -> {}", describe_edit(view(b, saved != nullptr)), describe_edit(view(a, cur != nullptr))),
+				static_cast<int>(reverts.size()) - 1 });
+		}
+
+		std::set<uint64_t> decoupled_keys(decoupled_.begin(), decoupled_.end());
+		decoupled_keys.insert(saved_decoupled_.begin(), saved_decoupled_.end());
+		for (const uint64_t key : decoupled_keys)
+		{
+			const bool now = decoupled_.count(key) != 0;
+			if (now == (saved_decoupled_.count(key) != 0))
+				continue;
+			reverts.push_back([this, key, now]()
+			{
+				if (now) decoupled_.erase(key);
+				else decoupled_.insert(key);
+				// Its own edit as the file has it, or none.
+				if (const auto* s = find_saved_override(key)) overrides_[key] = *s;
+				else overrides_.erase(key);
+			});
+			items.push_back({ std::format("decoupled:{:016x}", key), light_name(key),
+				now ? "edited on its own, apart from its group" : "follows its group again", static_cast<int>(reverts.size()) - 1 });
+		}
+
+		const auto& categories = game::map_lights::categories();
+		for (size_t i = 0; i < categories.size(); ++i)
+		{
+			const auto& c = categories[i];
+			const auto* s = game::map_lights::saved_category(c.name);
+			if (!s || (c.enabled == s->enabled && c.follows_effect == s->follows_effect && near_equal(c.intensity, s->intensity) &&
+				near_equal(c.radius, s->radius)))
+				continue;
+			auto text = [](const game::map_lights::category& x)
+			{
+				return std::format("{}{} x{:.2f} reach x{:.2f}", x.enabled ? "on" : "off", x.follows_effect ? ", follows effect" : "", x.intensity, x.radius);
+			};
+			const game::map_lights::category saved = *s;
+			reverts.push_back([i, saved]() { game::map_lights::set_category(i, saved.intensity, saved.radius, saved.enabled, saved.follows_effect); });
+			items.push_back({ "cat:" + c.name, std::format("Stand-in category '{}'", c.name), std::format("{} -> {}", text(saved), text(c)),
+				static_cast<int>(reverts.size()) - 1 });
+		}
+
+		// Ticks of items that no longer differ are forgotten.
+		for (auto it = save_skip_.begin(); it != save_skip_.end();)
+		{
+			const bool listed = std::any_of(items.begin(), items.end(), [&](const item& x) { return x.id == *it; });
+			it = listed ? std::next(it) : save_skip_.erase(it);
+		}
+		const auto ticked = std::count_if(items.begin(), items.end(), [&](const item& x) { return !save_skip_.count(x.id); });
+
+		ImGui::SameLine();
+		if (items.empty())
+			ImGui::TextDisabled("%s", save_status_.empty() ? "no changes" : save_status_.c_str());
+		else
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%d unsaved change%s, %d ticked to save%s%s", static_cast<int>(items.size()),
+				items.size() == 1 ? "" : "s", static_cast<int>(ticked), save_status_.empty() ? "" : "  |  last: ", save_status_.c_str());
+
+		const float em = ImGui::GetFontSize();
+		int revert_now = -1;
+		if (ImGui::BeginChild("##pending_save", ImVec2(0.0f, em * 6.5f), ImGuiChildFlags_Borders))
+		{
+			if (items.empty())
+				ImGui::TextDisabled("Save would write nothing: everything is as the files have it.");
+			if (game::custom_lights::dirty())
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Custom lights for this map are changed: they have their own Save button.");
+			for (const auto& x : items)
+			{
+				ImGui::PushID(x.id.c_str());
+				bool include = !save_skip_.count(x.id);
+				if (ImGui::Checkbox("##save", &include))
+				{
+					if (include) save_skip_.erase(x.id);
+					else save_skip_.insert(x.id);
+				}
+				tip("Ticked: Save writes this. Unticked: Save leaves it as the files have it; the change stays here, unsaved.");
+				ImGui::SameLine();
+				ImGui::BeginDisabled(x.revert < 0);
+				if (ImGui::SmallButton("Revert") && x.revert >= 0)
+					revert_now = x.revert;
+				ImGui::EndDisabled();
+				tip(x.revert >= 0 ? "Puts back what the files hold for this one." : "Use the setting's own Saved button.");
+				ImGui::SameLine();
+				ImGui::TextUnformatted(x.what.c_str());
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", x.change.c_str());
+				ImGui::PopID();
+			}
+		}
+		ImGui::EndChild();
+		if (revert_now >= 0)
+			reverts[revert_now]();
 	}
 
 	void game_lights::read_own_sun()
@@ -2507,8 +2775,11 @@ namespace comp
 			for (int c = 0; c < 3; ++c)
 				mixed |= (o ? o->offset[c] : 0.0f) != first.offset[c];
 		}
+		// One line either way, so the controls below stay put when a change makes them alike or not.
 		if (mixed)
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "These differ: the values below are the first light's.");
+		else
+			ImGui::TextDisabled("All of them have the same settings.");
 
 		bool draw = !first.disabled;
 		if (form_checkbox("Draw these lights", "##multi_draw", &draw, "Switches all of them off or on."))
@@ -2526,13 +2797,12 @@ namespace comp
 					std::memcpy(o.colour, r->colour, sizeof(o.colour));
 				o.recolour = first.recolour;
 			}
-		if (first.recolour)
-		{
-			form_label("Colour", nullptr);
-			if (ImGui::ColorEdit3("##multi_colour", first.colour, ImGuiColorEditFlags_Float))
-				for (const uint64_t key : keys)
-					std::memcpy(overrides_[key].colour, first.colour, sizeof(first.colour));
-		}
+		form_label("Colour", nullptr);
+		ImGui::BeginDisabled(!first.recolour);
+		if (ImGui::ColorEdit3("##multi_colour", first.colour, ImGuiColorEditFlags_Float | (first.recolour ? 0 : ImGuiColorEditFlags_NoDragDrop)) && first.recolour)
+			for (const uint64_t key : keys)
+				std::memcpy(overrides_[key].colour, first.colour, sizeof(first.colour));
+		ImGui::EndDisabled();
 		form_label("Move", "Metres from where the game puts each of them (x, height, z), the same for all. Saved with Save.");
 		if (ImGui::DragFloat3("##multi_offset", first.offset, 0.01f, -20.0f, 20.0f, "%.2f"))
 			for (const uint64_t key : keys)
@@ -2753,10 +3023,13 @@ namespace comp
 				form_label("Fades to zero at", "... and fades linearly to nothing at this distance (dwindle end).");
 				changed |= ImGui::DragFloat("##cl_end", &l.dwindle_end, 0.05f, 0.05f, 200.0f, "%.2f m");
 				back("cl_end", l.dwindle_end, &game::custom_lights::light::dwindle_end);
+				// As tall as the Remix branch's four rows, so the Spotlight tick below does not move.
+				ImGui::Dummy(ImVec2(1.0f, ImGui::GetFrameHeight()));
 			}
 			changed |= form_checkbox("Spotlight", "##cl_spot", &l.spot, "Shines in a cone instead of all around.");
 			back("cl_spot", l.spot, &game::custom_lights::light::spot);
-			if (l.spot)
+			// The cone's rows are always there (greyed out for a light that shines all around), so ticks below stay put.
+			ImGui::BeginDisabled(!l.spot);
 			{
 				form_label("Aim direction", "The direction the cone points, (x, height, z); it does not need to be normalised.");
 				changed |= ImGui::DragFloat3("##cl_dir", l.dir, 0.01f, -1.0f, 1.0f, "%.3f");
@@ -2773,13 +3046,14 @@ namespace comp
 				form_label("Cone edge softness", "0 = a hard edge, 1 = fades over the whole cone.");
 				changed |= ImGui::SliderFloat("##cl_soft", &l.softness, 0.0f, 1.0f, "%.2f");
 				back("cl_soft", l.softness, &game::custom_lights::light::softness);
-				if (!l.game_falloff)
-				{
-					form_label("Focus", "Concentrates the light towards the aim within the cone (the toolkit's focus exponent; 0 = even).");
-					changed |= ImGui::DragFloat("##cl_focus", &l.focus, 0.05f, 0.0f, 100.0f, "%.2f");
-					back("cl_focus", l.focus, &game::custom_lights::light::focus);
-				}
+				ImGui::BeginDisabled(l.game_falloff);
+				form_label("Focus", "Concentrates the light towards the aim within the cone (the toolkit's focus exponent; 0 = even).\n"
+					"Remix lights only (greyed out on the game's falloff).");
+				changed |= ImGui::DragFloat("##cl_focus", &l.focus, 0.05f, 0.0f, 100.0f, "%.2f");
+				back("cl_focus", l.focus, &game::custom_lights::light::focus);
+				ImGui::EndDisabled();
 			}
+			ImGui::EndDisabled();
 		}
 		return changed;
 	}
@@ -2931,10 +3205,11 @@ namespace comp
 		revert_buttons("pl_on", c.enabled, saved_bool("PlayerLight", "Enabled", def.enabled), def.enabled);
 		form_checkbox("Use the game's colour", "##pl_gc", &c.use_game_colour, "Saved as [PlayerLight] UseGameColour.");
 		revert_buttons("pl_gc", c.use_game_colour, saved_bool("PlayerLight", "UseGameColour", def.use_game_colour), def.use_game_colour);
-		if (!c.use_game_colour)
 		{
-			form_label("Colour", "Saved as [PlayerLight] Colour.");
-			ImGui::ColorEdit3("##pl_colour", c.colour, ImGuiColorEditFlags_Float);
+			form_label("Colour", "Saved as [PlayerLight] Colour. Greyed out while the game's colour is used.");
+			ImGui::BeginDisabled(c.use_game_colour);
+			ImGui::ColorEdit3("##pl_colour", c.colour, ImGuiColorEditFlags_Float | (c.use_game_colour ? ImGuiColorEditFlags_NoDragDrop : 0));
+			ImGui::EndDisabled();
 			float saved_colour[3];
 			saved_float3("PlayerLight", "Colour", def.colour, saved_colour);
 			revert_buttons3("pl_colour", c.colour, saved_colour, def.colour);
@@ -2960,19 +3235,21 @@ namespace comp
 		{
 			form_checkbox("Use the game's reach", "##pl_gr", &c.use_game_range, "Saved as [PlayerLight] UseGameRange.");
 			revert_buttons("pl_gr", c.use_game_range, saved_bool("PlayerLight", "UseGameRange", def.use_game_range), def.use_game_range);
-			if (!c.use_game_range)
 			{
-				form_label("Reach", "Saved as [PlayerLight] Range.");
+				form_label("Reach", "Saved as [PlayerLight] Range. Greyed out while the game's reach is used.");
+				ImGui::BeginDisabled(c.use_game_range);
 				ImGui::SliderFloat("##pl_range", &c.range, 0.1f, 30.0f, "%.2f m");
+				ImGui::EndDisabled();
 				revert_buttons("pl_range", c.range, std::max(0.01f, saved_float("PlayerLight", "Range", def.range)), def.range);
 			}
 			form_checkbox("Use the game's emitter size", "##pl_gs", &c.use_game_radius,
 				"The game's dwindle begin as the emitter. Saved as [PlayerLight] UseGameRadius.");
 			revert_buttons("pl_gs", c.use_game_radius, saved_bool("PlayerLight", "UseGameRadius", def.use_game_radius), def.use_game_radius);
-			if (!c.use_game_radius)
 			{
-				form_label("Emitter size", "Saved as [PlayerLight] Radius.");
+				form_label("Emitter size", "Saved as [PlayerLight] Radius. Greyed out while the game's emitter size is used.");
+				ImGui::BeginDisabled(c.use_game_radius);
 				ImGui::SliderFloat("##pl_radius", &c.radius, 0.01f, 2.0f, "%.2f m");
+				ImGui::EndDisabled();
 				revert_buttons("pl_radius", c.radius, std::max(0.01f, saved_float("PlayerLight", "Radius", def.radius)), def.radius);
 			}
 			form_label("Brightness", "Saved as [PlayerLight] Intensity.");
@@ -3178,11 +3455,17 @@ namespace comp
 		if (form_checkbox("Draw this light", "##pt_draw", &draw, "Switch this one light off or on."))
 			o.disabled = !draw;
 		revert_buttons("pt_draw", o.disabled, saved.disabled, none.disabled);
-		if ((row.kind == kind::map_row || row.kind == kind::bank_entity) && (row.state == row_state::characters || o.include_map))
+		// Always shown for map lights (greyed out where it does nothing), so toggling a light never adds or takes away a row.
+		if (row.kind == kind::map_row || row.kind == kind::bank_entity)
 		{
+			const bool applies = o.include_map || row.state == row_state::characters ||
+				(characters_only(row.pos[0], row.pos[1], row.pos[2]) && !game::map_lights::is_flame(row.pos[0], row.pos[1], row.pos[2]));
+			ImGui::BeginDisabled(!applies);
 			form_checkbox("Light the map as well", "##pt_include", &o.include_map,
 				"The game lights only characters with this light; the map around it gets its light from the\n"
-				"lightmap. Ticked, Remix draws it as a normal light, which lights the walls and floor too.");
+				"lightmap. Ticked, Remix draws it as a normal light, which lights the walls and floor too.\n"
+				"Greyed out: this light lights the map already.");
+			ImGui::EndDisabled();
 			revert_buttons("pt_include", o.include_map, saved.include_map, none.include_map);
 		}
 		form_label("Brightness", "This light only, on top of the source brightness. 0 = off.");
@@ -3197,11 +3480,19 @@ namespace comp
 			std::memcpy(o.colour, row.colour, sizeof(o.colour));
 		if (revert_buttons("pt_recolour", o.recolour, saved.recolour, none.recolour) && o.recolour)
 			std::memcpy(o.colour, saved.colour, sizeof(o.colour));
+		// Shown (greyed out with the game's colour) while 'Own colour' is off, so the rows below stay put.
+		form_label("Colour", nullptr);
 		if (o.recolour)
 		{
-			form_label("Colour", nullptr);
 			ImGui::ColorEdit3("##pt_colour", o.colour, ImGuiColorEditFlags_Float);
 			revert_buttons3("pt_colour", o.colour, saved.recolour ? saved.colour : nullptr, row.colour);
+		}
+		else
+		{
+			float game_colour[3] = { row.colour[0], row.colour[1], row.colour[2] };
+			ImGui::BeginDisabled();
+			ImGui::ColorEdit3("##pt_colour", game_colour, ImGuiColorEditFlags_Float);
+			ImGui::EndDisabled();
 		}
 		solo_flash_imgui(row.key);
 
