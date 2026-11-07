@@ -283,9 +283,10 @@ def cmd_host(args):
     if running("NvRemixBridge.exe") and not _wait_gone("NvRemixBridge.exe", 45.0):
         sys.exit("NvRemixBridge.exe is running: the normal game (or another Remix client) owns the bridge. Close it first.")
     require_deploy_switch()
-    import shutil
-    shutil.copy2(HOST, HOST_IN_GAME)
-    shutil.copy2(PROXY_BUILD, PROXY_IN_GAME)
+    # As the game's own files: a host that died without unmapping its image (killed, stuck in the driver) keeps both
+    # locked, and a plain copy then refused every later start.
+    deploy_file(HOST, HOST_IN_GAME)
+    deploy_file(PROXY_BUILD, PROXY_IN_GAME)
     print(f"proxy {PROXY_BUILD} ({datetime.datetime.fromtimestamp(PROXY_BUILD.stat().st_mtime):%H:%M:%S}) -> {PROXY_IN_GAME.name}")
     deploy_game_proxy()
     source = ["--live"] if args.live else [str(cap)]
