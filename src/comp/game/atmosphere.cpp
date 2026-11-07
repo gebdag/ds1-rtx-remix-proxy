@@ -136,8 +136,8 @@ namespace comp::game::atmosphere
 		haze_values g_haze_sent;
 		bool g_haze_sent_once = false;
 
-		// Per-draw haze sets: every distinct set the frame's draws carry holds a slot (1-15, the
-		// 4 bits the runtime keeps per surface) until no draw has used it for two frames. A set
+		// Per-draw haze sets: every distinct set the frame's draws carry holds a slot (1-14 of the
+		// 4 bits the runtime keeps per surface; 15 is kUnhazedSlot) until no draw has used it for two frames. A set
 		// keeps its slot while it is in use, so a draw's tag always names values Remix already
 		// has, except in a set's first frames: its values go out at the next frame_update, once
 		// Remix accepted them, and Remix applies options at the end of the frame that receives
@@ -150,10 +150,13 @@ namespace comp::game::atmosphere
 			unsigned int last_frame = 0;
 			bool used = false;
 		};
-		constexpr int kHazeSlots = 15;
+		constexpr int kHazeSlots = 14;
+		constexpr DWORD kUnhazedSlot = 15;
 		constexpr unsigned int kSlotLatency = 2;
 		constexpr DWORD kHazeMarker = 0xD15DA000;
 		haze_slot g_slots[kHazeSlots + 1]; // [0] unused
+		// The last tag_self_lit put a light shaft's own haze into its colour (tag_unhazed then keeps the look's haze off it).
+		bool g_shaft_own_haze = false;
 		bool g_slots_dirty = false;
 		DWORD g_tag_set = ~0u; // the stage 7 constant as last set; ~0 = unknown (set it)
 
@@ -521,6 +524,16 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	void tag_unhazed(IDirect3DDevice9* dev)
+	{
+		const DWORD tag = kHazeMarker | kUnhazedSlot;
+		if (dev && g_shaft_own_haze && tag != g_tag_set)
+		{
+			dev->SetTextureStageState(7, D3DTSS_CONSTANT, tag);
+			g_tag_set = tag;
+		}
+	}
+
 	namespace
 	{
 		// A probe-lit draw's self-lit colour (c100 * its uniform hemisphere ambient, gamma space), when
@@ -617,10 +630,11 @@ namespace comp::game::atmosphere
 	}
 
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
-		bool light_shaft)
+		bool light_shaft, const float* vs_const, float shaft_distance)
 	{
 		DWORD tag = 0;
 		g_self_lit_below_tag = 0;
+		g_shaft_own_haze = false;
 		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
 		// (m18_ao, c100 7) is an ordinary surface Remix lights, and the tag would add its c100 glow on top of that
 		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
@@ -647,7 +661,22 @@ namespace comp::game::atmosphere
 				float mean = 0.0f;
 				for (const auto& f : faces)
 					mean += f[c] / 6.0f;
-				const float value = ps_const[100 * 4 + c] * ((probed ? mean : 0.0f) * ps_const[86 * 4 + c] +
+				// Its own haze, which the game's shader puts on it with its own set (c103-c111, VS c128) at its own depth, and
+				// the look's haze leaves alone (tag_unhazed): the gain at its centre's distance. Without it Bed of Chaos's shaft
+				// came out 1.27 / 1.42 / 1.55 times the game's (frame_20261106_153141).
+				float gain = 1.0f;
+				if (vs_const && shaft_distance > 0.0f)
+				{
+					const float fog = std::clamp(std::clamp((shaft_distance - vs_const[128 * 4]) * vs_const[128 * 4 + 1], 0.0f, 1.0f) *
+						ps_const[103 * 4 + 3], 0.0f, 1.0f);
+					const float ext = std::exp2(-ps_const[104 * 4 + c] * shaft_distance * ps_const[111 * 4 + 3] * 2.08136892f);
+					const float blend = ps_const[110 * 4 + 3];
+					gain = (1.0f - fog) * (1.0f + (ext * ps_const[105 * 4 + c] - 1.0f) * blend);
+					if (!std::isfinite(gain))
+						gain = 1.0f;
+					g_shaft_own_haze = true;
+				}
+				const float value = gain * ps_const[100 * 4 + c] * ((probed ? mean : 0.0f) * ps_const[86 * 4 + c] +
 					0.5f * (ps_const[98 * 4 + c] + ps_const[99 * 4 + c]));
 				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(value, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 			}

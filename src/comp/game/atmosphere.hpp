@@ -11,7 +11,7 @@ namespace comp::game::atmosphere
 	// c107 Mie phase, c108 Rayleigh, c109 Mie, c110 sun colour (w = blend),
 	// c111 sun direction (w = distance scale), c135 exposure. These are per-region
 	// DrawParams, applied per draw, so Remix gets them per draw too: each distinct set
-	// takes a slot (1-15), each draw is tagged with its set's slot (tag_haze_set), and
+	// takes a slot (1-14; 15 is tag_unhazed's), each draw is tagged with its set's slot (tag_haze_set), and
 	// the runtime hazes a pixel with its surface's set (rtx.ds1Haze.sets). The single
 	// set most of the frame's geometry uses (weighted by primitives, held against brief
 	// challengers; atmosphere.cpp dominant_set) remains for untagged surfaces.
@@ -40,6 +40,13 @@ namespace comp::game::atmosphere
 	// (renderer for DIP/DP, d3d9ex for the UP draws), so no draw inherits another's tag.
 	void tag_haze_set(IDirect3DDevice9* dev, bool has_haze, const float* ps_const, const float* vs_const, unsigned int frame);
 
+	// Tags the draw about to be drawn as a layer the DS1 look's haze leaves alone, keeping its exposure (haze slot 15,
+	// Surface::isDs1Unhazed in the runtime): a light shaft. The game hazes it with its own set in its shader; the look's haze
+	// would use the set of the surface behind it, a wall fogged red from 50 m behind Bed of Chaos's grey-fogged shaft, which
+	// drew the wall's outline across the shaft (frame_20261106_153141). After tag_haze_set, which it overrides for this draw,
+	// and only where the last tag_self_lit put the shaft's own haze into its colour; otherwise the draw keeps its set.
+	void tag_unhazed(IDirect3DDevice9* dev);
+
 	// Self-lit ambient: a few region light sets switch the probe off (c86 = 0) and give both
 	// hemispheres one bright colour, so the HemEnv shaders draw their surfaces as texture * c100 *
 	// that colour however the scene is lit. That is how the game makes a plain rock plane its
@@ -57,9 +64,11 @@ namespace comp::game::atmosphere
 	// shells, c100 = 10, which Remix otherwise lit as plain surfaces in the dark). Alpha-blended draws only:
 	// an opaque one is a surface Remix lights, additive ones keep the fixed additive intensity.
 	// A lit effect mesh (`lit_effect`, ffp_state cur_is_lit_effect_mesh) likewise, tagged with c100 times its light.
-	// A light shaft (`light_shaft`, texture_names::is_light_shaft) with the game's ambient on it, seen from the side.
+	// A light shaft (`light_shaft`, texture_names::is_light_shaft) with the game's ambient on it, seen from the side, and its own
+	// haze at `shaft_distance` (its centre's, metres; <= 0 unknown) by its own set (PS c103-c111, VS c128 in `vs_const`).
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
-		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false);
+		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false,
+		const float* vs_const = nullptr, float shaft_distance = -1.0f);
 
 	// View fade: FRPG_NtoA multiplies its alpha by sat((|N.V| - c176.x) * c176.y), so its foliage cards
 	// (M_Tree[D]_Edge, alpha tested) vanish edge-on and its additive shells (Bed of Chaos's seal) glow

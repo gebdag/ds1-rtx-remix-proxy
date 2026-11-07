@@ -347,6 +347,9 @@ namespace comp
 				const bool base_decal = !is_atmospheric_layer() && !light_shaft && ffp.apply_blended_decal_marker(dev);
 				// A light shaft is a glow layer, as on the indexed path (its colour is the self-lit tag).
 				const bool shaft_layer = light_shaft && ffp.apply_unlit_layer_marker(dev, true);
+				// Hazed by the game with its own set, not the set of the wall behind it (atmosphere.hpp tag_unhazed).
+				if (shaft_layer)
+					game::atmosphere::tag_unhazed(dev);
 				const bool tinted = ffp.apply_draw_tint(dev);
 				const bool effect = ffp.apply_sp_effect(dev);
 				const bool toned = ffp.apply_skin_tone(dev, false);
@@ -520,11 +523,17 @@ namespace comp
 		// ... and Remix hazes the draw's surfaces with its own set, as the game does.
 		game::atmosphere::tag_haze_set(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_HAZE),
 			ffp.ps_const_data(), ffp.vs_const_data(), ffp.frame_count());
-		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit).
+		// ... and draws the game lights by a bright uniform ambient alone glow (atmosphere.hpp tag_self_lit). A light shaft with its
+		// own haze at its centre's distance.
+		const bool shaft_draw = ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer();
+		float shaft_distance = -1.0f;
+		if (float centre[3], ox, oy, oz; shaft_draw && ffp.draw_world_centre(PrimitiveType, BaseVertexIndex, startIndex, primCount, centre) &&
+			ffp.world_offset(ox, oy, oz))
+			shaft_distance = std::sqrt((centre[0] - ox) * (centre[0] - ox) + (centre[1] - oy) * (centre[1] - oy) + (centre[2] - oz) * (centre[2] - oz));
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
-			ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer());
+			shaft_draw, ffp.vs_const_data(), shaft_distance);
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -844,6 +853,9 @@ namespace comp
 					// Alpha-blended unlit glow layers take the sprites' unlit marker instead (ffp_state).
 					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
 						ffp.apply_unlit_layer_marker(dev, light_shaft);
+					// Hazed by the game with its own set, not the set of the wall behind it (atmosphere.hpp tag_unhazed).
+					if (unlit_layer && light_shaft)
+						game::atmosphere::tag_unhazed(dev);
 					if (shell && (shell_mode == 2 || flask))
 					{
 						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).

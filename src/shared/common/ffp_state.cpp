@@ -2674,6 +2674,152 @@ namespace shared::common
 		return true;
 	}
 
+	// Up to 64 of the bound draw's triangles in object space, read once per draw (buffers and range) and cached: the game's own
+	// buffers, never write-only video memory. Null when they cannot be read.
+	const ffp_state::effect_mesh_entry* ffp_state::sampled_triangles(D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index, UINT prim_count)
+	{
+		IDirect3DVertexBuffer9* vb = stream_vb_[0];
+		IDirect3DIndexBuffer9* ib = cur_ib_;
+		const UINT stride = stream_stride_[0], vb_offset = stream_offset_[0];
+		if (!vb || !ib || !stride)
+			return nullptr;
+		uint64_t key = reinterpret_cast<uintptr_t>(vb);
+		auto mix = [&key](uint64_t v) { key = (key ^ v) * 0x100000001B3ull; };
+		mix(reinterpret_cast<uintptr_t>(ib));
+		mix(static_cast<uint32_t>(base_vertex));
+		mix(start_index);
+		mix(prim_count);
+		mix(static_cast<uint64_t>(prim));
+		auto found = effect_meshes_.find(key);
+		if (found == effect_meshes_.end())
+		{
+			if (effect_meshes_.size() > 4096)
+				effect_meshes_.clear();
+			effect_mesh_entry entry;
+			// The game's own buffers: read once per draw. Write-only video memory reads back nothing useful (none sampled).
+			D3DINDEXBUFFER_DESC idesc {};
+			D3DVERTEXBUFFER_DESC vdesc {};
+			int pos_off = -1, bone_off = -1, colour_off = -1, colour_type = 0;
+			if (last_decl_)
+			{
+				D3DVERTEXELEMENT9 elements[MAXD3DDECLLENGTH];
+				UINT n = 0;
+				if (SUCCEEDED(last_decl_->GetDeclaration(elements, &n)))
+					for (UINT i = 0; i < n && elements[i].Stream != 0xFF; i++)
+					{
+						if (elements[i].Stream != 0 || elements[i].UsageIndex != 0)
+							continue;
+						if (elements[i].Usage == D3DDECLUSAGE_POSITION && elements[i].Type == D3DDECLTYPE_FLOAT3)
+							pos_off = elements[i].Offset;
+						else if (elements[i].Usage == D3DDECLUSAGE_BLENDINDICES)
+							bone_off = elements[i].Offset;
+						else if (elements[i].Usage == D3DDECLUSAGE_COLOR)
+						{
+							colour_off = elements[i].Offset;
+							colour_type = elements[i].Type;
+						}
+					}
+			}
+			const bool readable = pos_off >= 0 && SUCCEEDED(ib->GetDesc(&idesc)) && SUCCEEDED(vb->GetDesc(&vdesc)) &&
+				!(idesc.Pool == D3DPOOL_DEFAULT && (idesc.Usage & D3DUSAGE_WRITEONLY)) &&
+				!(vdesc.Pool == D3DPOOL_DEFAULT && (vdesc.Usage & D3DUSAGE_WRITEONLY));
+			const UINT isz = idesc.Format == D3DFMT_INDEX32 ? 4 : 2;
+			const UINT indices = prim == D3DPT_TRIANGLESTRIP ? prim_count + 2 : prim_count * 3;
+			void* idata = nullptr;
+			void* vdata = nullptr;
+			if (readable && static_cast<uint64_t>(start_index + indices) * isz <= idesc.Size &&
+				SUCCEEDED(ib->Lock(start_index * isz, indices * isz, &idata, D3DLOCK_READONLY)) && idata)
+			{
+				if (SUCCEEDED(vb->Lock(0, 0, &vdata, D3DLOCK_READONLY)) && vdata)
+				{
+					constexpr UINT kMaxTriangles = 64;
+					const UINT step = std::max(1u, (prim_count + kMaxTriangles - 1) / kMaxTriangles);
+					const auto* bytes = static_cast<const unsigned char*>(vdata);
+					auto index_at = [&](UINT i) -> int64_t
+					{
+						return static_cast<int64_t>(isz == 4 ? static_cast<const uint32_t*>(idata)[i] : static_cast<const uint16_t*>(idata)[i]) + base_vertex;
+					};
+					UINT taken = 0;
+					for (UINT t = 0; t < prim_count; t += step)
+					{
+						int64_t v[3];
+						if (prim == D3DPT_TRIANGLELIST) { v[0] = index_at(3 * t); v[1] = index_at(3 * t + 1); v[2] = index_at(3 * t + 2); }
+						else { v[0] = index_at(t); v[1] = index_at(t + 1); v[2] = index_at(t + 2); }
+						effect_mesh_triangle tri {};
+						bool ok = true;
+						float rgba[4] = {};
+						for (int k = 0; k < 3 && ok; k++)
+						{
+							const int64_t at = static_cast<int64_t>(vb_offset) + v[k] * stride;
+							if (v[k] < 0 || at + static_cast<int64_t>(stride) > static_cast<int64_t>(vdesc.Size))
+							{
+								ok = false;
+								break;
+							}
+							std::memcpy(tri.p[k], bytes + at + pos_off, sizeof(tri.p[k]));
+							tri.bone[k] = bone_off >= 0 ? bytes[at + bone_off] : 0;
+							const DWORD c = colour_off >= 0 ? pack_decl_color(bytes + at, colour_off, colour_type) : 0xFFFFFFFFu;
+							rgba[0] += ((c >> 16) & 0xFF) / 255.0f / 3.0f;
+							rgba[1] += ((c >> 8) & 0xFF) / 255.0f / 3.0f;
+							rgba[2] += (c & 0xFF) / 255.0f / 3.0f;
+							rgba[3] += (c >> 24) / 255.0f / 3.0f;
+						}
+						if (!ok)
+							continue;
+						std::memcpy(tri.rgba, rgba, sizeof(rgba));
+						entry.triangles.push_back(tri);
+						taken++;
+					}
+					// Each sampled triangle stands for step of them.
+					entry.scale = taken ? static_cast<float>(prim_count) / static_cast<float>(taken) : 1.0f;
+					vb->Unlock();
+				}
+				ib->Unlock();
+			}
+			found = effect_meshes_.emplace(key, std::move(entry)).first;
+		}
+		return &found->second;
+	}
+
+	bool ffp_state::draw_world_centre(D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index, UINT prim_count, float out[3])
+	{
+		float ox, oy, oz;
+		if (!view_proj_valid_ || cur_decl_is_skinned_ || (prim != D3DPT_TRIANGLELIST && prim != D3DPT_TRIANGLESTRIP) || !prim_count ||
+			!world_offset(ox, oy, oz))
+			return false;
+		const effect_mesh_entry* entry = sampled_triangles(prim, base_vertex, start_index, prim_count);
+		if (!entry)
+			return false;
+		double centre[3] = {}, total = 0.0;
+		for (const auto& tri : entry->triangles)
+		{
+			float w[3][3];
+			for (int k = 0; k < 3; k++)
+			{
+				// The world rows (VS c8 on, within the 256 registers), relative to the camera, then the world offset (as mesh_lights).
+				const float* m = vs_const_ + (8 + 3 * std::min(static_cast<int>(tri.bone[k]), 82)) * 4;
+				const float* p = tri.p[k];
+				w[k][0] = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3] + ox;
+				w[k][1] = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7] + oy;
+				w[k][2] = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11] + oz;
+			}
+			const float e1[3] = { w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2] };
+			const float e2[3] = { w[2][0] - w[0][0], w[2][1] - w[0][1], w[2][2] - w[0][2] };
+			const float cx = e1[1] * e2[2] - e1[2] * e2[1], cy = e1[2] * e2[0] - e1[0] * e2[2], cz = e1[0] * e2[1] - e1[1] * e2[0];
+			const double area = 0.5 * std::sqrt(static_cast<double>(cx) * cx + static_cast<double>(cy) * cy + static_cast<double>(cz) * cz);
+			if (!std::isfinite(area))
+				continue;
+			for (int a = 0; a < 3; a++)
+				centre[a] += area * (w[0][a] + w[1][a] + w[2][a]) / 3.0;
+			total += area;
+		}
+		if (!(total > 0.0))
+			return false;
+		for (int a = 0; a < 3; a++)
+			out[a] = static_cast<float>(centre[a] / total);
+		return std::isfinite(out[0] + out[1] + out[2]);
+	}
+
 	std::array<float, 4> ffp_state::texture_average(IDirect3DBaseTexture9* texture)
 	{
 		if (auto it = texture_average_.find(texture); it != texture_average_.end())

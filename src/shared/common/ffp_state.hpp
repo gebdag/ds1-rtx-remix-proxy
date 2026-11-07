@@ -179,6 +179,10 @@ namespace shared::common
 		struct sprite_point { float x, y, z, alpha; float r, g, b; float area; bool additive; };
 		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
 		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
+		// The bound indexed draw's area-weighted centre in world space (rigid draws: VS c8 rows and the world offset), from up to
+		// 64 of its triangles. False when its buffers cannot be read. Call with the game's state, before the rigid expansion
+		// replaces stream 0.
+		bool draw_world_centre(D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index, UINT prim_count, float out[3]);
 
 		// Per-frame flags — set by the comp layer's camera module
 		void set_inject_view_pos(bool v) { inject_view_pos_ = v; }
@@ -702,6 +706,11 @@ namespace shared::common
 		void push_soft_sprite(float* position, float feather) const;
 		// Average colour (rgba, 0-1) of textures used as sprite masks, from their smallest mip.
 		std::unordered_map<IDirect3DBaseTexture9*, std::array<float, 4>> texture_average_;
+		// draw_world_centre: up to 64 of a draw's triangles in object space, by draw (buffers and range).
+		struct effect_mesh_triangle { float p[3][3]; uint8_t bone[3]; float rgba[4]; };
+		struct effect_mesh_entry { std::vector<effect_mesh_triangle> triangles; float scale = 1.0f; };
+		std::unordered_map<uint64_t, effect_mesh_entry> effect_meshes_;
+		const effect_mesh_entry* sampled_triangles(D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index, UINT prim_count);
 		std::array<float, 4> texture_average(IDirect3DBaseTexture9* texture);
 		// A sprite texture's texels (rgba, 0-1) from its largest mip at most kMaskTexelSize wide, for sampling
 		// the Multi sprites' textures per vertex (a small mip: the vertices of a subdivided sprite are several
