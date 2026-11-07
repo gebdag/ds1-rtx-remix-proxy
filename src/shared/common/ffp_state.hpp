@@ -211,6 +211,9 @@ namespace shared::common
 		// What becomes of a sprite batch: as usual, taken (not drawn), or drawn with a marker for stage 4's D3DTSS_CONSTANT (returned, anything above 1).
 		using sprite_batch_fn = DWORD(*)(IDirect3DBaseTexture9* texture, const void* vertices, UINT stride, UINT position_offset, UINT colour_offset, UINT count);
 		void set_sprite_batch_taker(sprite_batch_fn fn) { sprite_batch_fn_ = fn; }
+		// Whether a sprite texture is the bloodstain's motes (s01003): such a draw is tagged for Remix particles (draw_sprite_up).
+		using sprite_texture_fn = bool(*)(IDirect3DBaseTexture9* texture);
+		void set_mote_texture_test(sprite_texture_fn fn) { mote_texture_fn_ = fn; }
 		// Cube textures the device created, by address: the game reaches its probes through handles of its own.
 		void note_cube(IDirect3DBaseTexture9* cube)
 		{
@@ -833,6 +836,7 @@ namespace shared::common
 		std::unordered_set<IDirect3DBaseTexture9*> known_cubes_;
 		uint32_t known_cube_vtable_ = 0;
 		sprite_batch_fn sprite_batch_fn_ = nullptr;
+		sprite_texture_fn mote_texture_fn_ = nullptr;
 		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking

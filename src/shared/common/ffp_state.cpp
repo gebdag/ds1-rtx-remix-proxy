@@ -2509,6 +2509,65 @@ namespace shared::common
 					out[v].color = (out[v].color & 0x00FFFFFFu) | (static_cast<DWORD>((out[v].color >> 24) * fade + 0.5f) << 24);
 			}
 
+		// Two effects Remix particles replace (runtime rtx_dark_souls_effect_particles.h), tagged on stage 4 like the fog gates' batches:
+		// the green motes over a bloodstain (s01003), and the streaks of a weapon striking stone (FRPG_Sfx_LineType0: additive, its pixel
+		// shader samples nothing). Both by the game's own vertex colour too (before the exposure scale above, which moves with the eye):
+		// the bloodstain's motes are (130, 255, 180), b/g 0.71, where the Moonlight Butterfly's magic on the same texture is
+		// (150, 255, 200), b/g 0.78; a hit's streaks come as an orange batch (255, 160, 50) and a paler one (255, 200, 100).
+		// A streak is a quad: two corners at each end. Its ends get u = -1 and +1 (it samples nothing, so u is free): a spark flies
+		// from the streak's middle towards the end on its side, the streaks crossing the hit's centre.
+		constexpr DWORD kMotesMarker = 0xD4000007;
+		constexpr DWORD kSparksMarker = 0xD4000008;
+		DWORD effect_marker = 0;
+		if (!batch_marker && unlit && !points && !masked && count >= 3 && cur_decl_has_color_)
+		{
+			DWORD blend_on = FALSE, dst_blend = 0;
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_on);
+			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
+			if (blend_on && dst_blend == D3DBLEND_ONE)
+			{
+				double sum_r = 0.0, sum_g = 0.0, sum_b = 0.0;
+				for (UINT v = 0; v < count; v++)
+				{
+					const DWORD raw = pack_decl_color(src + static_cast<size_t>(v) * stride, cur_decl_color_off_, cur_decl_color_type_);
+					sum_r += (raw >> 16) & 0xFF; sum_g += (raw >> 8) & 0xFF; sum_b += raw & 0xFF;
+				}
+				const bool stain_green = sum_r < sum_g * 0.7 && sum_b < sum_g * 0.745;
+				const bool spark_warm = sum_g < sum_r * 0.85 && sum_b < sum_r * 0.45;
+				if (stain_green && mote_texture_fn_ && (cur_ps_sampler_mask_ & 1u) && mote_texture_fn_(cur_texture_[0]))
+					effect_marker = kMotesMarker;
+				else if (spark_warm && !(cur_ps_sampler_mask_ & 1u) && count % 4 == 0)
+				{
+					// Each quad's corners pair up by end: the two nearest each other.
+					auto dist2 = [&](UINT a, UINT b)
+					{
+						const double dx = out[a].x - out[b].x, dy = out[a].y - out[b].y, dz = out[a].z - out[b].z;
+						return dx * dx + dy * dy + dz * dz;
+					};
+					bool streaks = true;
+					for (UINT q = 0; q < count && streaks; q += 4)
+					{
+						const double d01 = dist2(q, q + 1), d02 = dist2(q, q + 2), d03 = dist2(q, q + 3);
+						const UINT mate = d01 <= d02 && d01 <= d03 ? q + 1 : d02 <= d03 ? q + 2 : q + 3;
+						const double width = std::min({ d01, d02, d03 }), length = std::max({ d01, d02, d03 });
+						// A streak: far longer than wide.
+						if (!(length > width * 16.0))
+						{
+							streaks = false;
+							break;
+						}
+						for (UINT k = q; k < q + 4; k++)
+						{
+							out[k].u = (k == q || k == mate) ? -1.0f : 1.0f;
+							out[k].v = 0.0f;
+						}
+					}
+					if (streaks)
+						effect_marker = kSparksMarker;
+				}
+			}
+		}
+
 		IDirect3DVertexDeclaration9* game_decl = nullptr;
 		dev->GetVertexDeclaration(&game_decl);
 
@@ -2560,6 +2619,8 @@ namespace shared::common
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged ? kUnhazedUnlitMarker : kUnlitMarker);
 		if (batch_marker)
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, batch_marker);
+		if (effect_marker)
+			dev->SetTextureStageState(4, D3DTSS_CONSTANT, effect_marker);
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		// A sprite whose shader never reads the scene depth (SimpleSpriteType0: a message's runes, laid on the
@@ -2655,7 +2716,7 @@ namespace shared::common
 		if (game_rt) game_rt->Release();
 		if (unlit)
 			dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
-		if (batch_marker)
+		if (batch_marker || effect_marker)
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 		if (feathered)
 			dev->SetTextureStageState(2, D3DTSS_CONSTANT, stage2_constant);
