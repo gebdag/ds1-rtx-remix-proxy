@@ -17,7 +17,7 @@ The layer is a z_pbr sublayer, not a mod of its own: Remix takes a texture's mat
 hash, so a separate mod would drop z_pbr's high-res albedo and normal maps for these leaves. pbr_tools/
 build_pbr.py keeps foliage.usda in z_pbr's sublayers; this script adds it to the current mod.usda if missing.
 
-Only hashes a capture proved (PROVEN), plus the user's in-game test set (USER_TEST), are written: in those captures the plants move towards the game's look and
+Only hashes a capture proved (PROVEN), plus those the user approved in the game (USER_APPROVED), are written: in those captures the plants move towards the game's look and
 nothing else gets worse. A texture name can have several copies (map, object, other areas' folders) with their own
 hashes; each copy is proven on its own, by the hash the capture uploads.
 
@@ -54,10 +54,10 @@ PROVEN = {
     "BE798D0C7579B50F": "m10_grass_00", "1CAB90B15D1AAD7E": "m10_grass_diteal", "20C1D68DA46295D6": "m10_ivy_01",
     "898339D99DA7C2E9": "m10_01_grass_01", "E5B975B00D7C6319": "m10_01_tree_02", "7F86267370401636": "m10_01_tree_05",
 }
-# Not proven, written for an in-game test on the user's request (2026-11-07): Darkroot (m12_00) and Royal Wood / Oolacile
-# (m12_01) leaves, map/m12 copies plus the m15_tree_04 copies Darkroot draws. In captures these canopies came out brighter
-# than the game (frame_20261101_225235: 21.1 game, 23.6 without, 32.1 with).
-USER_TEST = {
+# Approved by the user in the game (2026-11-07): Darkroot (m12_00) and Royal Wood / Oolacile (m12_01) leaves, map/m12 copies
+# plus the m15_tree_04 copies Darkroot draws. In captures these canopies come out brighter than the game
+# (frame_20261101_225235: 21.1 game, 23.6 without, 32.1 with); the user prefers them in play.
+USER_APPROVED = {
     "97D9264B99B5A592": "m12_00_leaf_01", "7B6C68F699946078": "m12_00_leaf_02", "1DA22CB8590E9422": "m12_00_leaf_03",
     "E0B772F779343B03": "m12_00_tree_05", "F8CBA5C287706719": "m12_dlc_flower_01", "0B73BC006A0E7473": "m12_dlc_flower_02",
     "3690CBFEDF027476": "m12_dlc_grass_01", "84983DA40448A699": "m12_dlc_grass_02", "9E27E2A5BB6596E8": "m12_dlc_grass_19",
@@ -93,7 +93,7 @@ def is_leaf_name(entry):
 
 def picks(every):
     entries = json.load(open(INDEX))["entries"]
-    listed = {**PROVEN, **USER_TEST}
+    listed = {**PROVEN, **USER_APPROVED}
     hashes = sorted(h for h, e in entries.items() if is_leaf_name(e)) if every else sorted(listed)
     out = []
     for h in hashes:
