@@ -30,12 +30,11 @@ from gen_sky_meshes import diffuse_name, fnv1a64
 GAP_MAX, GAP_MIN, FACING, MIN_SHARE, MIN_AREA = 0.5, 0.01, 0.95, 0.1, 1.0
 
 # Thin walls whose two faces are in different models, which the pairing within a model cannot find: (map, model, mesh).
-# Undead Asylum corridor: m0300B1A18 mesh9 (m19_b_wall_05) rises 0.8 m through the floor 5.1 cm in front of m0010B1A18
-# mesh11's wall (m19_b_wall_02), facing it; lighting rays from the wall met it and the band under a cell window went black
-# under the player light (frame_20261105_224454, draws 378 and 323).
+# Not the Undead Asylum corridor pair (m0300B1A18 mesh9 5.1 cm in front of m0010B1A18 mesh11, the band under a cell
+# window, frame_20261105_224454): mesh9 casts no shadow instead (assets/sky/no_shadow_meshes.txt), which fixes the band
+# alone. As a thin wall, mesh11 let lighting rays through the corridor wall to the sky and lit the rubble under it white
+# (frame_20261106_234400: peak 137 with the pair, 18 without; the band frames unchanged).
 CROSS_MODEL = {
-    ('m18_01_00_00', 'm0300B1A18', 9),
-    ('m18_01_00_00', 'm0010B1A18', 11),
     # From scripts/scan_cross_model_thin_walls.py --verify (2026-11-06): meshes whose area is >= 10% and >= 1 m^2 covered,
     # sampled, by a facing surface of another placed piece 1-50 cm in front (the rule above, across models). The scan's
     # smaller strips (under 10%, the Asylum pair's kind) are not listed: many are props standing on floors.
