@@ -293,6 +293,8 @@ namespace shared::common
 		sky.mark_sky_draws = get_bool("Sky", "MarkSkyDraws", true);
 		sky.shell_mode = std::clamp(get_int("Sky", "ShellMode", 2), 0, 2);
 		sky.glass_split = get_bool("Sky", "GlassSplit", true);
+		sky.thin_walls = get_bool("Sky", "ThinWalls", true);
+		sky.no_shadow_meshes = get_bool("Sky", "NoShadowMeshes", true);
 
 		// [Resolution]
 		resolution.ini_render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));

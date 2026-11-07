@@ -351,6 +351,14 @@ namespace comp
 			ImGui::Checkbox("Window Glass Split", &cfg.sky.glass_split);
 			ImGui::SameLine();
 			ImGui::TextDisabled("leaded came as an opaque cutout, glass as its own (ds1_glass translucent) surface");
+
+			ImGui::Checkbox("Thin Walls", &cfg.sky.thin_walls);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Sky] ThinWalls: lighting rays pass a facing wall face within 0.5 m. Off to test light leaks");
+
+			ImGui::Checkbox("No-Shadow Meshes", &cfg.sky.no_shadow_meshes);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Sky] NoShadowMeshes: the faces in no_shadow_meshes.txt cast no shadow");
 			ImGui::Separator();
 		}
 

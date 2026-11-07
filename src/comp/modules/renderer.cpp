@@ -695,7 +695,7 @@ namespace comp
 				if (swamp)
 					dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
 				// A character with thin wall faces (the Moonlight Butterfly's wings: black patches otherwise).
-				const bool thin_wall_skin = game::texture_names::is_butterfly_wing(
+				const bool thin_wall_skin = shared::common::config::get().sky.thin_walls && game::texture_names::is_butterfly_wing(
 					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 				if (thin_wall_skin)
 					dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
@@ -816,7 +816,7 @@ namespace comp
 				// A wall of two single-sided faces turned towards each other goes to Remix tagged (game/thin_walls.hpp).
 				// Map meshes come from the offline table, which pairs faces across a model's meshes; the rest are
 				// measured on the game's own buffers, before the expansion replaces stream 0.
-				const bool inside_out = !water_draw &&
+				const bool inside_out = !water_draw && shared::common::config::get().sky.thin_walls &&
 					(game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount) ||
 					 game::thin_walls::is_inside_out(ffp.stream_vb(0), ffp.stream_offset(0), ffp.stream_stride(0), ffp.last_decl(),
 						ffp.cur_ib(), PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count()));
@@ -879,7 +879,8 @@ namespace comp
 					// A lamp holds its light inside: lighting rays pass it (game/mesh_lights.hpp).
 					const bool lamp = game::mesh_lights::is_lamp(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 					// So do the faces in rtx_comp\sky\no_shadow_meshes.txt (game/sky_meshes.hpp): same marker.
-					const bool no_shadow = !water_draw && game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+					const bool no_shadow = !water_draw && shared::common::config::get().sky.no_shadow_meshes &&
+						game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 					if (lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).

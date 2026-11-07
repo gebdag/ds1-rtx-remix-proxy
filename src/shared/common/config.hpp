@@ -366,6 +366,13 @@ namespace shared::common
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.
 			bool glass_split = true;
+			// Thin walls (rtx_comp\sky\thin_wall_meshes.txt, meshes measured inside out, the Moonlight Butterfly's wings): tagged
+			// so lighting rays pass a face turned back towards the surface they left, within 0.5 m (Surface::isDs1ThinWall). Off:
+			// no draw is tagged, every face stops rays (for testing light leaks; walls of two facing faces go dark).
+			bool thin_walls = true;
+			// No-shadow meshes (rtx_comp\sky\no_shadow_meshes.txt): tagged so lighting rays pass them (Surface::isDs1NoShadow).
+			// Off: they cast shadows like any mesh. Lamp meshes (mesh_lights) keep their tag.
+			bool no_shadow_meshes = true;
 		} sky;
 
 		struct resolution_settings
