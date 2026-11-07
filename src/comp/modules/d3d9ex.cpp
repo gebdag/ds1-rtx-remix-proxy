@@ -842,6 +842,27 @@ namespace comp
 		s_composite_requested = false;
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
+		// A frame presented over 300 ms after the last one is a hitch the player sees: logged with the wall clock (the remix log's
+		// times) and the frame count, to match against what loaded around it.
+		{
+			static LARGE_INTEGER s_last {}, s_freq {};
+			LARGE_INTEGER now {};
+			QueryPerformanceCounter(&now);
+			if (!s_freq.QuadPart)
+				QueryPerformanceFrequency(&s_freq);
+			if (s_last.QuadPart)
+			{
+				const double ms = static_cast<double>(now.QuadPart - s_last.QuadPart) * 1000.0 / static_cast<double>(s_freq.QuadPart);
+				if (ms > 300.0)
+				{
+					SYSTEMTIME t {};
+					GetLocalTime(&t);
+					shared::common::log("Hitch", std::format("{:02}:{:02}:{:02}.{:03} frame {}: {:.0f} ms since the last Present",
+						t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, ffp.frame_count(), ms));
+				}
+			}
+			s_last = now;
+		}
 		rt_tracker::on_present();
 		perf::on_present();
 		shared::common::ffp_prof::on_present();
