@@ -20,6 +20,7 @@
 #include "../game/lightmap_sun.hpp"
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
+#include "../game/map_lights.hpp"
 #include "../game/mesh_lights.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
@@ -47,6 +48,8 @@ namespace comp
 		constexpr DWORD kThinWallMarker = 0xD4000003;
 		// Stage 4's D3DTSS_CONSTANT on a lamp the runtime's lighting rays pass (game/mesh_lights.hpp).
 		constexpr DWORD kLampMarker = 0xD4000004;
+		// Stage 4's D3DTSS_CONSTANT on foliage (texture_names::is_foliage): lighting rays pass it in part (Surface::isDs1Foliage).
+		constexpr DWORD kFoliageMarker = 0xD4000006;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
 		// are blended over) in a pass whose camera is the main one: no user clip
@@ -881,6 +884,13 @@ namespace comp
 						game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 					if (lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
+					// Leaf cards the game lights without occlusion let indirect light through in part (Surface::isDs1Foliage). Only in Firelink
+					// Shrine (m10_02), where it was seen: the same textures in New Londo and the Asylum are not checked.
+					const bool foliage = !water_draw && !inside_out && !lamp && !no_shadow &&
+						game::texture_names::is_foliage(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) &&
+						((game::map_lights::current_map_id() >> 16) & 0xFFFF) == ((10u << 8) | 2u);
+					if (foliage)
+						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kFoliageMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).
 					game::effect_lights::observe_draw(dev,
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)),
@@ -968,7 +978,7 @@ namespace comp
 						ffp.clear_draw_tint(dev);
 					if (effect)
 						ffp.clear_sp_effect(dev);
-					if (inside_out || lamp || no_shadow)
+					if (inside_out || lamp || no_shadow || foliage)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				}
 				else

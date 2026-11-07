@@ -20,6 +20,7 @@ namespace comp::game::texture_names
 			bool estus_flask = false;
 			bool butterfly_wing = false;
 			bool lava = false;
+			bool foliage = false;
 			bool light_shaft = false;
 			owner owned_by = owner::unknown;
 		};
@@ -215,6 +216,11 @@ namespace comp::game::texture_names
 			return s == "m14_light" || s.find("vollight") != std::string::npos;
 		}
 
+		bool classify_foliage(const std::string& s)
+		{
+			return s == "m10_grass_02" || s == "m10_grass_03";
+		}
+
 		bool classify_lava(const std::string& s)
 		{
 			return s.size() > 10 && s[0] == 'm' && std::isdigit(static_cast<unsigned char>(s[1])) &&
@@ -259,6 +265,7 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.foliage = classify_foliage(e.name);
 		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
 		++g_named;
@@ -296,6 +303,15 @@ namespace comp::game::texture_names
 		std::shared_lock lock(g_mutex);
 		const auto it = g_entries.find(texture);
 		return it != g_entries.end() && it->second.lava;
+	}
+
+	bool is_foliage(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.foliage;
 	}
 
 	bool is_estus_flask(IDirect3DBaseTexture9* texture)
@@ -374,6 +390,7 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.foliage = classify_foliage(e.name);
 		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);

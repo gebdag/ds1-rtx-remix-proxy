@@ -45,6 +45,11 @@ namespace comp::game::texture_names
 	// True for a lava material's diffuse (mNN_n_lava_*), which atmosphere::tag_self_lit draws glowing.
 	bool is_lava(IDirect3DBaseTexture9* texture);
 
+	// True for a plant whose alpha-tested leaf cards the renderer tags with the foliage marker (in Firelink only): indirect
+	// light passes them in part (rtx.ds1Foliage.transmission). Only the plants seen wrong on a capture: Firelink's spiky rosettes, m10_grass_02
+	// and m10_grass_03 (black hearts and hard leaf shadows, frame_20261107_083232 and 083353).
+	bool is_foliage(IDirect3DBaseTexture9* texture);
+
 	// Whose texture it is, by name: a character's or its equipment's (c#### bodies, wp_ weapons and
 	// shields, bd_/hd_/lg_/am_ armour, fg_ faces), anything else named (the map and its objects), or
 	// unknown (no name recovered).
