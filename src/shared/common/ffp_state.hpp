@@ -318,6 +318,9 @@ namespace shared::common
 		bool cur_rt_is_menu_scene() const { return cur_rt_menu_scene_; }
 		// proxy.MenuScene.PathTrace: this character view is converted for Remix, which writes its frame into the target.
 		bool cur_rt_is_menu_path_traced() const { return cur_rt_menu_path_traced_; }
+		// Marks the private menu target for the runtime (d3d9_rtx.cpp, isDs1MenuScene): sampler 15's border colour, which no
+		// fixed-function draw samples. The target has the back buffer's size, so its shape cannot tell it.
+		static constexpr DWORD kMenuSceneMarker = 0xD7E05CE5;
 		// The menu's quad as it reaches the screen sizes the view's private target (the game's stays 512): square, its
 		// larger side in pixels. The view's draws and the quad use that target in place of the game's.
 		void note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count);
@@ -341,7 +344,8 @@ namespace shared::common
 		void set_menu_row_distance(float distance);
 		void turn_menu_cell(float* world) const;
 		// The slice of the frame that a view's quad shows. False until the row's camera is known.
-		bool menu_cell_uv(int cell, float& u0, float& v0, float& du, float& dv) const;
+		// Where a menu quad's view sits in the private target, as texture coordinates (a row's cell, or the single view).
+		bool menu_slice_uv(IDirect3DBaseTexture9* texture, float& u0, float& v0, float& du, float& dv) const;
 		bool menu_is_path_traced() const
 		{
 			return menu_path_trace_target_ && shared::common::config::get().ffp.menu_scene_path_trace;
@@ -634,6 +638,8 @@ namespace shared::common
 		int menu_cell_count_ = 0;
 		int cur_menu_cell_ = -1;
 		float menu_view_half_x_ = 0.0f, menu_view_half_y_ = 0.0f; // the small views' frustum at the character
+		float menu_frame_half_x_ = 0.0f, menu_frame_half_y_ = 0.0f; // a row frame's frustum at the characters
+		float menu_single_du_ = 0.0f, menu_single_dv_ = 0.0f; // the single view's share of the frame
 		IDirect3DBaseTexture9* menu_path_trace_target_ = nullptr;
 		IDirect3DTexture9* menu_native_texture_ = nullptr;
 		IDirect3DSurface9* menu_native_surface_ = nullptr;

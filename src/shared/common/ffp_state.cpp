@@ -755,23 +755,44 @@ namespace shared::common
 		turn(&world[12], true);
 	}
 
-	bool ffp_state::menu_cell_uv(int cell, float& u0, float& v0, float& du, float& dv) const
+	bool ffp_state::menu_slice_uv(IDirect3DBaseTexture9* texture, float& u0, float& v0, float& du, float& dv) const
 	{
-		if (menu_view_half_x_ <= 0.0f || menu_view_half_y_ <= 0.0f)
+		if (const int cell = menu_cell_of(texture); cell >= 0)
+		{
+			if (menu_view_half_x_ <= 0.0f || menu_view_half_y_ <= 0.0f || menu_frame_half_x_ <= 0.0f || menu_frame_half_y_ <= 0.0f)
+				return false;
+			const float along = (cell - 0.5f * (kMenuRowCells - 1)) * kMenuRowSpacing;
+			du = menu_view_half_x_ / menu_frame_half_x_;
+			u0 = 0.5f + (along - menu_view_half_x_) / (2.0f * menu_frame_half_x_);
+			dv = menu_view_half_y_ / menu_frame_half_y_;
+			v0 = 0.5f - 0.5f * dv;
+			return true;
+		}
+		if (!texture || texture != menu_path_trace_target_ || menu_single_du_ <= 0.0f || menu_single_dv_ <= 0.0f)
 			return false;
-		const float along = (cell - 0.5f * (kMenuRowCells - 1)) * kMenuRowSpacing;
-		du = menu_view_half_x_ / kMenuRowHalfWidth;
-		u0 = 0.5f + (along - menu_view_half_x_) / (2.0f * kMenuRowHalfWidth);
-		dv = 0.5f; // the frame's height is twice a view's
-		v0 = 0.25f;
+		du = menu_single_du_;
+		dv = menu_single_dv_;
+		u0 = 0.5f - 0.5f * du;
+		v0 = 0.5f - 0.5f * dv;
 		return true;
 	}
 
 	void ffp_state::note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count)
 	{
-		// FRPG_Menu_Common: S2 positions in eighths of the menu's 1280x720 space.
+		// The private target is the size of the back buffer: Remix sizes its frame from the target it writes, and a frame the
+		// size of the game's never resizes its buffers or recreates its upscaler and DLSS-NR features on entering or leaving a
+		// menu (about a third of a second each way). The views sit centred in it (the projection widens to its aspect,
+		// menu_slice_uv gives the quads their slice). FRPG_Menu_Common: S2 positions in eighths of the menu's 1280x720 space.
 		D3DSURFACE_DESC screen = {};
 		if (!dev || !vertices || stride != 12 || !count || !cur_rt0_ || FAILED(cur_rt0_->GetDesc(&screen)))
+			return;
+		D3DSURFACE_DESC back = {};
+		IDirect3DSurface9* back_buffer = nullptr;
+		if (FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) || !back_buffer)
+			return;
+		const HRESULT back_desc = back_buffer->GetDesc(&back);
+		back_buffer->Release();
+		if (FAILED(back_desc))
 			return;
 		int min_x = INT_MAX, max_x = INT_MIN, min_y = INT_MAX, max_y = INT_MIN;
 		for (UINT i = 0; i < count; i++)
@@ -784,16 +805,8 @@ namespace shared::common
 		}
 		const float pixels_x = (max_x - min_x) / 8.0f * screen.Width / 1280.0f * ui_fit_x_;
 		const float pixels_y = (max_y - min_y) / 8.0f * screen.Height / 720.0f * ui_fit_y_;
-		UINT width = static_cast<UINT>(std::ceil(std::max(pixels_x, pixels_y)));
-		UINT height = width;
-		if (menu_cell_count_ > 0)
-		{
-			if (menu_view_half_x_ <= 0.0f)
-				return;
-			width = static_cast<UINT>(std::ceil(pixels_x * kMenuRowHalfWidth / menu_view_half_x_));
-			height = static_cast<UINT>(std::ceil(pixels_y * 2.0f));
-		}
-		if (width < 256 || width > 4096 || height > 4096 || (width == menu_native_width_ && height == menu_native_height_))
+		const UINT width = back.Width, height = back.Height;
+		if (width < 256 || height < 256 || (width == menu_native_width_ && height == menu_native_height_))
 			return;
 		release_menu_native();
 		if (FAILED(dev->CreateTexture(width, height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &menu_native_texture_, nullptr)) ||
@@ -815,6 +828,9 @@ namespace shared::common
 		menu_native_texture_ = nullptr;
 		menu_native_width_ = 0;
 		menu_native_height_ = 0;
+		// The slices belong to the target's shape: a new target sets them again before a quad can use them.
+		menu_frame_half_x_ = menu_frame_half_y_ = 0.0f;
+		menu_single_du_ = menu_single_dv_ = 0.0f;
 	}
 
 	void ffp_state::on_set_render_target(DWORD index, IDirect3DSurface9* rt)
@@ -1172,6 +1188,10 @@ namespace shared::common
 	void ffp_state::on_reset()
 	{
 		release_menu_native();
+		// The bound target is gone with the Reset: nothing may be treated (or marked) as a menu view until the next bind.
+		cur_rt_menu_scene_ = false;
+		cur_rt_menu_path_traced_ = false;
+		cur_menu_cell_ = -1;
 		if (last_vs_) { last_vs_->Release(); last_vs_ = nullptr; }
 		if (last_ps_) { last_ps_->Release(); last_ps_ = nullptr; }
 		last_decl_ = nullptr;
@@ -1474,6 +1494,12 @@ namespace shared::common
 		if (!cfg_ || !enabled_ || !dev) return;
 
 		ffp_prof::scope prof(ffp_prof::step::engage);
+
+		// Every draw into the private menu target carries its marker: set again here, since the game can restore sampler state
+		// (state blocks) between binding the target and drawing. Only while the private target stands in: the game's own small
+		// target (the first menu frame, or after a Reset) is not marked, so its frame stays raster and never resizes Remix's.
+		if (menu_native_surface())
+			dev->SetSamplerState(15, D3DSAMP_BORDERCOLOR, kMenuSceneMarker);
 
 		if (!ffp_active_)
 		{
@@ -1876,14 +1902,30 @@ namespace shared::common
 			cached_proj_[8]  = 0.0f; cached_proj_[9]  = 0.0f;
 			cached_proj_[11] = 1.0f;
 			cached_proj_[12] = 0.0f; cached_proj_[13] = 0.0f; cached_proj_[15] = 0.0f;
-			if (menu_row)
+			// The private target's shape (height over width): the views sit centred in it.
+			const float menu_aspect = menu_native_width_ && menu_native_height_
+				? static_cast<float>(menu_native_height_) / static_cast<float>(menu_native_width_) : 0.0f;
+			if (menu_row && menu_aspect > 0.0f)
 			{
+				// The row's width at the characters, or wider where the views' height needs more than the target's shape gives.
+				menu_frame_half_x_ = std::max(kMenuRowHalfWidth, 1.02f * menu_view_half_y_ / menu_aspect);
+				menu_frame_half_y_ = menu_frame_half_x_ * menu_aspect;
 				const float near_z = std::max(g_menu_row_distance - 5.0f, 0.05f), far_z = g_menu_row_distance + 5.0f;
-				cached_proj_[0] = g_menu_row_distance / kMenuRowHalfWidth;
-				cached_proj_[5] = g_menu_row_distance / (2.0f * menu_view_half_y_);
+				cached_proj_[0] = g_menu_row_distance / menu_frame_half_x_;
+				cached_proj_[5] = g_menu_row_distance / menu_frame_half_y_;
 				cached_proj_[10] = far_z / (far_z - near_z);
 				cached_proj_[14] = -near_z * cached_proj_[10];
 				std::memcpy(cached_proj_raw_, cached_proj_, sizeof(cached_proj_raw_));
+			}
+			else if (cur_rt_menu_path_traced_ && menu_aspect > 0.0f && cached_proj_[0] > 0.0f && cached_proj_[5] > 0.0f)
+			{
+				// A single view (the character creator): the game's own field, widened (or heightened) to the target's shape.
+				const float half_x = 1.0f / cached_proj_[0], half_y = 1.0f / cached_proj_[5];
+				const float frame_x = std::max(half_x, half_y / menu_aspect), frame_y = frame_x * menu_aspect;
+				menu_single_du_ = half_x / frame_x;
+				menu_single_dv_ = half_y / frame_y;
+				cached_proj_[0] = 1.0f / frame_x;
+				cached_proj_[5] = 1.0f / frame_y;
 			}
 			dev->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(cached_proj_));
 

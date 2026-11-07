@@ -1119,8 +1119,13 @@ namespace comp
 		if (lookdev_passthrough())
 			return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, pRenderTarget);
 		auto* effective = rt_tracker::on_set_render_target(RenderTargetIndex, pRenderTarget);
-		if (auto* native = shared::common::ffp_state::get().menu_native_surface(); native && RenderTargetIndex == 0)
+		auto* native = shared::common::ffp_state::get().menu_native_surface();
+		if (native && RenderTargetIndex == 0)
 			effective = native;
+		// The private menu target's marker (ffp_state::kMenuSceneMarker) while it is bound, cleared otherwise; each draw into it
+		// sets it again (ffp_state::engage).
+		if (RenderTargetIndex == 0)
+			m_pIDirect3DDevice9->SetSamplerState(15, D3DSAMP_BORDERCOLOR, native ? shared::common::ffp_state::kMenuSceneMarker : 0);
 		return m_pIDirect3DDevice9->SetRenderTarget(RenderTargetIndex, effective);
 	}
 
@@ -1550,13 +1555,13 @@ namespace comp
 			DWORD src_blend = D3DBLEND_SRCALPHA;
 			m_pIDirect3DDevice9->GetRenderState(D3DRS_SRCBLEND, &src_blend);
 			m_pIDirect3DDevice9->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-			// A row's quad: its S2 texture coordinates (4096 = 1), moved to its slice of the frame.
+			// A view's quad: its S2 texture coordinates (4096 = 1), moved to its slice of the frame (a row's cell, or the single
+			// view centred in the wider target).
 			auto& menu_ffp = shared::common::ffp_state::get();
 			short slice[4 * 6];
 			const void* quad_vertices = pVertexStreamZeroData;
 			float u0, v0, du, dv;
-			if (const int cell = menu_ffp.menu_cell_of(menu_ffp.cur_texture(0));
-				cell >= 0 && VertexStreamZeroStride == 12 && NumVertices <= 4 && menu_ffp.menu_cell_uv(cell, u0, v0, du, dv))
+			if (VertexStreamZeroStride == 12 && NumVertices <= 4 && menu_ffp.menu_slice_uv(menu_ffp.cur_texture(0), u0, v0, du, dv))
 			{
 				std::memcpy(slice, pVertexStreamZeroData, 12 * NumVertices);
 				for (UINT v = 0; v < NumVertices; v++)
