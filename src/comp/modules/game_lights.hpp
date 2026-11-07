@@ -326,6 +326,12 @@ namespace comp
 		bool kind_game_falloff_initial_[static_cast<int>(light_kind::count)] = {}; // the above at start, for Default
 		bool game_falloff_ = true;        // master switch ([Lights] GameFalloff)
 		std::string falloff_table_sent_;
+		// What each light Remix draws is and where its values come from, for the runtime's DS1 light view (Alt+X > Lights,
+		// rtx.ds1Lights.labels): sent when the set changes, at most every few frames.
+		void send_labels();
+		std::string labels_sent_;
+		unsigned int labels_sent_frame_ = 0;
+		bool sun_authored_ = false;       // the sun's values come from the map's light banks (sync_sun)
 		uint64_t selected_ = KEY_SUN;              // the last row clicked
 		std::unordered_set<uint64_t> selection_;   // every selected row (Shift / Ctrl); empty: just selected_
 		uint64_t selection_anchor_ = KEY_SUN;      // where a Shift range starts

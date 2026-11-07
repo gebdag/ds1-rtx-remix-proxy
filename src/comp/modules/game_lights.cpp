@@ -1071,6 +1071,7 @@ namespace comp
 			}
 		}
 		const auto& map_sun = authored.authored ? authored : seen_sun_;
+		sun_authored_ = authored.authored;
 		// Not at the title or in a menu's character view, which have their own light.
 		const bool in_a_map = sun_map != 0 && ((sun_map >> 24) & 0xFF) < 99 && !shared::common::ffp_state::get().menu_is_path_traced();
 		const bool sun_wanted = sun_enabled && in_a_map && (map_sun.has_sun || sun_colour_set);
@@ -1405,12 +1406,78 @@ namespace comp
 			light.info.radiance = { probe_radiance_, probe_radiance_, probe_radiance_ };
 
 			submit_light(light.info, light.handle);
+			send_labels();
 			return;
 		}
 
 		// With the point lights off the list still fills, and the player light,
 		// which has its own toggle, still runs.
 		sync_lights(enabled);
+		send_labels();
+	}
+
+	void game_lights::send_labels()
+	{
+		// One entry per light Remix draws: hash | provenance | kind | name | origin;
+		// Provenance, for the runtime's colours: G the game's own light (read live), D derived from the game's data by the
+		// developers' rule (the effect table), T a table of ours from game placements (map flames, lamp meshes), H placed or
+		// set by hand, X a guess from what is drawn (particle stand-ins), M the proxy's own (menu key, debug probe).
+		auto clean = [](std::string s)
+		{
+			for (auto& ch : s)
+				if (ch == '|' || ch == ';' || ch == '\n' || ch == '\r')
+					ch = ',';
+			if (s.size() > 160)
+				s.resize(160);
+			return s;
+		};
+		auto provenance = [](light_kind k)
+		{
+			switch (k)
+			{
+			case light_kind::map_row: case light_kind::bank_entity: case light_kind::lerp_entity: case light_kind::fx_direct:
+			case light_kind::unresolved: case light_kind::player: case light_kind::sun: return 'G';
+			case light_kind::ffx_table: return 'D';
+			case light_kind::synthetic: case light_kind::mesh: return 'T';
+			case light_kind::custom: return 'H';
+			case light_kind::effect: return 'X';
+			default: return 'M';
+			}
+		};
+		// Built only when it could go out: at most every 10 frames (the last change still goes out by then).
+		const unsigned int frame = shared::common::ffp_state::get().frame_count();
+		if (frame - labels_sent_frame_ < 10)
+			return;
+		std::string labels;
+		for (const auto& row : rows_)
+			if (row.drawn && row.slot >= 0)
+				labels += std::format("{:x}|{}|{}|{}|{};", light_hash_for_slot(row.slot), provenance(row.kind),
+					kKindSource[static_cast<int>(row.kind)], clean(row.name), clean(row.origin));
+		if (sun_handle_)
+		{
+			// Where its colour and direction come from, as sync_sun picks them.
+			const char* from_game = sun_authored_ ? "the map's light banks" : "the game's draws (light 0, c92 / c95)";
+			const std::string origin = std::format("colour from {}, direction from {}",
+				sun_colour_set ? "[Sun] Colour (area_overrides.ini or the ini)" : from_game,
+				sun_direction_set ? "[Sun] Direction (area_overrides.ini or the ini)" : from_game);
+			labels += std::format("{:x}|{}|Sun|Sun|{};", string_hash64("ds1_sun"), sun_colour_set && sun_direction_set ? 'H' : 'G', clean(origin));
+		}
+		if (player_light_.handle)
+			labels += std::format("{:x}|G|Player|Player light|{};", string_hash64("ds1_player_light"),
+				clean("the game's head light (its character light bank row), at the proxy's [PlayerLight] offset and range"));
+		if (menu_key_handle_)
+			labels += std::format("{:x}|M|Menu|Menu key light|{};", menu_key_info_.hash, clean("the character menu's key light"));
+		if (const auto probe = live_lights_.find(-1); probe != live_lights_.end() && probe->second.handle)
+			labels += std::format("{:x}|M|Probe|Probe light|{};", probe->second.hash, clean("the debug probe light (F4)"));
+
+		// Sent when the set changes: stand-ins come and go with their effects.
+		if (labels == labels_sent_)
+			return;
+		auto& bridge = shared::common::remix_api::get().m_bridge;
+		if (bridge.SetConfigVariable)
+			bridge.SetConfigVariable("rtx.ds1Lights.labels", labels.c_str());
+		labels_sent_ = std::move(labels);
+		labels_sent_frame_ = frame;
 	}
 
 	// ------------------------------------------------------------------ persistence
