@@ -32,9 +32,11 @@ namespace comp::game::sky_meshes
 		uint8_t& cut, const std::string*& derived);
 
 	// True when this indexed draw is a thin-wall mesh (rtx_comp\sky\thin_wall_meshes.txt, scripts/gen_thin_walls.py):
-	// single-sided faces whose fronts face each other a few centimetres apart, measured against every mesh of its
-	// model. game/thin_walls.hpp measures each drawn mesh against itself only, and misses walls whose two faces are
-	// in different meshes (Firelink's m0100B2A10, mesh0 in front of mesh1's stone wall).
+	// a wall built from two single-sided faces whose fronts face each other a few centimetres apart. The game culls the
+	// face seen from behind and its lights cast no shadows; ray traced, each face shadows the other and the wall goes
+	// black, so the renderer tags these draws and the runtime lets lighting rays pass a tagged face turned back towards
+	// the surface they left (Surface::isDs1ThinWall). Only meshes confirmed black in a capture are listed (Firelink's
+	// m0100B2A10, Blighttown's m0300B0A14 mesh2).
 	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
 	// True when this indexed draw is a mesh listed in rtx_comp\sky\no_shadow_meshes.txt: a face no view shows that only shuts

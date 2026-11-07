@@ -35,7 +35,7 @@ namespace comp::game::texture_names
 	bool is_estus_flask(IDirect3DBaseTexture9* texture);
 
 	// True for the Moonlight Butterfly's diffuse (c3230): parts of its wings are two single-sided faces whose
-	// fronts face each other, which it draws as a thin wall (game/thin_walls.hpp).
+	// fronts face each other: the renderer tags its skinned draws with the thin-wall marker (renderer.cpp, thin_wall_skin).
 	bool is_butterfly_wing(IDirect3DBaseTexture9* texture);
 
 	// A light shaft drawn as an alpha-blended map mesh the game lights by the area's ambient (m14_light by the Bed of

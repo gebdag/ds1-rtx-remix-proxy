@@ -21,7 +21,6 @@
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/mesh_lights.hpp"
-#include "../game/thin_walls.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/vanilla_view.hpp"
@@ -42,8 +41,9 @@ namespace comp
 		// game's cull mode, though it is blended. Anor Londo builds many windows twice, an outer pane
 		// facing out and an inner one facing in, and the game shows each view only its own pane.
 		constexpr DWORD kSingleSidedGlassMarker = 0xD4000002;
-		// Stage 4's D3DTSS_CONSTANT on a thin wall (game/thin_walls.hpp): the runtime lets lighting rays through
-		// its faces where they face the surface the ray left (Surface::isDs1ThinWall).
+		// Stage 4's D3DTSS_CONSTANT on a thin wall (the confirmed map meshes, sky_meshes::is_thin_wall_draw, and the Moonlight
+		// Butterfly's wings, texture_names::is_butterfly_wing): the runtime lets lighting rays through its faces where they face
+		// the surface the ray left (Surface::isDs1ThinWall).
 		constexpr DWORD kThinWallMarker = 0xD4000003;
 		// Stage 4's D3DTSS_CONSTANT on a lamp the runtime's lighting rays pass (game/mesh_lights.hpp).
 		constexpr DWORD kLampMarker = 0xD4000004;
@@ -813,13 +813,11 @@ namespace comp
 					return S_OK;
 				}
 
-				// A wall of two single-sided faces turned towards each other goes to Remix tagged (game/thin_walls.hpp).
-				// Map meshes come from the offline table, which pairs faces across a model's meshes; the rest are
-				// measured on the game's own buffers, before the expansion replaces stream 0.
+				// A wall of two single-sided faces turned towards each other goes to Remix tagged: only the meshes in the
+				// confirmed table (sky_meshes::is_thin_wall_draw). Measuring every drawn mesh, and listing every mesh the rule
+				// found offline, tagged walls nothing had shown black, and lit through them (Undead Asylum, 2026-11-07).
 				const bool inside_out = !water_draw && shared::common::config::get().sky.thin_walls &&
-					(game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount) ||
-					 game::thin_walls::is_inside_out(ffp.stream_vb(0), ffp.stream_offset(0), ffp.stream_stride(0), ffp.last_decl(),
-						ffp.cur_ib(), PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count()));
+					game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);

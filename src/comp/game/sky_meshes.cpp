@@ -96,7 +96,7 @@ namespace comp::game::sky_meshes
 			// Before the thin walls: a face listed in both casts no shadow at all.
 			load_table_locked("no_shadow_meshes.txt", kind::no_shadow, "no-shadow", "every map mesh casts shadows");
 			// Last: a face set already listed as another kind keeps it.
-			load_table_locked("thin_wall_meshes.txt", kind::thin_wall, "thin wall", "walls split across meshes stay single-sided");
+			load_table_locked("thin_wall_meshes.txt", kind::thin_wall, "thin wall", "no map mesh gets the thin-wall tag");
 			load_table_locked("emitter_meshes.txt", kind::emitter, "light emitter", "no character lights");
 		}
 

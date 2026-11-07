@@ -1,14 +1,15 @@
-"""Generate assets/sky/thin_wall_meshes.txt: the map meshes the proxy draws double-sided as thin walls.
+"""Generate assets/sky/thin_wall_meshes.txt: the map meshes the proxy tags as thin walls, which are only the meshes in
+CONFIRMED below, each a wall seen black in a capture and lit by its entry. The rule further down finds candidates; it
+does not decide what is listed (`--candidates` prints them).
 
 Some DS1 map models build a wall from two single-sided faces a few centimetres apart whose fronts face
-each other (game/thin_walls.hpp). The game culls whichever face is seen from behind; ray traced, that face
-still shadows the other one from every light, and the wall goes black. The proxy measures each drawn mesh
-for such pairs at runtime, but only against itself, and the two faces are often in different meshes of
+each other. The game culls whichever face is seen from behind; ray traced, that face
+still shadows the other one from every light, and the wall goes black. The two faces are often in different meshes of
 one model: Firelink's m10_02 m0100B2A10, where mesh0 (440 triangles) lies 1-11 cm in front of mesh1's
 stone wall (frame_20261101_023844). Alone, mesh0 pairs nothing and mesh1 3%; against their model, 55% and
-12%. Both must be double-sided: with only one, the wall stays black from the other side.
+12%. Both must be tagged: with only one, the wall stays black from the other side.
 
-Rule (thin_walls.cpp's, per mesh against every face of its model, lod0, fronts from the vertex normals):
+Rule (per mesh against every face of its model, lod0, fronts from the vertex normals):
 a face pairs when a face of the model with an anti-parallel front (cos <= -0.95) lies 0.01-0.5 m in front
 of it with overlapping bounds; a mesh qualifies when its paired faces cover >= 10% of its area and >= 1 m^2.
 Face sets the game already draws without culling are skipped.
@@ -17,6 +18,9 @@ Each listed mesh contributes one line per face set (every LOD), as scripts/gen_s
   <FNV-1a 64 of the u16 index bytes, hex> <index count> <map>/<model>/mesh<i>/lod<j> <texture>
 
 Usage: py -3.12 scripts/gen_thin_walls.py [--data <DATA\\unpacked>] [--bbformats <dir with bbformats>]
+         [--map <id part>] [--out <file>] [--candidates]
+  default: write the CONFIRMED meshes' face sets to the table (every CONFIRMED mesh must be found)
+  --candidates: print every mesh the rule finds, marking the confirmed ones; writes nothing
 """
 import argparse
 import glob
@@ -29,22 +33,15 @@ from gen_sky_meshes import diffuse_name, fnv1a64
 
 GAP_MAX, GAP_MIN, FACING, MIN_SHARE, MIN_AREA = 0.5, 0.01, 0.95, 0.1, 1.0
 
-# Thin walls whose two faces are in different models, which the pairing within a model cannot find: (map, model, mesh).
-# Not the Undead Asylum corridor pair (m0300B1A18 mesh9 5.1 cm in front of m0010B1A18 mesh11, the band under a cell
-# window, frame_20261105_224454): mesh9 casts no shadow instead (assets/sky/no_shadow_meshes.txt), which fixes the band
-# alone. As a thin wall, mesh11 let lighting rays through the corridor wall to the sky and lit the rubble under it white
-# (frame_20261106_234400: peak 137 with the pair, 18 without; the band frames unchanged).
-CROSS_MODEL = {
-    # From scripts/scan_cross_model_thin_walls.py --verify (2026-11-06): meshes whose area is >= 10% and >= 1 m^2 covered,
-    # sampled, by a facing surface of another placed piece 1-50 cm in front (the rule above, across models). The scan's
-    # smaller strips (under 10%, the Asylum pair's kind) are not listed: many are props standing on floors.
-    ('m10_01_00_00', 'm2280B1A10', 2), ('m10_01_00_00', 'm2350B1A10', 3), ('m10_01_00_00', 'm2390B1A10', 3),
-    ('m10_01_00_00', 'm2500B1A10', 1), ('m10_01_00_00', 'm2500B1A10', 11), ('m10_01_00_00', 'm3001B1A10', 1),
-    ('m10_01_00_00', 'm3140B1A10', 5), ('m10_01_00_00', 'm3140B1A10', 6), ('m10_02_00_00', 'm2120B2A10', 6),
-    ('m12_01_00_00', 'm9050B1A12', 7), ('m13_00_00_00', 'm0813B0A13', 0), ('m14_00_00_00', 'm0160B0A14', 0),
-    ('m15_01_00_00', 'm3313B1A15', 0), ('m15_01_00_00', 'm3500B1A15', 7), ('m17_00_00_00', 'm2142B0A17', 1),
-    ('m17_00_00_00', 'm2143B0A17', 1), ('m17_00_00_00', 'm2145B0A17', 1), ('m17_00_00_00', 'm2408B0A17', 2),
-    ('m18_01_00_00', 'm0210B1A18', 3), ('m18_01_00_00', 'm0210B1A18', 5),
+# The only meshes the table lists: each one a wall seen black in a capture and lit by its entry, (map, model, mesh): proof.
+# The rule below finds thousands of meshes on every map (3489 in 2026-11-01's table); listed unchecked, they let light
+# through walls wherever anything stood within 0.5 m of them (the Undead Asylum's first corridor, frame_20261107_015039),
+# and none but these had a confirmed fix (audit 2026-11-07). A new entry needs its own capture, black before and lit
+# after, and a check of the captures around it. `--candidates` prints the rule's hits to look at; it writes nothing.
+CONFIRMED = {
+    ('m10_02_00_00', 'm0100B2A10', 0): 'Firelink tower wall, frame_20261101_023844 and 133737 (mesh0 1-11 cm in front of mesh1)',
+    ('m10_02_00_00', 'm0100B2A10', 1): 'Firelink tower wall, frame_20261101_023844 and 133737 (mesh1, the stone wall)',
+    ('m14_00_00_00', 'm0300B0A14', 2): 'Blighttown cave wall m14_b_wall_01, frame_20261031_171553 (two faces 0.27 m apart)',
 }
 CHUNK = 2048
 
@@ -116,12 +113,15 @@ def main():
     ap.add_argument('--bbformats', default=r'<other project>\tools')
     ap.add_argument('--out', default=None, help='default assets/sky/thin_wall_meshes.txt; with --map, none unless given')
     ap.add_argument('--map', default='', help='only maps whose id contains this (for testing)')
+    ap.add_argument('--candidates', action='store_true',
+                    help='print every mesh the rule finds (to be checked in the game one by one); writes nothing')
     args = ap.parse_args()
 
     sys.path.insert(0, args.bbformats)
     from bbformats.flver import read_flver
 
     lines = []
+    found = set()
     flagged = self_only = 0
     for map_dir in sorted(glob.glob(os.path.join(args.data, 'map', 'm*_*'))):
         map_id = os.path.basename(map_dir)
@@ -136,31 +136,42 @@ def main():
             for i, (mesh, f) in enumerate(zip(flver.meshes, faces)):
                 if f is None or f['total'] <= 0 or not f['cull']:
                     continue
-                share = paired_area(f, whole)
-                cross = (map_id, model, i) in CROSS_MODEL
-                if not cross and (share < MIN_AREA or share < MIN_SHARE * f['total']):
+                confirmed = (map_id, model, i) in CONFIRMED
+                if not confirmed and not args.candidates:
                     continue
+                share = paired_area(f, whole)
+                # Candidates are what the rule finds; the table is what was confirmed, whatever the rule says.
+                if args.candidates and (share < MIN_AREA or share < MIN_SHARE * f['total']):
+                    continue
+                if confirmed:
+                    found.add((map_id, model, i))
                 own = paired_area(f, f)
                 self_only += own >= MIN_AREA and own >= MIN_SHARE * f['total']
                 flagged += 1
                 map_count += 1
                 name = diffuse_name(flver.materials[mesh.material_index])
                 print(f'{map_id}/{model}/mesh{i}: {100 * share / f["total"]:.0f}% of {f["total"]:.0f} m^2 paired '
-                      f'({100 * own / f["total"]:.0f}% within itself) {name}', flush=True)
+                      f'({100 * own / f["total"]:.0f}% within itself) {name}{" [confirmed]" if confirmed else ""}', flush=True)
                 for j, fs in enumerate(mesh.face_sets):
                     idx = np.asarray(fs.indices, dtype='<u2')
                     lines.append(f'{fnv1a64(idx.tobytes()):016x} {len(idx)} {map_id}/{model}/mesh{i}/lod{j} {name}')
         print(f'{map_id}: {map_count} thin-wall meshes', flush=True)
 
-    print(f'{flagged} thin-wall meshes ({self_only} found by the runtime per-mesh measurement as well), '
-          f'{len(lines)} face sets')
+    print(f'{flagged} thin-wall meshes ({self_only} pair within themselves), {len(lines)} face sets')
+    if args.candidates:
+        return
+    # A confirmed mesh the run did not emit (a mistyped key, a missing model, a mesh without normals or drawn uncull)
+    # would leave its wall untagged without a word: stop instead.
+    missing = sorted(k for k in CONFIRMED if (not args.map or args.map in k[0]) and k not in found)
+    if missing:
+        sys.exit(f'CONFIRMED meshes not found: {missing}; the table was not written')
     if args.out is None:
         if args.map:
             return
         args.out = os.path.join(here, '..', 'assets', 'sky', 'thin_wall_meshes.txt')
     with open(args.out, 'w', newline='\n') as f:
-        f.write('# Dark Souls thin-wall map meshes (single-sided faces facing each other across a few cm, within '
-                'their model): <index FNV-1a 64> <index count> <source> <diffuse>\n')
+        f.write('# Dark Souls thin-wall map meshes (single-sided faces facing each other across a few cm), each confirmed '
+                'in a capture (CONFIRMED in scripts/gen_thin_walls.py): <index FNV-1a 64> <index count> <source> <diffuse>\n')
         f.write('# Generated by scripts/gen_thin_walls.py; do not edit by hand.\n')
         f.writelines(line + '\n' for line in lines)
 
