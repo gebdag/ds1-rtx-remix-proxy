@@ -2484,8 +2484,9 @@ namespace shared::common
 				}
 			}
 		}
-		// Point sprites are sparkles, nothing the effect lights follow.
-		if (sprite_observer_fn_ && count && !points)
+		// Point sprites are sparkles, nothing the effect lights follow; nor are streaks whose pixel shader samples no texture
+		// (FRPG_Sfx_LineType0: a weapon's sparks off stone, orange and additive like fire, which the game lights with nothing).
+		if (sprite_observer_fn_ && count && !points && (cur_ps_sampler_mask_ & 1u))
 		{
 			DWORD blend_on = FALSE, dst_blend = 0;
 			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_on);
