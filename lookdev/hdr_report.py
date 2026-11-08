@@ -41,6 +41,7 @@ def main() -> int:
             f"<td>{m['sdr_clipped_share'] * 100:.1f}%</td><td>{m['hdr_above_white_share'] * 100:.1f}%</td>"
             f"<td>{fmt(m['clipped_headroom_stops_mean'])} / {fmt(m['clipped_headroom_stops_p95'])} / {fmt(m['headroom_stops_max'])}</td>"
             f"<td>{m['nits_p99']:.0f} / {m['nits_p999']:.0f} / {m['nits_max']:.0f}</td>"
+            f"<td>{(m.get('presented') or {}).get('max', 0):.0f} / {(m.get('presented') or {}).get('above_paper', 0) * 100:.2f}%</td>"
             f"<td>{fmt(m['clipped_saturation_sdr'])} &rarr; {fmt(m['clipped_saturation_hdr'])}</td>"
             f"<td><a href='{rel}_sheet.png'>sheet</a> <a href='{rel}_sdr.png'>sdr</a> <a href='{rel}_hdr_view.png'>hdr</a> "
             f"<a href='{rel}_headroom.png'>headroom</a> <a href='{rel}_hdr_window.png'>window</a></td>"
@@ -74,7 +75,7 @@ present mapping (paper white {runs[0]['paper_white'] if runs else '-'} nits, pea
 roll-off from {runs[0]['shoulder'] if runs else '-'} of peak). <b>chroma</b>: saturation (max&minus;min)/max in the clipped
 pixels, SDR &rarr; HDR.</p>
 <table><tr><th>run</th><th>capture</th><th>path</th><th>unchanged (8-bit)</th><th>floor SDR&rarr;SDR (8-bit)</th><th>SDR clipped</th><th>HDR &gt; white</th>
-<th>headroom stops mean / p95 / max</th><th>nits p99 / p99.9 / max</th><th>chroma SDR&rarr;HDR</th><th>images</th></tr>
+<th>headroom stops mean / p95 / max</th><th>nits p99 / p99.9 / max (Remix frame)</th><th>presented max nits / share above paper white</th><th>chroma SDR&rarr;HDR</th><th>images</th></tr>
 {''.join(rows)}
 </table>
 <h2>Sheets</h2>
