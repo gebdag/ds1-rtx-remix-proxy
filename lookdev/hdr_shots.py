@@ -301,8 +301,9 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true", help="leave the host running")
     args = ap.parse_args()
 
-    if lookdev.running("DARKSOULS.exe"):
-        sys.exit("DARKSOULS.exe is running: it owns the bridge")
+    # A game in lookdev mode (vanilla) does not own the bridge; one running with Remix does.
+    if lookdev.running("NvRemixBridge.exe") and not lookdev.running(lookdev.HOST_IN_GAME.name):
+        sys.exit("NvRemixBridge.exe is running: the game owns the bridge")
     out = OUT_ROOT / args.prefix
     out.mkdir(parents=True, exist_ok=True)
     paths = [lookdev.resolve(c) for c in args.captures]
