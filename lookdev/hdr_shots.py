@@ -36,6 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hdr_swapchain_stats  # noqa: E402
 import look  # noqa: E402
 import lookdev  # noqa: E402
 import shot  # noqa: E402
@@ -212,6 +213,10 @@ def sheet(images: list[tuple[str, Image.Image]], width: int = 1920) -> Image.Ima
     return canvas
 
 
+def args_paper(hdr_settings: dict) -> float:
+    return hdr_settings["paper_white"]
+
+
 def run_capture(path: Path, out: Path, look_on: bool, settings: list[str], first: bool, hdr_settings: dict) -> dict:
     tag = f"{path.stem}_{'look' if look_on else 'stock'}"
     reference = look.reference_image(path)
@@ -228,9 +233,26 @@ def run_capture(path: Path, out: Path, look_on: bool, settings: list[str], first
     # The back buffers change at the next present, the swap chain the one after; then the frame settles again.
     time.sleep(2.0)
     hdr_window = wait_frames(reference, 60, True)
+    t_hdr = time.time()
     hdr_dump = dump_frame()
     hdr_path = out / f"{tag}_hdr.dds"
     hdr_dump.replace(hdr_path)
+    # What the display gets: the presented swap chain image of that frame, PQ decoded to nits.
+    presented = None
+    for _ in range(50):
+        found = [p for p in SCREENSHOTS.glob("hdrSwapchain_*.dds") if p.stat().st_mtime >= t_hdr]
+        if found:
+            time.sleep(1.0)
+            kind, rgb = hdr_swapchain_stats.read(max(found, key=lambda p: p.stat().st_mtime))
+            if kind == "rgb10a2":
+                nits = hdr_swapchain_stats.pq_to_nits(rgb)
+                y = nits @ hdr_swapchain_stats.LUMA_2020
+                presented = {"p99": float(np.percentile(y, 99)), "p999": float(np.percentile(y, 99.9)), "max": float(y.max()),
+                             "channel_max": float(nits.max()), "above_paper": float((y > args_paper(hdr_settings) * 1.02).mean())}
+            break
+        time.sleep(0.2)
+    for p in list(SCREENSHOTS.glob("hdrSwapchain_*.dds")) + list(SCREENSHOTS.glob("hdrBackBuffer_*.dds")):
+        p.unlink(missing_ok=True)
     live(*base)
     # A second SDR dump after switching back: the SDR-to-SDR difference is the noise and drift floor
     # (path tracing noise, the game's meter still adapting) the HDR-to-SDR difference is judged against.
@@ -248,6 +270,8 @@ def run_capture(path: Path, out: Path, look_on: bool, settings: list[str], first
     metrics["floor_mean_8bit"] = float(drift.mean())
     metrics["floor_p99_8bit"] = float(np.percentile(drift, 99))
     sdr2_path.unlink()
+    metrics["presented"] = presented
+    print(f"  presented: {presented}", flush=True)
     metrics["capture"] = path.stem
     metrics["look"] = look_on
     sdr_img = to_png(sdr[..., :3])
