@@ -29,6 +29,9 @@ def read(path: Path):
     if fourcc == b"DX10":
         dxgi = struct.unpack_from("<I", data, 128)[0]
         offset = 148
+    elif fourcc == b"GLI1":
+        # gli's own four-CC also carries the 20-byte DX10 header.
+        offset = 148
     masks = struct.unpack_from("<4I", data, 92)
     # gli writes its own 'GLI1' four-CC with the bit masks: R10G10B10A2 is masks (0x3ff, 0xffc00, 0x3ff00000, 0xc0000000)
     # in some channel order; the runtime's swap chain is A2B10G10R10 (R in the low bits).
