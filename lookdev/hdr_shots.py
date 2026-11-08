@@ -232,11 +232,22 @@ def run_capture(path: Path, out: Path, look_on: bool, settings: list[str], first
     hdr_path = out / f"{tag}_hdr.dds"
     hdr_dump.replace(hdr_path)
     live(*base)
-    time.sleep(1.0)
+    # A second SDR dump after switching back: the SDR-to-SDR difference is the noise and drift floor
+    # (path tracing noise, the game's meter still adapting) the HDR-to-SDR difference is judged against.
+    time.sleep(2.0)
+    wait_frames(reference, 60, False)
+    sdr2_dump = dump_frame()
+    sdr2_path = out / f"{tag}_sdr2.dds"
+    sdr2_dump.replace(sdr2_path)
 
     sdr = read_dds(sdr_path)
     hdr = read_dds(hdr_path)
+    sdr2 = read_dds(sdr2_path)
     metrics = analyse(sdr, hdr, **hdr_settings)
+    drift = np.abs(sdr2[..., :3] - sdr[..., :3]).mean(axis=2) * 255.0
+    metrics["floor_mean_8bit"] = float(drift.mean())
+    metrics["floor_p99_8bit"] = float(np.percentile(drift, 99))
+    sdr2_path.unlink()
     metrics["capture"] = path.stem
     metrics["look"] = look_on
     sdr_img = to_png(sdr[..., :3])
@@ -289,7 +300,8 @@ def main() -> int:
             t0 = time.time()
             m = run_capture(path, out, look_on, runtime_settings, i == 0, hdr_settings)
             results.append(m)
-            print(f"{path.stem} {'look' if look_on else 'stock'}: unchanged {m['unchanged_mean_8bit']:.2f}/255 (p99 {m['unchanged_p99_8bit']:.1f}) over {m['inside_share']*100:.0f}% | "
+            print(f"{path.stem} {'look' if look_on else 'stock'}: unchanged {m['unchanged_mean_8bit']:.2f}/255 (p99 {m['unchanged_p99_8bit']:.1f}) over {m['inside_share']*100:.0f}%, "
+                  f"floor {m['floor_mean_8bit']:.2f} (p99 {m['floor_p99_8bit']:.1f}) | "
                   f"SDR clipped {m['sdr_clipped_share']*100:.1f}% -> HDR above white {m['hdr_above_white_share']*100:.1f}%, "
                   f"+{m['clipped_headroom_stops_mean']:.2f} stops there (p95 {m['clipped_headroom_stops_p95']:.2f}, max {m['headroom_stops_max']:.2f}) | "
                   f"nits p99 {m['nits_p99']:.0f} p99.9 {m['nits_p999']:.0f} max {m['nits_max']:.0f} | "
