@@ -259,6 +259,9 @@ namespace shared::common
 		// [Hud]
 		hud.mark_ui_draws = get_bool("Hud", "MarkUiDraws", true);
 
+		// [HDR]
+		hdr.enabled = get_bool("HDR", "Enabled", false);
+
 		// [PlayerLight]
 		player_light.enabled = get_bool("PlayerLight", "Enabled", true);
 		player_light.use_game_colour = get_bool("PlayerLight", "UseGameColour", true);

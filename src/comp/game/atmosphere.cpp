@@ -918,6 +918,9 @@ namespace comp::game::atmosphere
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
+		// HDR10 output: the final pass copy and the runtime's rtx.hdr.enable follow at once; the scene target's format
+		// is set when the game creates it (a restart).
+		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "MenuScene.AmbientScale") g_menu_ambient_scale = static_cast<float>(std::atof(value.c_str()));
 		else if (key == "MenuScene.RowDistance") shared::common::ffp_state::get().set_menu_row_distance(static_cast<float>(std::atof(value.c_str())));
@@ -1046,6 +1049,14 @@ namespace comp::game::atmosphere
 			return;
 		g_updated_frame = frame;
 		apply_live_options(frame);
+		// HDR10 output ([HDR] Enabled): the runtime's half of the toggle follows the proxy's, sent once and on change.
+		if (frame % 30 == 0 && shared::common::remix_api::is_initialized())
+		{
+			static int sent = -1;
+			const int want = shared::common::config::get().hdr.enabled ? 1 : 0;
+			if (want != sent && set("rtx.hdr.enable", want ? "True" : "False"))
+				sent = want;
+		}
 		if (frame != g_haze_frame_id)
 			close_haze_frame();
 		if (frame != g_ambient_frame_id)

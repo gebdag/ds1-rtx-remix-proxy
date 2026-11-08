@@ -429,6 +429,61 @@ namespace {
 	// game's own pass on the game's own image.
 	bool s_composite_requested = false; // this frame; reset at Present
 
+	// HDR10 output ([HDR] Enabled, config.hpp): the back buffer's size, which the scene target shares.
+	bool back_buffer_size(IDirect3DDevice9* dev, UINT& width, UINT& height)
+	{
+		IDirect3DSurface9* back = nullptr;
+		if (FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)) || !back)
+			return false;
+		D3DSURFACE_DESC desc {};
+		const bool ok = SUCCEEDED(back->GetDesc(&desc));
+		back->Release();
+		width = desc.Width;
+		height = desc.Height;
+		return ok;
+	}
+
+	// HDR10 output: the final 2D pass (the scene target through the brightness LUT into the back buffer) becomes a
+	// plain copy, since the LUT's dependent read clamps anything above 1. True when the draw was replaced. The LUT is
+	// identity at the game's default brightness; HDR has its own white level (rtx.hdr.paperWhiteNits).
+	bool hdr_final_pass_copy(IDirect3DDevice9* dev)
+	{
+		if (!shared::common::config::get().hdr.enabled)
+			return false;
+		IDirect3DSurface9* rt = nullptr;
+		IDirect3DSurface9* back = nullptr;
+		dev->GetRenderTarget(0, &rt);
+		dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back);
+		const bool to_back = rt && back && rt == back;
+		if (back)
+			back->Release();
+		if (!to_back)
+		{
+			if (rt)
+				rt->Release();
+			return false;
+		}
+		bool copied = false;
+		IDirect3DBaseTexture9* source = nullptr;
+		if (SUCCEEDED(dev->GetTexture(0, &source)) && source && source->GetType() == D3DRTYPE_TEXTURE)
+		{
+			D3DSURFACE_DESC src_desc {}, rt_desc {};
+			static_cast<IDirect3DTexture9*>(source)->GetLevelDesc(0, &src_desc);
+			rt->GetDesc(&rt_desc);
+			IDirect3DSurface9* level = nullptr;
+			if ((src_desc.Usage & D3DUSAGE_RENDERTARGET) && src_desc.Width == rt_desc.Width && src_desc.Height == rt_desc.Height &&
+				SUCCEEDED(static_cast<IDirect3DTexture9*>(source)->GetSurfaceLevel(0, &level)) && level)
+			{
+				copied = SUCCEEDED(dev->StretchRect(level, nullptr, rt, nullptr, D3DTEXF_POINT));
+				level->Release();
+			}
+		}
+		if (source)
+			source->Release();
+		rt->Release();
+		return copied;
+	}
+
 	void composite_before_backbuffer(IDirect3DDevice9* dev, UINT stride)
 	{
 		// The same UI marking the HUD path uses; without it Remix composites at Present.
@@ -937,6 +992,18 @@ namespace comp
 					(res.present_width != Width || res.present_height != Height);
 				Width = res.present_width;
 				Height = res.present_height;
+			}
+		}
+		// HDR10 output: the game's 8-bit render textures of the back buffer's size (its scene target, which Remix's
+		// frame is composited into) hold 16-bit float, so what is brighter than SDR white survives to the back buffer.
+		if (shared::common::config::get().hdr.enabled && Pool == D3DPOOL_DEFAULT && (Usage & D3DUSAGE_RENDERTARGET) &&
+			(Format == D3DFMT_A8R8G8B8 || Format == D3DFMT_X8R8G8B8))
+		{
+			UINT bb_w = 0, bb_h = 0;
+			if (back_buffer_size(m_pIDirect3DDevice9, bb_w, bb_h) && Width == bb_w && Height == bb_h)
+			{
+				shared::common::log("HDR", std::format("CreateTexture {}x{} {} render target -> A16B16G16R16F", Width, Height, format_tag(Format)));
+				Format = D3DFMT_A16B16G16R16F;
 			}
 		}
 		const crash_context::stopwatch sw;
@@ -1528,6 +1595,9 @@ namespace comp
 				return S_OK;
 		}
 		composite_before_backbuffer(m_pIDirect3DDevice9, VertexStreamZeroStride);
+		// HDR10 output: the brightness LUT pass would clip the composited frame's headroom.
+		if (hdr_final_pass_copy(m_pIDirect3DDevice9))
+			return S_OK;
 		const auto hr = m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 		return hr;
 	}

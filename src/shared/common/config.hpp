@@ -326,6 +326,17 @@ namespace shared::common
 			bool mark_ui_draws = true;
 		} hud;
 
+		// [HDR] HDR10 output, with the hdr10 runtime (rtx.hdr.*). The game composites Remix's frame into its own
+		// 8-bit scene target and copies that to the back buffer through its brightness LUT, which would clip
+		// everything above SDR white: with this on, the game's back-buffer-sized 8-bit render textures are created
+		// as A16B16G16R16F and the final LUT pass is a plain copy (the LUT is identity at default brightness; HDR
+		// has its own paper-white setting), and rtx.hdr.enable is sent to the runtime. Textures are created at
+		// start and on a resolution change, so a toggle takes full effect at the next game start.
+		struct hdr_settings
+		{
+			bool enabled = false;
+		} hdr;
+
 		// DS1's particles (FRPG_Sfx_* pixel shaders) reach Remix as shader draws,
 		// which it reads through the stage-0 texture stage state, not the shader.
 		struct sfx_settings
