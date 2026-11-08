@@ -15,6 +15,161 @@ namespace comp::game::cutscenes
 {
 	namespace
 	{
+
+		// --- Smooth cutscene camera ---
+		// A cutscene's camera (.sibcam) has one key per 30 Hz frame and remo samples it at its continuous time, but through the
+		// nearest-key sampler 0xD09DA0: at 60 fps every camera pose is held for two frames while the characters move every frame
+		// (judder in slow pans). The engine's own Hermite sampler 0xD0A1F0 (same registers and stack: EDX track, XMM0 time,
+		// stack out and dat) interpolates with the authored tangents; at 30 fps its samples land on the keys, the same poses.
+		// Some cameras cut between shots on two consecutive keys: there the original snap is kept. The four keys around the time
+		// are sampled first, with every register as at the original call (this code's convention is the compiler's own); the
+		// step between the middle two is a cut when it is far larger than the steps either side of it (a fast camera move
+		// changes speed gradually, a cut jumps once).
+		constexpr DWORD kCameraCall = 0x00FC2084;   // in the SibcamIns sample 0xFC2060, used by remo cut start and update only
+		constexpr BYTE kCameraCallBytes[] = { 0xE8, 0x17, 0x7D, 0xD4, 0xFF };
+		constexpr DWORD kNearestSampler = 0x00D09DA0;
+		constexpr DWORD kHermiteSampler = 0x00D0A1F0;
+		constexpr float kKeysPerSecond = 30.0f;
+		constexpr int kCameraKeys = 4;            // the key before, the two around the time, the key after
+		constexpr float kCutRatio = 4.0f;         // a cut's step against the larger of its neighbours'
+		constexpr float kCutMinDistance = 0.5f;   // metres: smaller steps are never cuts
+		constexpr float kCutMinTurn = 0.03f;      // 1 - cos of an axis' turn (about 14 degrees): smaller turns are never cuts
+
+		bool s_smooth_camera = true;
+		bool s_camera_patched = false;
+		// Shared with the naked thunk (game thread only).
+		DWORD s_camera_target = kNearestSampler;
+		DWORD s_nearest_ptr = kNearestSampler;
+		DWORD s_sample_track = 0, s_sample_dat = 0, s_sample_esp = 0, s_sample_index = 0;
+		float s_sample_time = 0.0f;
+		float s_key_times[kCameraKeys] = {};
+		alignas(16) float s_poses[kCameraKeys][16] = {};
+		// Samples of the current scene and of the one before (a second without a sample ends a scene), for the F4 tab.
+		unsigned s_interpolated = 0, s_snapped = 0, s_last_interpolated = 0, s_last_snapped = 0;
+		ULONGLONG s_last_sample_ms = 0;
+
+		void __cdecl camera_key_times()
+		{
+			const float lo = std::floor(s_sample_time * kKeysPerSecond) / kKeysPerSecond;
+			for (int k = 0; k < kCameraKeys; ++k)
+				s_key_times[k] = lo + static_cast<float>(k - 1) / kKeysPerSecond;
+		}
+
+		// How far a pose moves to the next: its position step, and the largest 1 - cos of an axis' turn (rows 0-2 axes, row 3
+		// position: the matrix 0x415910 builds). A degenerate axis counts as a full turn.
+		void pose_step(const float* a, const float* b, float& distance, float& turn)
+		{
+			const float dx = a[12] - b[12], dy = a[13] - b[13], dz = a[14] - b[14];
+			distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+			turn = 0.0f;
+			for (int row = 0; row < 3; ++row)
+			{
+				const float* u = a + row * 4;
+				const float* v = b + row * 4;
+				const float lu = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+				const float lv = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+				const float c = lu > 1e-6f && lv > 1e-6f ? (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv) : -1.0f;
+				turn = std::max(turn, 1.0f - c);
+			}
+		}
+
+		void __cdecl camera_choose()
+		{
+			float distance[kCameraKeys - 1], turn[kCameraKeys - 1];
+			for (int k = 0; k + 1 < kCameraKeys; ++k)
+				pose_step(s_poses[k], s_poses[k + 1], distance[k], turn[k]);
+			const bool cut = distance[1] > std::max(kCutMinDistance, kCutRatio * std::max(distance[0], distance[2])) ||
+				turn[1] > std::max(kCutMinTurn, kCutRatio * std::max(turn[0], turn[2]));
+			s_camera_target = cut ? kNearestSampler : kHermiteSampler;
+
+			const ULONGLONG now = GetTickCount64();
+			if (s_last_sample_ms && now - s_last_sample_ms > 1000)
+			{
+				s_last_interpolated = s_interpolated;
+				s_last_snapped = s_snapped;
+				s_interpolated = s_snapped = 0;
+			}
+			s_last_sample_ms = now;
+			++(cut ? s_snapped : s_interpolated);
+		}
+
+		// Replaces the call at 0xFC2084. Entry: EDX track, XMM0 time, [esp+4] out, [esp+8] dat. The four keys go through the
+		// original sampler into our own poses, each call with the entry registers restored (pushad block at +8+16 after its two
+		// pushes) and ESP put back after it whatever it pops; then everything is restored and the chosen sampler is jumped to with
+		// the original stack, so it returns straight to the caller.
+		__declspec(naked) void camera_thunk()
+		{
+			__asm
+			{
+				pushad
+				sub esp, 16
+				movups [esp], xmm0
+				movss s_sample_time, xmm0
+				mov s_sample_track, edx
+				mov eax, [esp + 56]
+				mov s_sample_dat, eax
+				call camera_key_times
+
+				mov s_sample_esp, esp
+				mov s_sample_index, 0
+			next_key:
+				mov eax, s_sample_index
+				shl eax, 6
+				lea eax, s_poses[eax]
+				push s_sample_dat
+				push eax
+				mov eax, s_sample_index
+				movss xmm0, s_key_times[eax * 4]
+				mov edi, [esp + 24]
+				mov esi, [esp + 28]
+				mov ebp, [esp + 32]
+				mov ebx, [esp + 40]
+				mov ecx, [esp + 48]
+				mov eax, [esp + 52]
+				mov edx, s_sample_track
+				call dword ptr [s_nearest_ptr]
+				mov esp, s_sample_esp
+				inc s_sample_index
+				cmp s_sample_index, 4
+				jb next_key
+
+				call camera_choose
+
+				movups xmm0, [esp]
+				add esp, 16
+				popad
+				jmp dword ptr [s_camera_target]
+			}
+		}
+
+		bool write_call(DWORD target)
+		{
+			BYTE bytes[5] = { 0xE8 };
+			const DWORD rel = target - (kCameraCall + 5);
+			std::memcpy(bytes + 1, &rel, sizeof(rel));
+			DWORD old = 0;
+			if (!VirtualProtect(reinterpret_cast<void*>(kCameraCall), sizeof(bytes), PAGE_EXECUTE_READWRITE, &old))
+				return false;
+			std::memcpy(reinterpret_cast<void*>(kCameraCall), bytes, sizeof(bytes));
+			VirtualProtect(reinterpret_cast<void*>(kCameraCall), sizeof(bytes), old, &old);
+			FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(kCameraCall), sizeof(bytes));
+			return true;
+		}
+
+		// Patched at start-up, before any scene plays: the call's displacement spans two 8-byte blocks, so it cannot be written
+		// in one atomic store while the game might run it. Switching it later only takes effect from the next start.
+		void apply_smooth_camera()
+		{
+			if (s_camera_patched || !s_smooth_camera)
+				return;
+			if (std::memcmp(reinterpret_cast<const void*>(kCameraCall), kCameraCallBytes, sizeof(kCameraCallBytes)) != 0)
+			{
+				log("Cutscenes", "Unexpected bytes at the cutscene camera call: smooth camera unavailable", LOG_TYPE::LOG_TYPE_WARN, true);
+				return;
+			}
+			s_camera_patched = write_call(reinterpret_cast<DWORD>(&camera_thunk));
+			log("Cutscenes", s_camera_patched ? "Smooth cutscene camera on" : "Could not patch the cutscene camera call");
+		}
 		// RemoManStep: the singleton, and its request (thiscall: scene, flags, callback, user data, unused, player).
 		constexpr DWORD kRemoMan = 0x01378490;
 		constexpr DWORD kRequest = 0x00EE1950;
@@ -152,6 +307,8 @@ namespace comp::game::cutscenes
 	{
 		if (shared::globals::lookdev_host)
 			return;
+		s_smooth_camera = shared::common::config::get().get_bool("Cutscenes", "SmoothCamera", true);
+		apply_smooth_camera();
 		s_available = std::memcmp(reinterpret_cast<const void*>(kRequest), kRequestStart, sizeof(kRequestStart)) == 0 &&
 			*reinterpret_cast<const DWORD*>(kScriptUpdateSlot) == kScriptUpdate;
 		if (!s_available)
@@ -176,6 +333,18 @@ namespace comp::game::cutscenes
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Stops the game's time, in a cutscene too, while rendering goes on: to capture one frame with F9.\n"
 				"Things the path tracer runs on its own clock (ripples, drips) keep going.");
+
+		if (ImGui::Checkbox("Smooth Cutscene Camera (from the next start)", &s_smooth_camera))
+			shared::common::config::get().set_string("Cutscenes", "SmoothCamera", s_smooth_camera ? "1" : "0");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Cutscene cameras have 30 keys a second; at 60 fps the game holds each for two frames (judder in slow pans).\n"
+				"On: the game's own interpolating camera sampler between keys, hard cuts kept. Saved as [Cutscenes] SmoothCamera;\n"
+				"a change takes effect when the game starts.");
+		ImGui::SameLine();
+		ImGui::TextDisabled(s_camera_patched ? "(in use this session)" : "(not in use this session)");
+		if (s_camera_patched && (s_interpolated || s_snapped || s_last_interpolated || s_last_snapped))
+			ImGui::TextDisabled("Camera samples: this scene %u interpolated, %u kept on a key (cuts); last scene %u / %u",
+				s_interpolated, s_snapped, s_last_interpolated, s_last_snapped);
 
 		ImGui::Spacing();
 		if (!s_available)
