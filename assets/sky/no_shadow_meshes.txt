@@ -4,4 +4,7 @@
 # Undead Asylum, under the cell windows: m0300B1A18 mesh9 (m19_b_wall_05) stands 5.1 cm in front of m0010B1A18 mesh11's wall and faces
 # it, so the corridor sees through it (culled) to that wall and to the strip of floor between the two. Every light ray from that floor met
 # mesh9 and the strip showed as a black line along the wall's foot (frame_20261106_115049, draw 512). mesh11 still casts the wall's shadow.
-4bd3fc480980e512 6045 m18_01_00_00/m0300B1A18/mesh9/lod0
+# 'hide <first> <last>': prims of the draw no view shows, left out of Remix. mesh9's strip prims 3252-3253 are that panel, a 2.6 x 4.5 m
+# quad at x -12.21 facing the wall 5 cm behind it: passing lighting rays was not enough, it still kept every bounce ray from that
+# wall, which in the intro cutscene (no direct light there) went black (frame_20261108_033848).
+4bd3fc480980e512 6045 m18_01_00_00/m0300B1A18/mesh9/lod0 hide 3252 3253

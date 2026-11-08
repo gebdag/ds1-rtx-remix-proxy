@@ -76,6 +76,14 @@ namespace comp
 		constexpr UINT kCatacombsBeamStart = 823;
 		bool s_force_shaft = false;
 		bool s_beam_split = false;
+		// A no-shadow mesh with prims no view shows (game/sky_meshes.hpp, no_shadow_hidden_prims) is drawn in the pieces
+		// around them (on_draw_indexed_prim). The pieces no longer match the table by their index range, so they carry the
+		// mesh's no-shadow tag through s_force_no_shadow.
+		bool s_hidden_split = false;
+		bool s_force_no_shadow = false;
+		// The whole draw's range while its pieces are drawn: the lightmap sun level is measured over the mesh as before.
+		UINT s_split_start = 0;
+		UINT s_split_prims = 0;
 
 		bool is_catacombs_sky_with_beams(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT prim_count)
 		{
@@ -468,6 +476,51 @@ namespace comp
 			return sky_hr;
 		}
 
+		// A no-shadow mesh with prims no view shows: drawn around them, so Remix never gets them.
+		if (!s_hidden_split && !s_beam_split && shared::common::config::get().sky.no_shadow_meshes &&
+			(PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLELIST) &&
+			game::sky_meshes::any_hidden_prims() && shared::common::ffp_state::get().view_proj_valid() &&
+			!shared::common::ffp_state::get().cur_decl_is_skinned())
+		{
+			UINT hide_first = 0, hide_last = 0;
+			if (IDirect3DIndexBuffer9* ib = shared::common::ffp_state::get().cur_ib())
+			{
+				const bool hidden = game::sky_meshes::no_shadow_hidden_prims(ib, PrimitiveType, startIndex, primCount, hide_first, hide_last);
+				if (hidden)
+				{
+					s_hidden_split = true;
+					s_force_no_shadow = true;
+					s_split_start = startIndex;
+					s_split_prims = primCount;
+					const UINT per_prim = PrimitiveType == D3DPT_TRIANGLESTRIP ? 1u : 3u;
+					HRESULT split_hr = D3D_OK;
+					if (hide_first > 0)
+						split_hr = on_draw_indexed_prim(dev, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, hide_first);
+					const UINT rest = hide_last + 1;
+					if (rest < primCount)
+					{
+						// A strip piece that starts on an odd triangle has its winding turned: so is its culling.
+						const bool turned = PrimitiveType == D3DPT_TRIANGLESTRIP && (rest & 1u);
+						DWORD cull = D3DCULL_CCW;
+						if (turned)
+						{
+							dev->GetRenderState(D3DRS_CULLMODE, &cull);
+							dev->SetRenderState(D3DRS_CULLMODE, cull == D3DCULL_CW ? D3DCULL_CCW : cull == D3DCULL_CCW ? D3DCULL_CW : cull);
+						}
+						const HRESULT rest_hr = on_draw_indexed_prim(dev, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices,
+							startIndex + rest * per_prim, primCount - rest);
+						if (turned)
+							dev->SetRenderState(D3DRS_CULLMODE, cull);
+						if (FAILED(rest_hr))
+							split_hr = rest_hr;
+					}
+					s_force_no_shadow = false;
+					s_hidden_split = false;
+					return split_hr;
+				}
+			}
+		}
+
 		auto& ctx = setup_context(dev);
 		const auto im = imgui::get();
 		auto& ffp = shared::common::ffp_state::get();
@@ -541,7 +594,10 @@ namespace comp
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
 		// ... and lightmapped draws carry their lightmap's level, which the runtime scales the sun by.
-		game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
+		if (s_hidden_split)
+			game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, s_split_start, s_split_prims, ffp.frame_count());
+		else
+			game::lightmap_sun::tag_draw(dev, PrimitiveType, BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 		// ... and emissive meshes the game gives no light get one of their own (rtx_comp\\lights\\mesh_lights.txt).
 		if (!ffp.is_depth_prepass())
 		{
@@ -881,7 +937,7 @@ namespace comp
 					const bool lamp = game::mesh_lights::is_lamp(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 					// So do the faces in rtx_comp\sky\no_shadow_meshes.txt (game/sky_meshes.hpp): same marker.
 					const bool no_shadow = !water_draw && shared::common::config::get().sky.no_shadow_meshes &&
-						game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+						(s_force_no_shadow || game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
 					if (lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
 					// Leaf cards the game lights without occlusion let indirect light through in part (Surface::isDs1Foliage). Only in Firelink

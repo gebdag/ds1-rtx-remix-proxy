@@ -3,6 +3,7 @@
 
 #include "shared/common/ffp_state.hpp"
 
+#include <atomic>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -30,6 +31,9 @@ namespace comp::game::sky_meshes
 			std::string texture; // glass: the diffuse the mesh is drawn with
 			std::string derived; // glass: the glass pass texture (rtx_comp\glass\<derived>.dds)
 			float above_y = -std::numeric_limits<float>::infinity(); // sky: only while the camera is above this height
+			bool hide = false;    // no-shadow: prims hide_first..hide_last of the draw are left out
+			UINT hide_first = 0;
+			UINT hide_last = 0;
 		};
 
 		// Entries live in g_hashes for good (a node map: pointers stay valid).
@@ -51,6 +55,7 @@ namespace comp::game::sky_meshes
 		std::unordered_set<UINT> g_counts;                  // index counts present in the tables
 		std::unordered_map<IDirect3DIndexBuffer9*, std::vector<range_result>> g_cache;
 		std::unordered_set<uint64_t> g_logged;
+		bool g_any_hide = false;                            // some no-shadow entry lists hidden prims
 
 		void load_table_locked(const char* file_name, kind k, const char* what, const char* missing)
 		{
@@ -79,8 +84,23 @@ namespace comp::game::sky_meshes
 				float above_y = -std::numeric_limits<float>::infinity();
 				if (std::string word; k == kind::sky && in >> texture >> word && word == "above")
 					in >> above_y;
-				g_hashes.emplace(std::stoull(hash_hex, nullptr, 16),
-					entry{ source, k, static_cast<uint8_t>(cut), texture, derived, above_y });
+				entry e{ source, k, static_cast<uint8_t>(cut), texture, derived, above_y };
+				// A no-shadow mesh may name prims of its draw that no view shows: 'hide <first> <last>'.
+				if (std::string word; k == kind::no_shadow && in >> word && word == "hide")
+				{
+					long long first = -1, last = -1;
+					if (in >> first >> last && first >= 0 && last >= first)
+					{
+						e.hide = true;
+						e.hide_first = static_cast<UINT>(first);
+						e.hide_last = static_cast<UINT>(last);
+						g_any_hide = true;
+					}
+					else
+						shared::common::log("SkyMeshes", std::format("{}: bad 'hide <first> <last>' for {}, ignored", file_name, source),
+							shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
+				}
+				g_hashes.emplace(std::stoull(hash_hex, nullptr, 16), std::move(e));
 				g_counts.insert(count);
 				loaded++;
 			}
@@ -190,6 +210,31 @@ namespace comp::game::sky_meshes
 	bool is_no_shadow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
 		return lookup(ib, type, start_index, prim_count).k == kind::no_shadow;
+	}
+
+	bool any_hidden_prims()
+	{
+		// Once loaded the tables never change: read the flag without the lock after that.
+		static std::atomic<int> state{ -1 };
+		const int s = state.load(std::memory_order_acquire);
+		if (s >= 0)
+			return s > 0;
+		std::lock_guard lock(g_mutex);
+		if (!g_loaded)
+			load_locked();
+		state.store(g_any_hide ? 1 : 0, std::memory_order_release);
+		return g_any_hide;
+	}
+
+	bool no_shadow_hidden_prims(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
+		UINT& first, UINT& last)
+	{
+		const match m = lookup(ib, type, start_index, prim_count);
+		if (m.k != kind::no_shadow || !m.e->hide || m.e->hide_last >= prim_count)
+			return false;
+		first = m.e->hide_first;
+		last = m.e->hide_last;
+		return true;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

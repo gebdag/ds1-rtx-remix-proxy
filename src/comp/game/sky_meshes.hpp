@@ -43,6 +43,15 @@ namespace comp::game::sky_meshes
 	// light out (the Asylum's duplicate wall face in front of the wall under its cell windows). Lighting rays pass it.
 	bool is_no_shadow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// For a no-shadow mesh listed with 'hide <first> <last>': the prims of its draw (counted as the draw counts them) that no
+	// view shows, which the renderer leaves out of what it sends to Remix. A face 5 cm in front of a wall and facing it hides
+	// that wall from every bounce ray, which passing only lighting rays (the no-shadow tag) does not cure. False for any
+	// other draw.
+	// Whether any no-shadow entry lists hidden prims: lets the renderer skip the lookup for every draw otherwise.
+	bool any_hidden_prims();
+	bool no_shadow_hidden_prims(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
+		UINT& first, UINT& last);
+
 	// True when this indexed draw is a mesh listed in rtx_comp\sky\emitter_meshes.txt: a character that gives off a
 	// little light the game bakes into nothing (the crystal lizard), see game/effect_lights.hpp.
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
