@@ -385,12 +385,19 @@ namespace comp
 
 		// HDR10 output (config.hpp hdr_settings): the proxy's half (float scene target, final pass as a copy) and the
 		// runtime's (rtx.hdr.enable, sent by atmosphere::frame_update).
+		static const bool hdr_at_start = cfg.hdr.enabled;
 		if (ImGui::Checkbox("HDR10 Output (experimental)", &cfg.hdr.enabled))
-			cfg.set_string("HDR", "Enabled", cfg.hdr.enabled ? "1" : "0");
+		{
+			if (!cfg.set_string("HDR", "Enabled", cfg.hdr.enabled ? "1" : "0"))
+				shared::common::log("HDR", "could not write [HDR] Enabled to " + cfg.ini_path(), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+		}
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Needs the hdr10 runtime and Windows HDR on for the display. The scene target's format is set when\n"
 			                  "the game creates it: a change here takes full effect at the next game start. Peak and SDR white\n"
-			                  "are in the Remix menu (Dark Souls tab > HDR10 output).");
+			                  "are in the Remix menu (Dark Souls tab > HDR10 output). The Remix menu's own HDR10 checkbox switches\n"
+			                  "only the runtime's half: the scene target stays 8-bit and the image stays SDR at paper white.");
+		if (cfg.hdr.enabled != hdr_at_start)
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "Restart the game to apply: the scene target gets its format when the game creates it.");
 		ImGui::Separator();
 
 		ImGui::Checkbox("Skip Post-FX (master)", &cfg.ffp.skip_postfx);
