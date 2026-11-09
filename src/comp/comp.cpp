@@ -28,6 +28,7 @@
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
 #include "game/effect_lights.hpp"
+#include "game/ffx_lights.hpp"
 #include "game/texture_names.hpp"
 
 namespace comp
@@ -44,6 +45,7 @@ namespace comp
 		if (game::map_lights::wants_sprites())
 			game::map_lights::observe_sprites(points, count);
 		game::effect_lights::observe_sprites(points, count);
+		game::ffx_lights::observe_sprites(points, count);
 		game::waterfall::observe_sprites(points, count);
 	}
 

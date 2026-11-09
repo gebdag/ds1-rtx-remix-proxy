@@ -3,6 +3,7 @@
 #include <array>
 
 #include "point_lights.hpp"
+#include "shared/common/ffp_state.hpp"
 
 namespace comp::game::ffx_lights
 {
@@ -39,5 +40,8 @@ namespace comp::game::ffx_lights
 	// covers are the map's own lights (MSB bank lights, bank entities, map_lights stand-ins): a persistent
 	// effect with one of them within 3 m is the flame that light stands for, and gets none.
 	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale);
+
+	// The particles drawn this frame: lights that follow their effect's sprites (Tomb of the Giants' lantern halos) take their level from them.
+	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);
 
 }

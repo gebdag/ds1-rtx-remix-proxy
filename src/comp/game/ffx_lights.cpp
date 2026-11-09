@@ -2,6 +2,7 @@
 #include "ffx_lights.hpp"
 #include "ffx_instances.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "camera.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -70,6 +71,53 @@ namespace comp::game::ffx_lights
 			float own_age = 0.0f; // the instance's age field when last read
 		};
 		std::unordered_map<unsigned, fade> g_fades;
+
+		// Effects whose light follows the sprites they draw at their spot, as bright as those are opaque: Tomb of the Giants' lantern halos
+		// (FFX 540). Their placed stand-ins did this (map_lights, category lantern, full at alpha 0.196); with those off by default the table's
+		// light for the effect went on and off at once while its halo faded in and out. Same rule and timing as map_lights' effect gate.
+		struct follow_rule { unsigned ffx_id; float full_alpha; };
+		constexpr follow_rule kFollow[] = { { 540, 0.196f } };
+		constexpr float kFollowRadius = 1.5f;
+		constexpr float kFollowRiseSeconds = 0.05f;
+		constexpr float kFollowFallSeconds = 0.2f;
+		// Only a spot the game would draw its effect at, and shows nothing, has lost it: inside the view less this margin, within this range.
+		constexpr float kFollowViewRange = 30.0f;
+		constexpr float kFollowViewMargin = 0.1f;
+		struct follower
+		{
+			float pos[3] = {};
+			float alpha_frame = 0.0f; // strongest sprite alpha at the spot since the last collect
+			float level = 1.0f;       // lit, as before this followed anything, until its spot is in view or a sprite is drawn there
+			float full_alpha = 1.0f;
+			UINT seen = 0;
+		};
+		std::unordered_map<unsigned, follower> g_followers; // by instance address
+		std::chrono::steady_clock::time_point g_follow_time;
+
+		const follow_rule* follow_rule_for(unsigned ffx_id)
+		{
+			for (const auto& r : kFollow)
+				if (r.ffx_id == ffx_id)
+					return &r;
+			return nullptr;
+		}
+
+		bool follow_spot_in_view(const float* p)
+		{
+			float camera[3] = {};
+			const float* view_proj = shared::common::ffp_state::get().map_viewproj_rows();
+			if (!view_proj || !camera::get_override_pos(camera[0], camera[1], camera[2]))
+				return false;
+			const float d[3] = { p[0] - camera[0], p[1] - camera[1], p[2] - camera[2] };
+			if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] > kFollowViewRange * kFollowViewRange)
+				return false;
+			auto row = [&](int r) { return view_proj[r * 4] * d[0] + view_proj[r * 4 + 1] * d[1] + view_proj[r * 4 + 2] * d[2] + view_proj[r * 4 + 3]; };
+			const float w = row(3);
+			if (w <= 0.0f)
+				return false;
+			const float limit = w * (1.0f - kFollowViewMargin);
+			return std::abs(row(0)) <= limit && std::abs(row(1)) <= limit;
+		}
 		const std::chrono::steady_clock::time_point g_origin = std::chrono::steady_clock::now();
 
 		void load()
@@ -144,6 +192,22 @@ namespace comp::game::ffx_lights
 		return static_cast<int>(g_table.size());
 	}
 
+	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count)
+	{
+		if (g_followers.empty() || !points)
+			return;
+		for (UINT v = 0; v < count; ++v)
+		{
+			const auto& p = points[v];
+			for (auto& [address, fl] : g_followers)
+			{
+				const float dx = p.x - fl.pos[0], dy = p.y - fl.pos[1], dz = p.z - fl.pos[2];
+				if (dx * dx + dy * dy + dz * dz <= kFollowRadius * kFollowRadius)
+					fl.alpha_frame = std::max(fl.alpha_frame, p.alpha);
+			}
+		}
+	}
+
 	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale)
 	{
 		g_out.clear();
@@ -156,6 +220,10 @@ namespace comp::game::ffx_lights
 		const UINT frame = shared::common::ffp_state::get().frame_count();
 		const auto time_now = std::chrono::steady_clock::now();
 		const float now = std::chrono::duration<float>(time_now - g_origin).count();
+		const float follow_dt = std::clamp(std::chrono::duration<float>(time_now - g_follow_time).count(), 0.0f, 0.5f);
+		g_follow_time = time_now;
+		const float follow_rise = 1.0f - std::exp(-follow_dt / kFollowRiseSeconds);
+		const float follow_fall = 1.0f - std::exp(-follow_dt / kFollowFallSeconds);
 		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; float level; };
 		std::vector<candidate> candidates;
 		for (const auto& inst : ffx_instances::current())
@@ -216,6 +284,24 @@ namespace comp::game::ffx_lights
 				f->second.ended = -1.0f;
 			}
 			c.level = f->second.level;
+			// One that follows its effect's sprites: as bright as the halo drawn at it is opaque.
+			if (const auto* rule = follow_rule_for(inst.ffx_id))
+			{
+				auto& fl = g_followers[inst.address];
+				std::memcpy(fl.pos, c.pos, sizeof(fl.pos));
+				fl.full_alpha = rule->full_alpha;
+				fl.seen = frame;
+				const float alpha = fl.alpha_frame;
+				fl.alpha_frame = 0.0f;
+				// Nothing drawn at the light: gone if the game would have drawn it there, else as it was.
+				if (alpha > 0.0f || follow_spot_in_view(c.pos))
+				{
+					// Against the halo's own full alpha only: a bright spark or spell near the lantern would otherwise have set the scale for good.
+					const float target = std::min(1.0f, alpha / fl.full_alpha);
+					fl.level += (target - fl.level) * (target > fl.level ? follow_rise : follow_fall);
+				}
+				c.level *= fl.level;
+			}
 			if (c.level < kFadeOff)
 				continue;
 			if (c.e->persistent && std::any_of(covers.begin(), covers.end(), [&](const point_lights::light* l)
@@ -230,6 +316,7 @@ namespace comp::game::ffx_lights
 				candidates.push_back(c);
 		}
 		std::erase_if(g_fades, [&](const auto& t) { return t.second.seen != frame; });
+		std::erase_if(g_followers, [&](const auto& t) { return t.second.seen != frame; });
 		if (candidates.size() > kMaxLights)
 		{
 			std::nth_element(candidates.begin(), candidates.begin() + kMaxLights, candidates.end(),
