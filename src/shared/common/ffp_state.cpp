@@ -3735,6 +3735,19 @@ namespace shared::common
 		return true;
 	}
 
+	bool ffp_state::apply_skinned_glow_layer_marker(IDirect3DDevice9* dev)
+	{
+		DWORD blend_enabled = FALSE, src = 0, dst = 0;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend_enabled);
+		dev->GetRenderState(D3DRS_SRCBLEND, &src);
+		dev->GetRenderState(D3DRS_DESTBLEND, &dst);
+		if (!blend_enabled || src != D3DBLEND_SRCALPHA || dst != D3DBLEND_INVSRCALPHA)
+			return false;
+		const int exposure_power = (cur_ps_reads_exposure_ ? 1 : 0) + (cur_vs_exposure_ ? 1 : 0);
+		dev->SetTextureStageState(0, D3DTSS_CONSTANT, exposure_power ? 0xD15D0E20u + exposure_power : 0xD15D0E1Du);
+		return true;
+	}
+
 	// ---- Rigid vertex expansion ----
 
 	uint64_t ffp_state::fingerprint_source(const unsigned char* src, UINT total_verts,

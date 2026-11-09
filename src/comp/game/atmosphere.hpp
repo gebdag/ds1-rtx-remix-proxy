@@ -47,6 +47,9 @@ namespace comp::game::atmosphere
 	// and only where the last tag_self_lit put the shaft's own haze into its colour; otherwise the draw keeps its set.
 	void tag_unhazed(IDirect3DDevice9* dev);
 
+	// Seath's glow layers: the game adds a broad specular over its 3x colour, which the self-lit tag does not hold. Scales the current tag (proxy.Character.SeathGlowGain).
+	void scale_self_lit_for_seath(IDirect3DDevice9* dev);
+
 	// Self-lit ambient: a few region light sets switch the probe off (c86 = 0) and give both
 	// hemispheres one bright colour, so the HemEnv shaders draw their surfaces as texture * c100 *
 	// that colour however the scene is lit. That is how the game makes a plain rock plane its

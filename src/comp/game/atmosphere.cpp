@@ -173,6 +173,7 @@ namespace comp::game::atmosphere
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
+		float g_seath_glow_gain = 1.0f; // proxy.Character.SeathGlowGain, live
 
 		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
 		constexpr DWORD kViewFadeMarker = 0xD6000000;
@@ -786,6 +787,17 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	void scale_self_lit_for_seath(IDirect3DDevice9* dev)
+	{
+		if ((g_self_lit_tag_set >> 24) != (kSelfLitMarker >> 24) || g_seath_glow_gain == 1.0f)
+			return;
+		DWORD tag = kSelfLitMarker;
+		for (int shift = 16; shift >= 0; shift -= 8)
+			tag |= static_cast<DWORD>(std::clamp(std::lround(((g_self_lit_tag_set >> shift) & 0xFF) * g_seath_glow_gain), 1L, 255L)) << shift;
+		dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
+		g_self_lit_tag_set = tag;
+	}
+
 	void tag_view_fade(IDirect3DDevice9* dev, bool fade, const float* ps_const)
 	{
 		DWORD tag = 0;
@@ -965,6 +977,7 @@ namespace comp::game::atmosphere
 					&gl->menu_key[3], &gl->menu_key[4], &gl->menu_key[5], &gl->menu_key[6]);
 		}
 		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
+		else if (key == "Character.SeathGlowGain") g_seath_glow_gain = std::max(static_cast<float>(std::atof(value.c_str())), 0.0f);
 		else if (key == "Eyes.Gain") eye_sprites::set_gain(static_cast<float>(std::atof(value.c_str())));
 		else if (key == "Lights.PlayerIntensity") { if (auto* gl = game_lights::get()) gl->set_player_intensity(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.PlayerGammaAdd") { if (auto* gl = game_lights::get()) gl->set_player_gamma_add(b); }
