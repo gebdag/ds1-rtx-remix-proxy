@@ -135,7 +135,10 @@ namespace comp
 		const bool seath_glow = glow_ps && glow_ps[100 * 4] >= 2.9f && game::texture_names::name_of(ffp.cur_texture(0)) == "c5290_2" &&
 			ffp.apply_skinned_glow_layer_marker(dev);
 		if (seath_glow)
+		{
 			game::atmosphere::scale_self_lit_for_seath(dev);
+			game::atmosphere::tag_seath_unhazed(dev);
+		}
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
 		if (seath_glow)
 			ffp.clear_decal_marker(dev);
