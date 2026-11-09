@@ -419,18 +419,21 @@ namespace comp::game::atmosphere
 			report("adaptation", ok, std::format("rate {}, clamp {}..{}, key {}, c135.y {}", c54[0], c54[1], c54[2], c54[3], divisor));
 		}
 
-		// Shots the game shows as a silhouette against a bright sky, which the sky ambient would light up: bounce rays that leave the map get
-		// the game's ambient, but here the game's shaders mask it almost to nothing. Identified by the cutscene camera's exact place and long
-		// lens, so play and every other shot keep theirs. Undead Asylum intro, scn180101 cut0050: the knight looking down the shaft into the
-		// cell from a fixed camera, frame_20261108_123227 (helmet 221 with the ambient, 29 in the game). No other cutscene camera comes within a metre.
+		// Shots of the knight looking down the shaft into the Undead Asylum cell (scn180101), where the game's ambient on bounce rays burns him out
+		// against the sky behind him. There the rays take the sky texture instead, which the user chose over dimming the ambient (2026-11-09: that left
+		// him very dark). Identified by the cutscene camera's exact place and lens, so play and every other shot keep the ambient. Close, frame_20261108_123227
+		// and frame_20261109_080703, Sy 11.5; from further away, frame_20261109_080657, Sy 2.54 (2.4 in play).
 		struct dark_shot
 		{
 			const char* map;
 			float camera[3];
+			float min_focal;   // vertical: Sy of the view-projection
 		};
-		constexpr dark_shot kDarkShots[] = { { "m18_01_00_00", { -15.65f, 186.48f, -46.66f } } };
+		constexpr dark_shot kDarkShots[] = {
+			{ "m18_01_00_00", { -15.65f, 186.48f, -46.66f }, 6.0f },
+			{ "m18_01_00_00", { -16.46f, 185.65f, -46.92f }, 2.5f },
+		};
 		constexpr float kDarkShotRadius = 0.1f;
-		constexpr float kDarkShotMinFocal = 6.0f;    // vertical, Sy of the view-projection: 11.5 in this shot, 2.4 in play
 		constexpr float kCameraCutM = 0.5f;          // a camera that moved further than this since the last frame arrived by a cut
 		bool g_dark_shot_sent = false;
 
@@ -445,10 +448,9 @@ namespace comp::game::atmosphere
 			static float last[3] = {};
 			const bool cut = std::abs(x - last[0]) > kCameraCutM || std::abs(y - last[1]) > kCameraCutM || std::abs(z - last[2]) > kCameraCutM;
 			last[0] = x, last[1] = y, last[2] = z;
-			if (!cut && std::sqrt(rows[4] * rows[4] + rows[5] * rows[5] + rows[6] * rows[6]) < kDarkShotMinFocal)
-				return false;
+			const float focal = std::sqrt(rows[4] * rows[4] + rows[5] * rows[5] + rows[6] * rows[6]);
 			for (const auto& shot : kDarkShots)
-				if (std::abs(x - shot.camera[0]) < kDarkShotRadius && std::abs(y - shot.camera[1]) < kDarkShotRadius &&
+				if ((cut || focal >= shot.min_focal) && std::abs(x - shot.camera[0]) < kDarkShotRadius && std::abs(y - shot.camera[1]) < kDarkShotRadius &&
 					std::abs(z - shot.camera[2]) < kDarkShotRadius && map_lights::current_map_name() == shot.map)
 					return true;
 			return false;
@@ -1063,8 +1065,8 @@ namespace comp::game::atmosphere
 			close_ambient_frame();
 		if (!shared::common::remix_api::is_initialized())
 			return;
-		// A dark shot takes the sky from bounce rays at once, in and out: it starts and ends on a hard cut.
-		if (const bool dark_shot = in_dark_shot(); dark_shot != g_dark_shot_sent && set("rtx.ds1Ambient.bounceScale", dark_shot ? "0" : "1"))
+		// At once, in and out: such a shot starts and ends on a hard cut.
+		if (const bool dark_shot = in_dark_shot(); dark_shot != g_dark_shot_sent && set("rtx.ds1Ambient.skyInShot", dark_shot ? "True" : "False"))
 			g_dark_shot_sent = dark_shot;
 		if (probe_split split; g_have_ambient && split_probe(g_ambient_ready, split))
 		{

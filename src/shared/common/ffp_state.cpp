@@ -2279,7 +2279,7 @@ namespace shared::common
 		const float colour_scale = 0.5f * exposure;
 		auto channel = [&](float v) { return static_cast<DWORD>(std::clamp(v * 255.0f * colour_scale + 0.5f, 0.0f, 255.0f)); };
 
-		static constexpr UINT kMostTriangles = 4096;
+		static constexpr UINT kMostTriangles = 2048;
 		static constexpr float kHalf = 0.005f;      // metres
 		spark_vertices_.clear();
 		for (const auto& e : spark_emissions_)

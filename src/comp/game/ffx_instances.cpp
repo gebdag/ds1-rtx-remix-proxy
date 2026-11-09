@@ -47,6 +47,7 @@ namespace comp::game::ffx_instances
 
 		// Effect trees are small; the caps guard against a list changing under the walk.
 		constexpr int kMaxInstances = 8192;
+		constexpr int kMaxGroups = 4096;
 		constexpr int kMaxParents = 32;
 		constexpr int kMaxTreeNodes = 256;
 
@@ -77,8 +78,9 @@ namespace comp::game::ffx_instances
 				return;
 
 			std::vector<DWORD> stack;
-			for (DWORD group = read_dword(manager + kManagerGroups); group && g_instances.size() < kMaxInstances;
-				group = read_dword(group + kGroupNext))
+			int groups = 0;
+			for (DWORD group = read_dword(manager + kManagerGroups); group && g_instances.size() < kMaxInstances && groups < kMaxGroups;
+				group = read_dword(group + kGroupNext), ++groups)
 			{
 				if (const DWORD first = read_dword(group + kGroupFirst))
 					stack.push_back(first);

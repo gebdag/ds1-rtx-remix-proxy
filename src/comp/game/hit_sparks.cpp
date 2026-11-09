@@ -22,6 +22,8 @@ namespace comp::game::hit_sparks
 		constexpr float kNewAge = 0.25f;
 		// An instance that emits as long as it runs stops counting after this long, should it stay behind in the tree.
 		constexpr float kLongestEmission = 6.0f;
+		// Frames an instance may go unseen and still be the same one.
+		constexpr UINT kForget = 8;
 		// A second instance this close in the same frame is the same hit.
 		constexpr float kSameHit = 0.1f;
 
@@ -119,9 +121,11 @@ namespace comp::game::hit_sparks
 					}
 				}
 			}
-			if (age < kLongestEmission)
+			// An instance can outlive what it shows by minutes: its emitters are its child instances, removed as they finish.
+			if (age < kLongestEmission && ffx_instances::child_state(inst.address) == ffx_instances::children::running)
 				add(out, *e, at, true);
 		}
-		std::erase_if(g_seen, [&](const auto& kv) { return kv.second.frame != frame; });
+		// Not at the first miss: a walk that lost a live instance for a frame would fire its burst again when it came back.
+		std::erase_if(g_seen, [&](const auto& kv) { return frame - kv.second.frame > kForget; });
 	}
 }
