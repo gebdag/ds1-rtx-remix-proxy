@@ -2552,12 +2552,20 @@ namespace shared::common
 					out[v].color = (out[v].color & 0x00FFFFFFu) | (static_cast<DWORD>((out[v].color >> 24) * fade + 0.5f) << 24);
 			}
 
-		// The effect Remix particles replace (runtime rtx_dark_souls_effect_particles.h), tagged on stage 4 like the fog gates' batches:
-		// the green motes over a bloodstain (s01003), by the game's own vertex colour too (before the exposure scale above, which moves
-		// with the eye): the bloodstain's are (130, 255, 180), b/g 0.71, where the Moonlight Butterfly's magic on the same texture is
-		// (150, 255, 200), b/g 0.78.
+		// Two effects Remix particles replace (runtime rtx_dark_souls_effect_particles.h), tagged on stage 4 like the fog gates' batches:
+		// the green motes over a bloodstain (s01003), and the streaks of a weapon striking stone (FRPG_Sfx_LineType0: additive, its pixel
+		// shader samples nothing). Both by the game's own vertex colour too (before the exposure scale above, which moves with the eye):
+		// the bloodstain's motes are (130, 255, 180), b/g 0.71, where the Moonlight Butterfly's magic on the same texture is
+		// (150, 255, 200), b/g 0.78; a hit's streaks come as an orange batch (255, 160, 50) and a paler one (255, 200, 100).
+		// A streak is a quad: two corners at each end, laid along one spark's flight (the game rebuilds them every frame from its
+		// particles). Its ends get u = -1 and +1 (it samples nothing, so u is free). Remix spawns a hit's sparks once, in the first
+		// frame its streaks show: every streak is moved so its middle sits on the burst's centre, and a spark flies from there
+		// towards the end on its side. Later frames of the same burst are tagged to hide without spawning (the sparks already fly).
 		constexpr DWORD kMotesMarker = 0xD4000007;
+		constexpr DWORD kSparksMarker = 0xD4000008;
+		constexpr DWORD kSparksHideMarker = 0xD4000009;
 		DWORD effect_marker = 0;
+		UINT spark_draw_prims = 0;   // a spark draw that spawns for only some of its streaks: the triangles it draws
 		if (!batch_marker && unlit && !points && !masked && count >= 3 && cur_decl_has_color_)
 		{
 			DWORD blend_on = FALSE, dst_blend = 0;
@@ -2572,8 +2580,107 @@ namespace shared::common
 					sum_r += (raw >> 16) & 0xFF; sum_g += (raw >> 8) & 0xFF; sum_b += raw & 0xFF;
 				}
 				const bool stain_green = sum_r < sum_g * 0.7 && sum_b < sum_g * 0.745;
+				const bool spark_warm = sum_g < sum_r * 0.85 && sum_b < sum_r * 0.45;
 				if (stain_green && mote_texture_fn_ && (cur_ps_sampler_mask_ & 1u) && mote_texture_fn_(cur_texture_[0]))
 					effect_marker = kMotesMarker;
+				else if (spark_warm && !(cur_ps_sampler_mask_ & 1u) && count % 4 == 0)
+				{
+					// Each quad's corners pair up by end: the two nearest each other.
+					auto dist2 = [&](UINT a, UINT b)
+					{
+						const double dx = out[a].x - out[b].x, dy = out[a].y - out[b].y, dz = out[a].z - out[b].z;
+						return dx * dx + dy * dy + dz * dz;
+					};
+					// How many of these streaks are new, for Remix to spawn sparks from (0: they only hide). A draw continues the burst of
+					// its batch (orange or pale) within kBurstReach seen in the last kBurstGap frames, unless that burst was already drawn
+					// this frame (a second hit nearby). New streaks are what it has more than in its last frame: all of them in its first,
+					// then those the game adds (a hit's sparks may come over several frames, and the game batches nearby hits' streaks into
+					// one draw, so a slash's later ticks show as more streaks, not as a new draw). A burst that keeps showing past
+					// kBurstFrames counts as new again (the game's sparks last well under a second; a replayed capture draws one frame for
+					// ever). When it spawns, every streak is moved so its middle sits on the burst's centre, where the sparks start.
+					auto spark_burst_new_streaks = [&](sprite_vertex* quads, UINT n, int batch) -> UINT
+					{
+						static constexpr float kBurstReach = 1.5f;     // world units (metres) a burst may move between its frames
+						static constexpr UINT kBurstGap = 6;          // frames a burst may go unseen and still be the same
+						static constexpr UINT kBurstFrames = 60;      // frames after which a burst still showing counts as new
+						const UINT frame = frame_count_;
+						const UINT streaks = n / 4;
+						float centre[3] = {};
+						for (UINT k = 0; k < n; k++)
+						{
+							centre[0] += quads[k].x / n;
+							centre[1] += quads[k].y / n;
+							centre[2] += quads[k].z / n;
+						}
+						auto continues = [&](const spark_burst& b)
+						{
+							const float dx = b.x - centre[0], dy = b.y - centre[1], dz = b.z - centre[2];
+							return b.batch == batch && b.last_frame != frame && dx * dx + dy * dy + dz * dz <= kBurstReach * kBurstReach;
+						};
+						std::erase_if(spark_bursts_, [&](const spark_burst& b) { return frame - b.last_frame > kBurstGap; });
+						const auto known = std::find_if(spark_bursts_.begin(), spark_bursts_.end(), continues);
+						UINT fresh = streaks;
+						if (known != spark_bursts_.end())
+						{
+							const bool rearm = frame - known->first_frame > kBurstFrames;
+							if (rearm)
+								known->first_frame = frame;
+							fresh = rearm ? streaks : streaks > known->streaks ? streaks - known->streaks : 0;
+							known->x = centre[0];
+							known->y = centre[1];
+							known->z = centre[2];
+							known->last_frame = frame;
+							known->streaks = streaks;
+						}
+						else
+							spark_bursts_.push_back({ centre[0], centre[1], centre[2], frame, frame, streaks, batch });
+						if (!fresh)
+							return 0;
+						for (UINT q = 0; q + 3 < n; q += 4)
+						{
+							float mid[3] = {};
+							for (UINT k = q; k < q + 4; k++)
+							{
+								mid[0] += quads[k].x * 0.25f;
+								mid[1] += quads[k].y * 0.25f;
+								mid[2] += quads[k].z * 0.25f;
+							}
+							for (UINT k = q; k < q + 4; k++)
+							{
+								quads[k].x += centre[0] - mid[0];
+								quads[k].y += centre[1] - mid[1];
+								quads[k].z += centre[2] - mid[2];
+							}
+						}
+						return fresh;
+					};
+					// Streaks: most quads far longer than wide (at least 4 times, squared 16). A slow spark's streak is short and
+					// nearly square (length 1.5-2 times its width): it still has its ends, so it is kept with the draw.
+					UINT long_quads = 0;
+					for (UINT q = 0; q < count; q += 4)
+					{
+						const double d01 = dist2(q, q + 1), d02 = dist2(q, q + 2), d03 = dist2(q, q + 3);
+						const UINT mate = d01 <= d02 && d01 <= d03 ? q + 1 : d02 <= d03 ? q + 2 : q + 3;
+						const double width = std::min({ d01, d02, d03 }), length = std::max({ d01, d02, d03 });
+						if (length > width * 16.0)
+							long_quads++;
+						for (UINT k = q; k < q + 4; k++)
+						{
+							out[k].u = (k == q || k == mate) ? -1.0f : 1.0f;
+							out[k].v = 0.0f;
+						}
+					}
+					if (long_quads * 4 >= (count / 4) * 3)
+					{
+						// Orange batch (255, 160, 50: g/r 0.63) or pale (255, 200, 100: 0.78).
+						const UINT fresh = spark_burst_new_streaks(out, count, sum_g < sum_r * 0.7 ? 0 : 1);
+						effect_marker = fresh ? kSparksMarker : kSparksHideMarker;
+						// Remix spawns its sparks per triangle drawn (two a streak): a burst that only gained some streaks draws that many
+						// (any of its streaks, all moved to its centre, give a spark's heading; the draw itself is hidden).
+						if (fresh && fresh < count / 4 && indices && prim == D3DPT_TRIANGLELIST && prim_count == (count / 4) * 2)
+							spark_draw_prims = fresh * 2;
+					}
+				}
 			}
 		}
 
@@ -2704,7 +2811,7 @@ namespace shared::common
 		hr = masked_triangles
 			? dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, masked_triangles, masked_sprite_vertices_.data(), sizeof(sprite_vertex))
 			: indices
-			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, prim_count, indices, index_format, out, sizeof(sprite_vertex))
+			? dev->DrawIndexedPrimitiveUP(prim, min_index, num_verts, spark_draw_prims ? spark_draw_prims : prim_count, indices, index_format, out, sizeof(sprite_vertex))
 			: dev->DrawPrimitiveUP(prim, prim_count, out, sizeof(sprite_vertex));
 		if (points)
 			dev->SetRenderState(D3DRS_CULLMODE, game_cull);
