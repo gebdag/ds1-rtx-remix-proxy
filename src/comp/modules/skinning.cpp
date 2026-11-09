@@ -104,6 +104,21 @@ namespace comp
 		const bool tinted = ffp.apply_draw_tint(dev);
 		const bool effect = ffp.apply_sp_effect(dev);
 		const bool toned = ffp.apply_skin_tone(dev, false);
+		// Priscilla's fur (c2730_2): many overlapping blended cards at a quarter coverage. Remix's alpha-blended layers lose most of her against the dark behind
+		// (half the game's brightness). The game's velocity pass draws the same cards as a cutout, alpha test 128: so do these.
+		const bool fur_cards = game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) == "c2730_2" && ffp.ps_const_data()[139 * 4 + 3] >= 0.99f; // not while she fades (invisibility goes through c139.w)
+		DWORD fur_blend = FALSE, fur_test = FALSE, fur_ref = 0, fur_func = 0;
+		if (fur_cards)
+		{
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &fur_blend);
+			dev->GetRenderState(D3DRS_ALPHATESTENABLE, &fur_test);
+			dev->GetRenderState(D3DRS_ALPHAREF, &fur_ref);
+			dev->GetRenderState(D3DRS_ALPHAFUNC, &fur_func);
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+			dev->SetRenderState(D3DRS_ALPHAREF, 128);
+			dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+		}
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
@@ -111,6 +126,13 @@ namespace comp
 			game::texture_scroll::clear(dev);
 		if (toned)
 			ffp.clear_skin_tone(dev);
+		if (fur_cards)
+		{
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, fur_blend);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, fur_test);
+			dev->SetRenderState(D3DRS_ALPHAREF, fur_ref);
+			dev->SetRenderState(D3DRS_ALPHAFUNC, fur_func);
+		}
 		// Two-layer material (the FaceGen face: lerp(s0, s3 + c156, vertex alpha)): the second
 		// diffuse as a coplanar decal with vertex alpha as its opacity, as on the rigid path.
 		if (SUCCEEDED(hr) && ffp.overlay_texture())
