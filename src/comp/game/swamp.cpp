@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "swamp.hpp"
+#include "texture_names.hpp"
 
 #include "shared/common/remix_api.hpp"
 
@@ -41,13 +42,32 @@ namespace comp::game::swamp
 		// The WaterWave ring mesh maps its local xy to ring texture UV 0.5 - 0.5455 * xy (an octagon of
 		// local radius ~0.92 reaching UV 0 and 1; measured on the game's mesh).
 		constexpr float kRingUvPerLocal = 0.5455f;
-		constexpr size_t kMaxRings = 16; // the runtime's ds1SwampMaxRings
+		constexpr size_t kMaxRings = 64; // the runtime's ds1SwampMaxRings
 
 		// Ring texture coordinates from world x, z: u = u_x * x + u_z * z + u_1, v likewise.
 		struct ring
 		{
 			float u[3], v[3], strength;
+			int slot = -1;   // which footprint texture (kStampNames), -1: a wake ring, whose texture is the colour texture's alpha
 		};
+
+		// The footprint stamps Painted World's snow takes, by the texture they stamp with: the player's and Priscilla's. Bound by the game this frame only.
+		constexpr const char* kStampNames[] = { "s00029", "s12730" };
+		IDirect3DBaseTexture9* g_stamp_textures[std::size(kStampNames)] = {};
+		// A stamp mesh's texture coordinates from its local x, z: u = m[0] x + m[1] z + m[2], v = m[3] x + m[4] z + m[5].
+		struct stamp_mesh { float m[6]; bool ok; };
+		std::unordered_map<uint64_t, stamp_mesh> g_stamp_meshes;
+
+		int stamp_slot(IDirect3DBaseTexture9* texture)
+		{
+			if (!texture)
+				return -1;
+			const auto name = texture_names::name_of(texture);
+			for (size_t i = 0; i < std::size(kStampNames); i++)
+				if (name == kStampNames[i])
+					return static_cast<int>(i);
+			return -1;
+		}
 
 		// The frame being drawn.
 		unsigned int g_frame = ~0u;
@@ -126,6 +146,7 @@ namespace comp::game::swamp
 			g_map_diffuse.clear();
 			g_lightmap_diffuse.clear();
 			g_rings_ready = g_rings;
+			std::fill(std::begin(g_stamp_textures), std::end(g_stamp_textures), nullptr);
 			std::memcpy(g_offsets_ready, g_offsets, sizeof(g_offsets));
 			g_current_prims = 0;
 			g_have_layers = false;
@@ -307,6 +328,31 @@ namespace comp::game::swamp
 		// The colour texture with the height texture's (r + g + b) / 3 in its alpha, at the larger size of
 		// the two, every mip box-filtered from the one above. Both tile, so each read at its own scale of
 		// the same uv sees what the game's separate textures give there.
+		// The Texture Lab's helper finds a baked surface's source by these dumps: width, height, then the top level as Remix hashes it (BGRA).
+		// Only where the lab is set up (rtx_comp\\texlab exists), once per pair, at the bake (a load).
+		void dump_for_texture_lab(IDirect3DBaseTexture9* colour, IDirect3DBaseTexture9* height, UINT w, UINT h, const std::vector<uint8_t>& rgba)
+		{
+			const std::string lab = shared::globals::root_path + "\\rtx_comp\\texlab";
+			const auto colour_name = texture_names::name_of(colour), height_name = texture_names::name_of(height);
+			if (GetFileAttributesA(lab.c_str()) == INVALID_FILE_ATTRIBUTES || colour_name.empty() || height_name.empty())
+				return;
+			const std::string dir = lab + "\\baked";
+			CreateDirectoryA(dir.c_str(), nullptr);
+			const std::string path = dir + "\\" + std::string(colour_name) + "__" + std::string(height_name) + ".bin";
+			if (GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+				return;
+			std::vector<uint8_t> bgra(rgba);
+			for (size_t i = 0; i + 3 < bgra.size(); i += 4)
+				std::swap(bgra[i], bgra[i + 2]);
+			if (FILE* f = fopen(path.c_str(), "wb"))
+			{
+				fwrite(&w, sizeof(w), 1, f);
+				fwrite(&h, sizeof(h), 1, f);
+				fwrite(bgra.data(), 1, bgra.size(), f);
+				fclose(f);
+			}
+		}
+
 		IDirect3DTexture9* bake(IDirect3DDevice9* dev, IDirect3DBaseTexture9* colour, IDirect3DBaseTexture9* height)
 		{
 			std::vector<uint8_t> a, b;
@@ -330,6 +376,7 @@ namespace comp::game::swamp
 						o[c] = static_cast<uint8_t>(std::lround(std::clamp(ca[c], 0.0f, 1.0f) * 255.0f));
 					o[3] = static_cast<uint8_t>(std::lround(std::clamp((cb[0] + cb[1] + cb[2]) / 3.0f, 0.0f, 1.0f) * 255.0f));
 				}
+			dump_for_texture_lab(colour, height, w, h, level);
 			UINT lw = w, lh = h;
 			for (DWORD l = 0; l < out->GetLevelCount(); l++)
 			{
@@ -376,7 +423,7 @@ namespace comp::game::swamp
 		{
 			std::string text;
 			for (const auto& r : rings)
-				text += std::format("{:.5f},{:.5f},{:.4f},{:.5f},{:.5f},{:.4f},{:.5f};", r.u[0], r.u[1], r.u[2], r.v[0], r.v[1], r.v[2], r.strength);
+				text += std::format("{:.5f},{:.5f},{:.4f},{:.5f},{:.5f},{:.4f},{:.5f},{};", r.u[0], r.u[1], r.u[2], r.v[0], r.v[1], r.v[2], r.strength, r.slot);
 			return text;
 		}
 	}
@@ -441,6 +488,9 @@ namespace comp::game::swamp
 			// Only the rings stamped into the swamp's height field (water has its own WaterWave rings).
 			if (!g_height_target || render_target(dev) != g_height_target || g_rings.size() >= kMaxRings)
 				return;
+			// Footprints go by their own mesh (observe_stamp).
+			if (stamp_slot(bound_texture(dev, 0)) >= 0)
+				return;
 			// Local xy -> world x, z: rows c8 and c10 of bone 0 (the disc lies in its local xy plane).
 			// Inverted, then the mesh's local -> texture mapping 0.5 - kRingUvPerLocal * xy, plus VS c246.
 			const float a = c(vs, 8, 0), b = c(vs, 8, 1), d = c(vs, 10, 0), e = c(vs, 10, 1);
@@ -464,6 +514,96 @@ namespace comp::game::swamp
 			r.strength = strength;
 			g_rings.push_back(r);
 		}
+	}
+
+	void observe_stamp(const float* vs, const float* ps, IDirect3DDevice9* dev, IDirect3DVertexBuffer9* vb, UINT stride, INT base_vertex, UINT min_vertex,
+		UINT num_vertices, int pos_offset, int uv_offset, int uv_type, unsigned int frame)
+	{
+		begin(frame);
+		if (!vs || !ps || !vb || !stride || num_vertices < 3 || pos_offset < 0 || uv_offset < 0 || !g_height_target || render_target(dev) != g_height_target ||
+			g_rings.size() >= kMaxRings)
+			return;
+		IDirect3DBaseTexture9* texture = bound_texture(dev, 0);
+		const int slot = stamp_slot(texture);
+		if (slot < 0)
+			return;
+		const auto c = [](const float* regs, int r, int k) { return regs[r * 4 + k]; };
+		// FRPG_WWS_Dif________________WaterWave: tex.r * tex.a * c100.x * c100.w * vertex x, w * c139.x * c139.w (the vertices are white). The stamp fades through c139.w.
+		const float strength = c(ps, 100, 0) * c(ps, 100, 3) * c(ps, 139, 0) * c(ps, 139, 3);
+		if (strength <= 0.0f)
+			return;
+		const uint64_t key = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vb)) ^ (static_cast<uint64_t>(base_vertex + min_vertex) << 32) ^ num_vertices;
+		auto [found, fresh] = g_stamp_meshes.try_emplace(key, stamp_mesh {});
+		if (fresh)
+		{
+			unsigned char* data = nullptr;
+			const UINT count = std::min(num_vertices, 16u);
+			if (SUCCEEDED(vb->Lock((base_vertex + min_vertex) * stride, count * stride, reinterpret_cast<void**>(&data), D3DLOCK_READONLY)) && data)
+			{
+				// The mesh lies in its local x, z plane; the first three corners not on a line give its mapping.
+				float p[16][3], t[16][2];
+				for (UINT i = 0; i < count; i++)
+				{
+					const unsigned char* at = data + i * stride;
+					std::memcpy(p[i], at + pos_offset, sizeof(p[i]));
+					if (uv_type == D3DDECLTYPE_FLOAT2 || uv_type == D3DDECLTYPE_FLOAT4)
+						std::memcpy(t[i], at + uv_offset, 2 * sizeof(float));
+					else
+					{
+						const auto* s = reinterpret_cast<const int16_t*>(at + uv_offset);
+						t[i][0] = s[0] / 1024.0f;
+						t[i][1] = s[1] / 1024.0f;
+					}
+				}
+				vb->Unlock();
+				for (UINT i = 2; i < count && !found->second.ok; i++)
+				{
+					const float a = p[1][0] - p[0][0], b = p[1][2] - p[0][2], d = p[i][0] - p[0][0], e = p[i][2] - p[0][2];
+					const float det = a * e - b * d;
+					if (std::abs(det) < 1e-6f)
+						continue;
+					for (int k = 0; k < 2; k++)
+					{
+						const float du1 = t[1][k] - t[0][k], du2 = t[i][k] - t[0][k];
+						float* m = found->second.m + k * 3;
+						m[0] = (du1 * e - du2 * b) / det;
+						m[1] = (du2 * a - du1 * d) / det;
+						m[2] = t[0][k] - m[0] * p[0][0] - m[1] * p[0][2];
+					}
+					found->second.ok = true;
+				}
+			}
+		}
+		if (!found->second.ok)
+			return;
+		// Local x, z -> world x, z: rows c8 and c10 of bone 0, camera-relative like every world matrix here, then inverted.
+		const float a = c(vs, 8, 0), b = c(vs, 8, 2), d = c(vs, 10, 0), e = c(vs, 10, 2);
+		const float det = a * e - b * d;
+		if (std::abs(det) < 1e-8f)
+			return;
+		float ox = 0.0f, oy = 0.0f, oz = 0.0f;
+		shared::common::ffp_state::get().world_offset(ox, oy, oz);
+		const float tx = c(vs, 8, 3) + ox, tz = c(vs, 10, 3) + oz;
+		const float inv[2][2] = { { e / det, -b / det }, { -d / det, a / det } };
+		ring r {};
+		float* rows[2] = { r.u, r.v };
+		const float* m = found->second.m;
+		for (int k = 0; k < 2; k++)
+		{
+			const float* mk = m + k * 3;
+			rows[k][0] = mk[0] * inv[0][0] + mk[1] * inv[1][0];
+			rows[k][1] = mk[0] * inv[0][1] + mk[1] * inv[1][1];
+			rows[k][2] = mk[2] + c(vs, 246, k) - rows[k][0] * tx - rows[k][1] * tz;
+		}
+		r.strength = strength;
+		r.slot = slot;
+		g_rings.push_back(r);
+		g_stamp_textures[slot] = texture;
+	}
+
+	void stamp_textures(IDirect3DBaseTexture9** out)
+	{
+		std::copy(std::begin(g_stamp_textures), std::end(g_stamp_textures), out);
 	}
 
 	void observe_surface_mesh(IDirect3DVertexBuffer9* vb, UINT stride, INT base_vertex, UINT min_vertex, UINT num_vertices,

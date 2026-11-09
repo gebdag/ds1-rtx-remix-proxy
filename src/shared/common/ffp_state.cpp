@@ -2266,11 +2266,41 @@ namespace shared::common
 	// One small triangle per game streak, at the hit, with its colour and its speed in u; the runtime throws the sparks (particle_system_spawn).
 	void ffp_state::draw_spark_emitter(IDirect3DDevice9* dev)
 	{
-		if (!spark_source_fn_ || spark_emit_frame_ == frame_count_ || cur_rt_menu_path_traced_)
+		if ((!spark_source_fn_ && !stamp_texture_fn_) || spark_emit_frame_ == frame_count_ || cur_rt_menu_path_traced_)
 			return;
 		spark_emit_frame_ = frame_count_;
+
+		// The footprint textures the snow's stamps read: one hidden triangle each, on stage 4's marker, near the camera.
+		if (stamp_texture_fn_)
+		{
+			IDirect3DBaseTexture9* stamps[2] = {};
+			stamp_texture_fn_(stamps);
+			if (stamps[0] || stamps[1])
+			{
+				IDirect3DBaseTexture9* bound = nullptr;
+				DWORD stage4 = 0;
+				dev->GetTexture(0, &bound);
+				dev->GetTextureStageState(4, D3DTSS_CONSTANT, &stage4);
+				for (DWORD slot = 0; slot < 2; slot++)
+				{
+					if (!stamps[slot])
+						continue;
+					const float x = static_cast<float>(sprite_cam_[0]), y = static_cast<float>(sprite_cam_[1]), z = static_cast<float>(sprite_cam_[2]);
+					const spark_vertex v[3] = { { x - 0.005f, y, z - 0.005f, 0xFFFFFFFFu, 0.0f, 0.0f }, { x + 0.005f, y, z - 0.005f, 0xFFFFFFFFu, 1.0f, 0.0f }, { x, y + 0.005f, z + 0.005f, 0xFFFFFFFFu, 0.0f, 1.0f } };
+					dev->SetTexture(0, stamps[slot]);
+					dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0xD400000Au + slot);
+					dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, v, sizeof(spark_vertex));
+				}
+				dev->SetTexture(0, bound);
+				if (bound)
+					bound->Release();
+				dev->SetTextureStageState(4, D3DTSS_CONSTANT, stage4);
+			}
+		}
+
 		spark_emissions_.clear();
-		spark_source_fn_(spark_emissions_);
+		if (spark_source_fn_)
+			spark_source_fn_(spark_emissions_);
 		if (spark_emissions_.empty())
 			return;
 

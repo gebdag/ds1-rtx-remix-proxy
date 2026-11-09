@@ -637,6 +637,9 @@ namespace comp
 		// The swamp's surface constants, height field layers and wake rings.
 		if (ffp.view_proj_valid() && swamp_pass != game::swamp::pass::None)
 			game::swamp::observe(swamp_pass, ffp.vs_const_data(), ffp.ps_const_data(), dev, ffp.frame_count(), primCount);
+		if (ffp.view_proj_valid() && swamp_pass == game::swamp::pass::WaveRing)
+			game::swamp::observe_stamp(ffp.vs_const_data(), ffp.ps_const_data(), dev, ffp.stream_vb(0), ffp.stream_stride(0), BaseVertexIndex, MinVertexIndex, NumVertices,
+				ffp.cur_decl_pos_off(), ffp.cur_decl_texcoord_off(), ffp.cur_decl_texcoord_type(), ffp.frame_count());
 		if (ffp.view_proj_valid() && swamp_pass == game::swamp::pass::Surface)
 			game::swamp::observe_surface_mesh(ffp.stream_vb(0), ffp.stream_stride(0), BaseVertexIndex, MinVertexIndex, NumVertices,
 				ffp.cur_decl_pos_off(), ffp.cur_decl_texcoord_off(), ffp.cur_decl_texcoord_type(), ffp.frame_count(), primCount);

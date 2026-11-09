@@ -184,6 +184,10 @@ namespace shared::common
 		struct spark_emission { float pos[3]; float rgb[3]; float speed; UINT streaks; };
 		using spark_source_fn = void(*)(std::vector<spark_emission>& out);
 		void set_spark_source(spark_source_fn fn) { spark_source_fn_ = fn; }
+
+		// The snow's footprint textures this frame (two slots, null where unused): Remix takes each from a hidden draw (draw_spark_emitter).
+		using stamp_texture_fn = void(*)(IDirect3DBaseTexture9** out);
+		void set_stamp_texture_source(stamp_texture_fn fn) { stamp_texture_fn_ = fn; }
 		// The bound indexed draw's area-weighted centre in world space (rigid draws: VS c8 rows and the world offset), from up to
 		// 64 of its triangles. False when its buffers cannot be read. Call with the game's state, before the rigid expansion
 		// replaces stream 0.
@@ -788,6 +792,7 @@ namespace shared::common
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
 		IDirect3DTexture9* white_sprite_tex_ = nullptr;
 		// The game's hits this frame and the triangles they become (draw_spark_emitter); where hits were lately, for the log.
+		stamp_texture_fn stamp_texture_fn_ = nullptr;
 		spark_source_fn spark_source_fn_ = nullptr;
 		UINT spark_emit_frame_ = ~0u;
 		std::vector<spark_emission> spark_emissions_;

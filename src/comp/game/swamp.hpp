@@ -41,6 +41,13 @@ namespace comp::game::swamp
 	// texture (null when it has none): a lightmapped surface takes the c100 of the geometry sharing its own.
 	void observe_map_diffuse(const float* ps_const, unsigned int frame, unsigned int prim_count, IDirect3DBaseTexture9* lightmap);
 
+	// A WaveRing draw's own mesh: a footprint stamp (Painted World's snow, local x, z plane, mapped by its vertices) for the runtime to evaluate.
+	void observe_stamp(const float* vs_const, const float* ps_const, IDirect3DDevice9* dev, IDirect3DVertexBuffer9* vb, UINT stride, INT base_vertex, UINT min_vertex,
+		UINT num_vertices, int pos_offset, int uv_offset, int uv_type, unsigned int frame);
+
+	// The footprint textures this frame's stamps used, by slot (two; null where unused). ffp_state hands them to Remix.
+	void stamp_textures(IDirect3DBaseTexture9** out);
+
 	// Once per frame: hands the last frame's values to Remix when they changed.
 	void frame_update(unsigned int frame);
 
