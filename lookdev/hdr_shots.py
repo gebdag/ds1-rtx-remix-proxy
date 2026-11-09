@@ -296,7 +296,7 @@ def main() -> int:
     ap.add_argument("--paper", type=float, default=200.0, help="paper white nits for the analysis mapping (also set in the runtime)")
     ap.add_argument("--peak", type=float, default=1000.0)
     ap.add_argument("--shoulder", type=float, default=0.75)
-    ap.add_argument("--srgb", action="store_true", help="analyse with the sRGB piecewise decode (rtx.hdr.srgbDecode)")
+    ap.add_argument("--power-decode", action="store_true", help="analyse with the 2.2 power decode instead of the sRGB piecewise default (rtx.hdr.srgbDecode)")
     ap.add_argument("--fresh", action="store_true", help="restart the host first")
     ap.add_argument("--keep", action="store_true", help="leave the host running")
     args = ap.parse_args()
@@ -307,9 +307,9 @@ def main() -> int:
     out = OUT_ROOT / args.prefix
     out.mkdir(parents=True, exist_ok=True)
     paths = [lookdev.resolve(c) for c in args.captures]
-    hdr_settings = {"paper_white": args.paper, "peak": args.peak, "shoulder": args.shoulder, "gamma": 0.0 if args.srgb else 2.2}
+    hdr_settings = {"paper_white": args.paper, "peak": args.peak, "shoulder": args.shoulder, "gamma": 2.2 if args.power_decode else 0.0}
     runtime_settings = [f"rtx.hdr.paperWhiteNits={args.paper}", f"rtx.hdr.peakNits={args.peak}", f"rtx.hdr.shoulderStart={args.shoulder}",
-                        f"rtx.hdr.srgbDecode={'True' if args.srgb else 'False'}", *args.settings.split()]
+                        f"rtx.hdr.srgbDecode={'False' if args.power_decode else 'True'}", *args.settings.split()]
     looks = [True, False] if args.look == "both" else [args.look == "on"]
 
     start = time.time()
