@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "texture_scroll.hpp"
 #include "env_reflection.hpp"
+#include "map_lights.hpp"
 
 #include "shared/common/ffp_state.hpp"
 
@@ -97,7 +98,16 @@ namespace comp::game::texture_scroll
 			// c131 0 the game reflects nothing and c132 never shows: no strength from it then.
 			const float face_on = ps[130 * 4] * ps[131 * 4];
 			const float reflection_level = ps[131 * 4] > 0.0f ? 0.2126f * ps[132 * 4] + 0.7152f * ps[132 * 4 + 1] + 0.0722f * ps[132 * 4 + 2] : 1.0f;
-			dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(face_on), to_byte(reflection_level), to_byte(reflection_level), to_byte(reflection_level)));
+			// Ash Lake (m13_02) shows the game's own reflection, tinted c132 and weighted c131, over what its bed and its murk (c127.w) leave.
+			const bool game_look = ((map_lights::current_map_id() >> 16) & 0xFFFF) == ((13u << 8) | 2u);
+			if (game_look)
+			{
+				const float r = ps[131 * 4];
+				dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(ps[127 * 4 + 3]), to_byte(r * ps[132 * 4]), to_byte(r * ps[132 * 4 + 1]), to_byte(r * ps[132 * 4 + 2])));
+				dev->SetTextureStageState(3, D3DTSS_BUMPENVLOFFSET, 0xD9000001u);
+			}
+			else
+				dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(face_on), to_byte(reflection_level), to_byte(reflection_level), to_byte(reflection_level)));
 
 			const float wave_height = ps[126 * 4];
 			// The normal map repeats every texture coordinate, so whole coordinates drop out of the
@@ -202,6 +212,7 @@ namespace comp::game::texture_scroll
 			dev->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 			dev->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
 			dev->SetTextureStageState(1, D3DTSS_CONSTANT, 0);
+			dev->SetTextureStageState(3, D3DTSS_BUMPENVLOFFSET, 0);
 			env_reflection::forget();
 			// The game's own texture factor back (and stage 1 as the FFP setup leaves it).
 			ffp_state::get().clear_draw_tint(dev);

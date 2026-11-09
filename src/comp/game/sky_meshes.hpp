@@ -58,6 +58,9 @@ namespace comp::game::sky_meshes
 	// True for a mesh listed in rtx_comp\sky\glow_meshes.txt: a piece the game only brightens, given a light of its own (the Skull Lantern's eyes).
 	bool is_glow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A face set in rtx_comp\sky\painted_meshes.txt: its vertex colour is shade the artists painted, shown as the game shows it.
+	bool is_painted_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }
