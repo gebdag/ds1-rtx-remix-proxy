@@ -63,6 +63,9 @@ namespace comp
 		// A follows-effect stand-in below this level is not drawn (its effect has faded out).
 		constexpr float kEffectLevelOff = 0.002f;
 		constexpr uint64_t kSessionKeyBit = 0x4000000000000000ull;
+
+		// A key that is saved: the top bit keeps it apart from KEY_SUN / KEY_PLAYER, and the session bit must not come from the hash.
+		constexpr uint64_t saved_key(uint64_t hash) { return (hash & ~kSessionKeyBit) | 0x8000000000000000ull; }
 		// The sun's edits in the list (brightness, on/off, colour) are the current map's: "SUN" | map id. The top two bits clear, so
 		// never a row key (top bit set) and saved (no session bit). A sun set to 0.1x in one map starts at 1x in the next.
 		uint64_t sun_map_key(unsigned map_id) { return 0x1355'4E00'0000'0000ull | map_id; }
@@ -154,14 +157,14 @@ namespace comp
 		{
 			// Unlit effect lights are keyed by their effect, saved: an edit applies to every instance of it.
 			if (k == kind::ffx_table)
-				return string_hash64(va("ffx:%d", l.ffx_id)) | 0x8000000000000000ull;
+				return saved_key(string_hash64(va("ffx:%d", l.ffx_id)));
 			const uint64_t h = is_static(k)
 				? string_hash64(va("pos:%d:%ld:%ld:%ld", static_cast<int>(k),
 					std::lround(l.x * 20.0f), std::lround(l.y * 20.0f), std::lround(l.z * 20.0f)))
 				: string_hash64(va("slot:%d:%d", static_cast<int>(k), l.slot));
 			// Top bit: never KEY_SUN / KEY_PLAYER. Next bit: a session-only key, which
 			// serialize() and save_all() skip.
-			return h | 0x8000000000000000ull | (is_static(k) ? 0ull : kSessionKeyBit);
+			return saved_key(h) | (is_static(k) ? 0ull : kSessionKeyBit);
 		}
 
 		kind classify(const game::point_lights::light& l)
@@ -508,11 +511,11 @@ namespace comp
 			if (row.kind == kind::fx_direct)
 			{
 				row.id = row.key;
-				row.key = string_hash64(va("ffx_group:%d", group_effect)) | 0x8000000000000000ull;
+				row.key = saved_key(string_hash64(va("ffx_group:%d", group_effect)));
 			}
 			row.group_key = row.key;
-			row.own_key = string_hash64(va("ffx_own:%d:%ld:%ld:%ld", group_effect,
-				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))) | 0x8000000000000000ull;
+			row.own_key = saved_key(string_hash64(va("ffx_own:%d:%ld:%ld:%ld", group_effect,
+				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))));
 			if (decoupled_.count(row.own_key))
 			{
 				row.key = row.own_key;
@@ -524,10 +527,10 @@ namespace comp
 		{
 			const auto texture = game::mesh_lights::texture_of(l.slot);
 			row.id = row.key;
-			row.key = string_hash64(va("mesh_group:%s", texture.c_str())) | 0x8000000000000000ull;
+			row.key = saved_key(string_hash64(va("mesh_group:%s", texture.c_str())));
 			row.group_key = row.key;
-			row.own_key = string_hash64(va("mesh_own:%s:%ld:%ld:%ld", texture.c_str(),
-				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))) | 0x8000000000000000ull;
+			row.own_key = saved_key(string_hash64(va("mesh_own:%s:%ld:%ld:%ld", texture.c_str(),
+				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))));
 			if (decoupled_.count(row.own_key))
 			{
 				row.key = row.own_key;
@@ -1554,7 +1557,7 @@ namespace comp
 				continue;
 			if (line.rfind("decoupled ", 0) == 0)
 			{
-				decoupled_.insert(std::stoull(line.substr(10), nullptr, 16));
+				decoupled_.insert(std::stoull(line.substr(10), nullptr, 16) & ~kSessionKeyBit);
 				continue;
 			}
 			std::istringstream in(line);
@@ -1571,7 +1574,8 @@ namespace comp
 			std::string word;
 			if ((in >> word) && word == "move" && !(in >> o.offset[0] >> o.offset[1] >> o.offset[2]))
 				o.offset[0] = o.offset[1] = o.offset[2] = 0.0f;
-			overrides_[std::stoull(key_text, nullptr, 16)] = o;
+			// Only saved keys are ever written. Older files hold some with the session bit set by their hash alone.
+			overrides_[std::stoull(key_text, nullptr, 16) & ~kSessionKeyBit] = o;
 		}
 		saved_overrides_ = overrides_;
 		saved_decoupled_ = decoupled_;
