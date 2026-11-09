@@ -1851,6 +1851,7 @@ namespace comp
 		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", false));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
+		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
 		sun_enabled = cfg.get_bool("Sun", "Enabled", true);
 		sun_intensity_scale = cfg.get_float("Sun", "IntensityScale", 1.0f);
 		sun_angular_diameter = cfg.get_float("Sun", "AngularDiameter", 0.53f);
@@ -2499,7 +2500,7 @@ namespace comp
 		const float button_slot = ImGui::GetFrameHeight() + ImGui::GetFontSize() + ImGui::CalcTextSize("Saved").x + ImGui::CalcTextSize("Default").x +
 			table_style.FramePadding.x * 4.0f + table_style.ItemSpacing.x + table_style.CellPadding.x * 2.0f;
 		const float count_width = ImGui::CalcTextSize("Drawn now 0000").x + table_style.CellPadding.x * 2.0f;
-		const float table_width = std::min(ImGui::GetFontSize() * 26.0f + button_slot * 2.0f + count_width, ImGui::GetContentRegionAvail().x);
+		const float table_width = std::min(ImGui::GetFontSize() * 32.0f + button_slot * 2.0f + count_width, ImGui::GetContentRegionAvail().x);
 		if (ImGui::BeginTable("##sources", 4, flags, ImVec2(table_width, 0.0f)))
 		{
 			ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch);

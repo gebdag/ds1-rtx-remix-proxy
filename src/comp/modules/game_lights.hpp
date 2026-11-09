@@ -54,6 +54,8 @@ namespace comp
 		float sun_intensity_scale = 1.0f;
 		float sun_angular_diameter = 0.53f;
 		// [Ambient] Lock (gamma, usually from an area override): the ambient as this one value on every side, whatever the game's dominant region says this frame.
+		// [Ambient] PreferScale: the area's ambient comes only from the draws of the set whose c86.x this is (0 = the frame's dominant set).
+		float ambient_prefer_scale = 0.0f;
 		bool ambient_lock_set = false;
 		float ambient_lock[3] = {};
 		float sun_fallback_colour[3] = { 0.7f, 0.7f, 0.7f };

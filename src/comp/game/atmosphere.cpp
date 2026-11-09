@@ -824,6 +824,10 @@ namespace comp::game::atmosphere
 		std::memcpy(a.lower, &ps_const[99 * 4], sizeof(a.lower));
 		std::memcpy(a.shadow_dir, &ps_const[175 * 4], sizeof(a.shadow_dir));
 		g_menu_diffuse = ps_const[100 * 4];
+		// An area with several light sets of similar size (Ash Lake: the Hydra's end of the lake is far brighter) would swing the whole sky with
+		// the view. Named in an area override, one set is the area's and the others are not counted.
+		if (const auto* gl = game_lights::get(); gl && gl->ambient_prefer_scale > 0.0f && std::abs(a.scale[0] - gl->ambient_prefer_scale) > 0.01f)
+			return;
 		g_ambient_sets.add(a, prim_count);
 	}
 
