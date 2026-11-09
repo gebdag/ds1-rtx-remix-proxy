@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "swamp.hpp"
+#include "map_lights.hpp"
 #include "texture_names.hpp"
 
 #include "shared/common/remix_api.hpp"
@@ -532,6 +533,13 @@ namespace comp::game::swamp
 		const float strength = c(ps, 100, 0) * c(ps, 100, 3) * c(ps, 139, 0) * c(ps, 139, 3);
 		if (strength <= 0.0f)
 			return;
+		// Vertex buffers are freed and their addresses reused across maps.
+		static unsigned stamp_map = 0;
+		if (const unsigned map = map_lights::current_map_id(); map != stamp_map)
+		{
+			stamp_map = map;
+			g_stamp_meshes.clear();
+		}
 		const uint64_t key = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vb)) ^ (static_cast<uint64_t>(base_vertex + min_vertex) << 32) ^ num_vertices;
 		auto [found, fresh] = g_stamp_meshes.try_emplace(key, stamp_mesh {});
 		if (fresh)
