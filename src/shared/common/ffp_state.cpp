@@ -291,6 +291,7 @@ namespace shared::common
 		cur_ps_draw_tint_ = false;
 		cur_ps_point_lights_ = 0;
 		cur_ps_skin_tone_ = false;
+		cur_ps_is_eye_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
 		if (shader)
 		{
@@ -302,6 +303,8 @@ namespace shared::common
 				cur_ps_draw_tint_ = it->second;
 			if (auto it = ps_skin_tone_.find(shader); it != ps_skin_tone_.end())
 				cur_ps_skin_tone_ = it->second;
+			if (auto it = ps_is_eye_.find(shader); it != ps_is_eye_.end())
+				cur_ps_is_eye_ = it->second;
 			if (auto it = ps_sampler_masks_.find(shader); it != ps_sampler_masks_.end())
 				cur_ps_sampler_mask_ = it->second;
 			if (auto it = ps_sfx_class_.find(shader); it != ps_sfx_class_.end())
@@ -335,6 +338,7 @@ namespace shared::common
 			++point_lights;
 		ps_point_lights_[shader] = point_lights;
 		ps_skin_tone_[shader] = reads_float_const(bytecode, 156);
+		ps_is_eye_[shader] = reads_float_const(bytecode, 174);
 
 		// FNV-1a hashes of DS1's water-surface pixel shaders, computed over the
 		// token stream from the version token through the END token inclusive:
@@ -2181,10 +2185,16 @@ namespace shared::common
 			return false;
 		// Two-layer shaders (sampler s3) add it to the second diffuse only.
 		const bool two_layer = (cur_ps_sampler_mask_ & (1u << 3)) != 0;
+		const float* c = &ps_const_[156 * 4];
+		// A face's base layer (FaceGen map) takes no tone, but it is skin: 0xD6 tells Remix so. Not the eyes (FRPG_Phn_FaceEye reads c174).
+		if (two_layer && !overlay && !cur_ps_is_eye_ && (c[0] != 0.0f || c[1] != 0.0f || c[2] != 0.0f))
+		{
+			dev->SetTextureStageState(5, D3DTSS_CONSTANT, 0xD6000000u);
+			return true;
+		}
 		if (overlay != two_layer)
 			return false;
 
-		const float* c = &ps_const_[156 * 4];
 		DWORD tag = SKIN_TONE_MARKER;
 		bool any = false;
 		for (int i = 0; i < 3; i++)

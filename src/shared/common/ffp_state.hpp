@@ -768,6 +768,8 @@ namespace shared::common
 		// Pixel shaders that read c156 (see apply_skin_tone).
 		std::unordered_map<IDirect3DPixelShader9*, bool> ps_skin_tone_;
 		bool cur_ps_skin_tone_ = false;
+		std::unordered_map<IDirect3DPixelShader9*, bool> ps_is_eye_;
+		bool cur_ps_is_eye_ = false;
 		// c101 per specular map (sampler 1) on draws without a SpEffect.
 		std::unordered_map<IDirect3DBaseTexture9*, float> spec_scale_;
 		// Whether a texture is DXT1 with punch-through texels (cur_draw_is_fur_shell); unreadable ones are false.
