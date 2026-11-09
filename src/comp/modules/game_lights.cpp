@@ -1801,7 +1801,7 @@ namespace comp
 		game_falloff_ = cfg.get_bool("Lights", "GameFalloff", true);
 		skip_characters_only_ = cfg.get_bool("Lights", "SkipCharacterOnly", true);
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
-		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", true));
+		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", false));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		sun_enabled = cfg.get_bool("Sun", "Enabled", true);
@@ -1926,16 +1926,18 @@ namespace comp
 		int revert_pair(const char* id, bool differs_saved, bool saved_is_default, bool differs_default, bool have_default)
 		{
 			int pressed = 0;
+			// A clear gap after the control, so a click meant for a tick never lands on a button that has just appeared.
+			const float gap = ImGui::GetFontSize();
 			if (differs_saved && !(have_default && saved_is_default))
 			{
-				ImGui::SameLine();
+				ImGui::SameLine(0.0f, gap);
 				if (ImGui::SmallButton(std::format("Saved##rv_s_{}", id).c_str()))
 					pressed = 1;
 				tip("Back to the saved value (remix-comp-proxy.ini, light_overrides.txt, categories.txt or the map's custom light file).");
 			}
 			if (have_default && differs_default)
 			{
-				ImGui::SameLine();
+				ImGui::SameLine(0.0f, differs_saved && !saved_is_default ? -1.0f : gap);
 				if (ImGui::SmallButton(std::format("Default##rv_d_{}", id).c_str()))
 					pressed = 2;
 				tip("Back to the game's own value (the shipped default for settings of our own).");
@@ -2444,12 +2446,19 @@ namespace comp
 
 		const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_BordersOuter |
 			ImGuiTableFlags_SizingFixedFit;
-		if (ImGui::BeginTable("##sources", 4, flags, ImVec2(ImGui::GetFontSize() * 46.0f, 0.0f)))
+		// Every column right of the stretching Source column has a fixed width, its buttons' room included. With them fitting their contents, a Default button
+		// appearing after a tick was cleared widened the column and moved the tick from under the mouse.
+		const auto& table_style = ImGui::GetStyle();
+		const float button_slot = ImGui::GetFrameHeight() + ImGui::GetFontSize() + ImGui::CalcTextSize("Saved").x + ImGui::CalcTextSize("Default").x +
+			table_style.FramePadding.x * 4.0f + table_style.ItemSpacing.x + table_style.CellPadding.x * 2.0f;
+		const float count_width = ImGui::CalcTextSize("Drawn now 0000").x + table_style.CellPadding.x * 2.0f;
+		const float table_width = std::min(ImGui::GetFontSize() * 26.0f + button_slot * 2.0f + count_width, ImGui::GetContentRegionAvail().x);
+		if (ImGui::BeginTable("##sources", 4, flags, ImVec2(table_width, 0.0f)))
 		{
 			ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Draw");
-			ImGui::TableSetupColumn("Game-style fade");
-			ImGui::TableSetupColumn("Drawn now");
+			ImGui::TableSetupColumn("Draw", ImGuiTableColumnFlags_WidthFixed, button_slot);
+			ImGui::TableSetupColumn("Game-style fade", ImGuiTableColumnFlags_WidthFixed, button_slot);
+			ImGui::TableSetupColumn("Drawn now", ImGuiTableColumnFlags_WidthFixed, count_width);
 			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 			ImGui::TableNextColumn();
 			ImGui::TableHeader("Source");
@@ -2490,7 +2499,7 @@ namespace comp
 					// Stand-ins are also not built at all while off ([Lights] SynthesizedLights, saved).
 					bool on = game::map_lights::enabled() && kind_enabled_[k];
 					if (ImGui::Checkbox(draw_id.c_str(), &on) |
-						revert_buttons(revert_id.c_str(), on, saved_bool("Lights", "SynthesizedLights", true), true))
+						revert_buttons(revert_id.c_str(), on, saved_bool("Lights", "SynthesizedLights", false), false))
 					{
 						game::map_lights::set_enabled(on);
 						kind_enabled_[k] = on;
@@ -2501,7 +2510,7 @@ namespace comp
 				else
 				{
 					ImGui::Checkbox(draw_id.c_str(), &kind_enabled_[k]);
-					const bool on = true;
+					const bool on = lk != kind::effect; // the guesses start off
 					revert_buttons(revert_id.c_str(), kind_enabled_[k], nullptr, &on);
 				}
 

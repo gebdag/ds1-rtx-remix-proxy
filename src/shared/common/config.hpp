@@ -263,7 +263,7 @@ namespace shared::common
 			bool resolve_entity_params = true;
 			// Inject the stand-in lights in rtx_comp\lights\<map>.txt for maps the
 			// engine never lights (Blighttown's torches and friends).
-			bool synthesized_lights = true;
+			bool synthesized_lights = false;
 			// Scale on the lights stood in for fire effects the game does not light (a fire breath;
 			// game::effect_lights): 1, the default, = the game's own torch to bonfire lights. 2 was the default while
 			// every game light reached Remix at a third of its strength (game_lights.cpp); with them corrected it lit a

@@ -251,7 +251,7 @@ namespace shared::common
 		lights.intensity_scale = get_float("Lights", "IntensityScale", 1.0f);
 		lights.radius_scale = get_float("Lights", "RadiusScale", 1.0f);
 		lights.resolve_entity_params = get_bool("Lights", "ResolveEntityParams", true);
-		lights.synthesized_lights = get_bool("Lights", "SynthesizedLights", true);
+		lights.synthesized_lights = get_bool("Lights", "SynthesizedLights", false);
 		lights.fire_light_scale = std::max(0.0f, get_float("Lights", "FireLightScale", 1.0f));
 		lights.effect_table_scale = std::max(0.0f, get_float("Lights", "EffectTableScale", 1.0f));
 		fog_gate_enable = get_bool("FogGate", "Enable", false);
