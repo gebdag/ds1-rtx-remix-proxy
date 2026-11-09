@@ -1442,6 +1442,53 @@ namespace comp
 		// which has its own toggle, still runs.
 		sync_lights(enabled);
 		send_labels();
+		log_look_watch();
+	}
+
+	void game_lights::log_look_watch()
+	{
+		static int budget = 400;
+		static unsigned int last_logged = 0;
+		static float last[9] = {};
+		if (budget <= 0)
+			return;
+		const unsigned int map = game::map_lights::current_map_id();
+		if (map == 0 || ((map >> 24) & 0xFF) >= 99)
+			return;
+		const float up_dir[3] = { 0.0f, 1.0f, 0.0f }, down_dir[3] = { 0.0f, -1.0f, 0.0f };
+		float up[3] = {}, down[3] = {};
+		game::atmosphere::ambient_toward(up_dir, up);
+		game::atmosphere::ambient_toward(down_dir, down);
+		// The strongest live light by radiance times the area it starts from: what can light a big surface at once.
+		int strongest = 0;
+		float power = 0.0f, radiance = 0.0f, radius = 0.0f, where[3] = {};
+		for (const auto& [key, light] : live_lights_)
+		{
+			const float r = std::max({ light.info.radiance.x, light.info.radiance.y, light.info.radiance.z });
+			const float p = r * light.sphere.radius * light.sphere.radius;
+			if (p > power)
+			{
+				power = p, strongest = key, radiance = r, radius = light.sphere.radius;
+				where[0] = light.sphere.position.x, where[1] = light.sphere.position.y, where[2] = light.sphere.position.z;
+			}
+		}
+		const float sun = sun_handle_ ? std::max({ sun_info_.radiance.x, sun_info_.radiance.y, sun_info_.radiance.z }) : 0.0f;
+		const float now[9] = { up[0], up[1], up[2], down[0], down[1], down[2], sun, power, static_cast<float>(live_lights_.size()) };
+		bool jump = false;
+		for (int i = 0; i < 9; i++)
+		{
+			const float bigger = std::max(std::abs(now[i]), std::abs(last[i]));
+			const float floor = i < 6 ? 0.02f : i == 6 ? 0.002f : i == 7 ? 0.02f : 12.0f;
+			jump = jump || (bigger > floor && std::abs(now[i] - last[i]) > 0.15f * bigger);
+		}
+		const unsigned int frame = shared::common::ffp_state::get().frame_count();
+		if (!jump || frame - last_logged < 2)
+			return;
+		last_logged = frame;
+		budget--;
+		std::memcpy(last, now, sizeof(last));
+		shared::common::log("LookWatch", std::format("frame {} up {:.3f} {:.3f} {:.3f} down {:.3f} {:.3f} {:.3f} sun {:.4f} lights {} strongest key {} radiance {:.2f} radius {:.2f} at {:.1f} {:.1f} {:.1f}",
+			frame, up[0], up[1], up[2], down[0], down[1], down[2], sun, live_lights_.size(), strongest, radiance, radius, where[0], where[1], where[2]));
 	}
 
 	void game_lights::send_labels()

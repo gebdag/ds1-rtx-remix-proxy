@@ -283,6 +283,9 @@ namespace shared::common
 		// Skinning data (populated by skinning module via on_set_vs_const_f bone detection)
 		int bone_start_reg() const { return bone_start_reg_; }
 		int num_bones() const { return num_bones_; }
+		// Whether the last rigid expansion served its cached vertices ([Transition] log).
+		bool last_rigid_expand_reused() const { return last_rigid_reused_; }
+		bool last_rigid_reused_ = false;
 		int cur_decl_num_weights() const { return cur_decl_num_weights_; }
 		int cur_decl_blend_weight_off() const { return cur_decl_blend_weight_off_; }
 		int cur_decl_blend_weight_type() const { return cur_decl_blend_weight_type_; }

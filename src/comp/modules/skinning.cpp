@@ -9,6 +9,7 @@
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/effect_lights.hpp"
+#include "../game/map_lights.hpp"
 
 namespace comp
 {
@@ -90,6 +91,7 @@ namespace comp
 		ffp.setup_albedo_texture(dev);
 
 		upload_bones(dev);
+		log_transition(dev, src_vb, base_vtx, total_verts, stride, start_idx, prim_count);
 
 		// Swap in expanded VB and declaration
 		IDirect3DVertexDeclaration9* orig_decl = nullptr;
@@ -283,6 +285,7 @@ namespace comp
 			prune_cache(frame);
 
 		auto& entry = skin_cache_[skin_key{ src_vb, base_vtx, num_verts, stride, layout }];
+		transition_event_ = !entry.vb ? 1 : frame - entry.last_frame >= 30 ? 2 : 0;
 		entry.last_frame = frame;
 
 		// Lock source VB
@@ -305,6 +308,8 @@ namespace comp
 		// Other vertices in the range re-expand into the entry's buffer, which the key sizes exactly:
 		// a new buffer would cost Remix the draw's instance pairing. A new range creates one.
 		IDirect3DVertexBuffer9* exp_vb = entry.vb;
+		if (entry.vb)
+			transition_event_ = 3;
 		if (!exp_vb && FAILED(dev->CreateVertexBuffer(num_verts * vtx_size, 0,
 			0, D3DPOOL_MANAGED, &exp_vb, nullptr)))
 		{
@@ -577,6 +582,141 @@ namespace comp
 		for (size_t i = 0; i < std::size(kStates); i++)
 			dev->SetRenderState(kStates[i], saved[i]);
 		return hr;
+	}
+
+	namespace
+	{
+		// Character pieces are seen for a change of model through the number of player body draws per frame. A change opens a window of 300 frames:
+		// the frame it happened on (held back until it is known) and every piece that appears or changes in it, then one list of all pieces at its end.
+		constexpr UINT kWatchFrames = 300;
+		int g_watch_budget = 1200;
+		UINT g_watch_frame = 0;
+		UINT g_watch_until = 0;
+		UINT g_watch_map_frame = 0;
+		unsigned int g_watch_map = 0;
+		int g_body_draws = 0;
+		int g_body_draws_last = -1;
+		int g_window_lines = 0;
+		int g_list_lines = 0;
+		std::vector<std::string> g_watch_held;
+
+		std::string clock_text()
+		{
+			SYSTEMTIME t;
+			GetLocalTime(&t);
+			return std::format("{:02}:{:02}:{:02}.{:03}", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+		}
+
+		void watch_write(const std::string& line)
+		{
+			if (g_watch_budget-- > 0)
+				shared::common::log("Transition", line);
+		}
+	}
+
+	void skinning::log_transition(IDirect3DDevice9* dev, IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, UINT start_idx, UINT prim_count)
+	{
+		const int event = transition_event_;
+		transition_event_ = 0;
+		if (g_watch_budget <= 0)
+			return;
+		auto& ffp = shared::common::ffp_state::get();
+		const UINT frame = ffp.frame_count();
+		const unsigned int map = game::map_lights::current_map_id();
+		if (map != g_watch_map)
+		{
+			g_watch_map = map;
+			g_watch_map_frame = frame;
+		}
+		if (frame != g_watch_frame)
+		{
+			// Not during a map's first seconds, when every character is new.
+			if (g_body_draws_last >= 0 && g_body_draws != g_body_draws_last && frame - g_watch_map_frame > 240)
+			{
+				watch_write(std::format("{} frame {}: player body draws {} -> {}", clock_text(), g_watch_frame, g_body_draws_last, g_body_draws));
+				g_window_lines = 0;
+				g_list_lines = 0;
+				g_watch_until = frame + kWatchFrames;
+				for (const auto& line : g_watch_held)
+					watch_write(line);
+			}
+			g_watch_held.clear();
+			g_body_draws_last = g_body_draws;
+			g_body_draws = 0;
+			g_watch_frame = frame;
+		}
+		if (game::texture_names::is_body_part(ffp.cur_texture(0)))
+			g_body_draws++;
+
+		const bool in_window = frame < g_watch_until;
+		const bool last_frame = in_window && frame + 1 == g_watch_until;
+		if (!event && !last_frame)
+			return;
+
+		// The bones this piece reads, on this frame: what its acceleration structure is built from when it is new.
+		const int used = std::max(cur_max_idx_, cur_raw_max_idx_) + 1;
+		const int start = ffp.bone_start_reg(), regs = ffp.regs_per_bone();
+		const float* c = ffp.vs_const_data();
+		int bad = 0, zero = 0;
+		float largest_scale = 0.0f, smallest_scale = 1e30f;
+		if (c && regs > 0)
+			for (int b = 0; b < used && start + b * regs + 3 <= 256; b++)
+			{
+				const float* m = &c[(start + b * regs) * 4];
+				bool nan = false;
+				for (int i = 0; i < 12; i++)
+					nan = nan || !std::isfinite(m[i]);
+				if (nan)
+				{
+					bad++;
+					continue;
+				}
+				const float len = std::sqrt(m[0] * m[0] + m[4] * m[4] + m[8] * m[8]);
+				if (len < 1e-4f)
+					zero++;
+				largest_scale = std::max(largest_scale, len);
+				smallest_scale = std::min(smallest_scale, len);
+			}
+		DWORD test = 0, blend = 0;
+		dev->GetRenderState(D3DRS_ALPHATESTENABLE, &test);
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+		static const char* const kEvents[] = { "drawn", "first seen", "back after a gap", "other vertices" };
+		const std::string name(game::texture_names::name_of(ffp.cur_texture(0)));
+		std::string line = std::format("{} frame {}: {} {} triangles {} vertices {} vb {:p}+{} stride {} ib {:p} start {} bones {} nan {} zero {} scale {:.3f}-{:.3f} atest {} blend {}",
+			clock_text(), frame, kEvents[event], name.empty() ? "?" : name, prim_count, num_verts, static_cast<void*>(src_vb), base_vtx, stride,
+			static_cast<void*>(ffp.cur_ib()), start_idx, used, bad, zero, smallest_scale > 1e29f ? 0.0f : smallest_scale, largest_scale, test, blend);
+		if (bad || zero)
+			line += " BAD BONES";
+		if (in_window)
+		{
+			if (last_frame ? g_list_lines++ < 60 : g_window_lines++ < 80)
+				watch_write(line);
+		}
+		else if (g_watch_held.size() < 60)
+			g_watch_held.push_back(std::move(line));
+	}
+
+	void skinning::log_glow_draw(IDirect3DDevice9* dev, UINT base_vtx, UINT start_idx, UINT prim_count)
+	{
+		static const void* last_vb = nullptr;
+		static const void* last_ib = nullptr;
+		static UINT last_base = ~0u, last_start = ~0u;
+		static int last_reused = -1;
+		static int budget = 200;
+		auto& ffp = shared::common::ffp_state::get();
+		const void* vb = ffp.stream_vb(0);
+		const void* ib = ffp.cur_ib();
+		const int reused = ffp.last_rigid_expand_reused() ? 1 : 0;
+		if (budget <= 0 || (vb == last_vb && ib == last_ib && base_vtx == last_base && start_idx == last_start && reused == last_reused))
+			return;
+		last_vb = vb, last_ib = ib, last_base = base_vtx, last_start = start_idx, last_reused = reused;
+		budget--;
+		DWORD test = 0, blend = 0;
+		dev->GetRenderState(D3DRS_ALPHATESTENABLE, &test);
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+		shared::common::log("Transition", std::format("{} frame {}: lantern glow piece {} triangles {} vb {:p}+{} ib {:p} start {} vertices reused {} c100 {:.2f} atest {} blend {}",
+			clock_text(), ffp.frame_count(), std::string(game::texture_names::name_of(ffp.cur_texture(0))), prim_count, vb, base_vtx, ib, start_idx, reused,
+			ffp.ps_const_data() ? ffp.ps_const_data()[100 * 4] : 0.0f, test, blend));
 	}
 
 	void skinning::upload_bones(IDirect3DDevice9* dev)

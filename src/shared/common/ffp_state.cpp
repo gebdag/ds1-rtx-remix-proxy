@@ -3904,12 +3904,14 @@ namespace shared::common
 		}
 
 		const bool try_reuse = reuse_enabled && !palette_needed;
+		last_rigid_reused_ = false;
 		uint64_t pending_fp = 0;
 		bool have_pending_fp = false;
 
 		if (try_reuse)
 		{
 			const bool hit = fingerprint_match;
+			last_rigid_reused_ = hit;
 
 			if (hit)
 			{

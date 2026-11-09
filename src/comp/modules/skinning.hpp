@@ -122,7 +122,16 @@ namespace comp
 
 		// Bone upload
 		void upload_bones(IDirect3DDevice9* dev);
+
+		// [Transition] log: what happens to the character draws around a model change (a Chameleon cast and its end), which a capture cannot show.
+		// 0 none, 1 first seen, 2 back after a gap, 3 other vertices in the same range.
+		int transition_event_ = 0;
+		void log_transition(IDirect3DDevice9* dev, IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, UINT start_idx, UINT prim_count);
 		void disable_skinning(IDirect3DDevice9* dev);
+	public:
+		// The same log for the Skull Lantern's glowing piece, a rigid draw.
+		static void log_glow_draw(IDirect3DDevice9* dev, UINT base_vtx, UINT start_idx, UINT prim_count);
+	private:
 
 		// Format decoders
 		static float half_to_float(unsigned short h);

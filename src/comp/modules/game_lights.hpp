@@ -75,6 +75,8 @@ namespace comp
 		}
 
 		int active_light_count() const { return static_cast<int>(live_lights_.size()); }
+		// Logs sudden changes of the frame's light (ambient, sun, strongest live light), budgeted, for what a capture cannot show.
+		void log_look_watch();
 		int total_light_count() const { return harvested_count_; }
 		int create_failed_count() const { return create_failed_; }
 		int zero_radiance_count() const { return zero_radiance_; }

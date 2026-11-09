@@ -946,6 +946,8 @@ namespace comp
 					}
 					const bool tinted = ffp.apply_draw_tint(dev);
 					const bool effect = ffp.apply_sp_effect(dev);
+					if (game::sky_meshes::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount))
+						skinning::log_glow_draw(dev, static_cast<UINT>(BaseVertexIndex), startIndex, primCount);
 					if (inside_out)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
 					// A lamp holds its light inside: lighting rays pass it (game/mesh_lights.hpp).
