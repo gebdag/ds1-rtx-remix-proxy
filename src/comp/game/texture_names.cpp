@@ -213,7 +213,7 @@ namespace comp::game::texture_names
 		// m11 volume lights. The "*light_shaft*" planes are atmospheric layers (classify_atmospheric) and additive.
 		bool classify_light_shaft(const std::string& s)
 		{
-			return s == "m14_light" || s.find("vollight") != std::string::npos;
+			return s == "m14_light" || s == "m11_light_shaft" || s.find("vollight") != std::string::npos;
 		}
 
 		bool classify_foliage(const std::string& s)
@@ -233,6 +233,9 @@ namespace comp::game::texture_names
 				!std::isdigit(static_cast<unsigned char>(s[2])) || s[3] != '_')
 				return false;
 			if (s.find("shadow") != std::string::npos)
+				return false;
+			// Painted World's two shafts stand in its cellars, nowhere near any sky: drawn with the sky layers they never showed.
+			if (s == "m11_light_shaft")
 				return false;
 			for (const char* word : { "sky", "cloud", "mist", "fog", "shaft", "_bg_", "back_ground" })
 			{

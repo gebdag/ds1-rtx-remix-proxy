@@ -667,7 +667,7 @@ namespace comp::game::atmosphere
 	}
 
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
-		bool light_shaft, const float* vs_const, float shaft_distance)
+		bool light_shaft, const float* shaft_gain, const float* vs_const, float shaft_distance)
 	{
 		DWORD tag = 0;
 		g_self_lit_below_tag = 0;
@@ -713,7 +713,7 @@ namespace comp::game::atmosphere
 						gain = 1.0f;
 					g_shaft_own_haze = true;
 				}
-				const float value = gain * ps_const[100 * 4 + c] * ((probed ? mean : 0.0f) * ps_const[86 * 4 + c] +
+				const float value = gain * (shaft_gain ? shaft_gain[c] : 1.0f) * ps_const[100 * 4 + c] * ((probed ? mean : 0.0f) * ps_const[86 * 4 + c] +
 					0.5f * (ps_const[98 * 4 + c] + ps_const[99 * 4 + c]));
 				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(value, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 			}

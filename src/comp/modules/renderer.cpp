@@ -291,7 +291,7 @@ namespace comp
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
-			ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer());
+			ffp.view_proj_valid() && is_light_shaft_draw() && !is_atmospheric_layer(), nullptr);
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -586,10 +586,20 @@ namespace comp
 		if (float centre[3], ox, oy, oz; shaft_draw && ffp.draw_world_centre(PrimitiveType, BaseVertexIndex, startIndex, primCount, centre) &&
 			ffp.world_offset(ox, oy, oz))
 			shaft_distance = std::sqrt((centre[0] - ox) * (centre[0] - ox) + (centre[1] - oy) * (centre[1] - oy) + (centre[2] - oz) * (centre[2] - oz));
+		// Painted World's cellar shafts are additive; on the dark behind them an alpha blend looks the same, and the light-shaft path takes only those.
+		// Their light is stronger than this path's formula gives, measured against the game in frame_20261109_081805 and 081947.
+		static constexpr float kCellarShaftGain[3] = { 2.6f, 2.3f, 2.3f };
+		const float* shaft_gain = nullptr;
+		if (DWORD dest = 0; shaft_draw && SUCCEEDED(dev->GetRenderState(D3DRS_DESTBLEND, &dest)) && dest == D3DBLEND_ONE)
+		{
+			ctx.save_rs(dev, D3DRS_DESTBLEND);
+			dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+			shaft_gain = kCellarShaftGain;
+		}
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
-			shaft_draw, ffp.vs_const_data(), shaft_distance);
+			shaft_draw, shaft_gain, ffp.vs_const_data(), shaft_distance);
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());

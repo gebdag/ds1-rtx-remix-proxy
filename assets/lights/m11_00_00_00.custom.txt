@@ -1,0 +1,8 @@
+# Custom lights for m11_00_00_00 (Painted World). F4 > Lights > Custom lights edits and saves this file.
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+#
+# The cellars' two shafts of light (m11_light_shaft). Placed at the top of each shaft mesh and aimed along its axis. They stand in for the map's two
+# small lights under the ceiling (slots 16 and 21, turned off in light_overrides.txt), which lit the ceiling instead of the floor below.
+-27.27 53.60 906.80 2 3 200 255 230 100 Cellar_shaft_1 remix 3500.000 0.00 0.250 0.00 spot -0.245 -0.947 0.209 18 0.3
+-19.57 53.60 891.12 2 3 200 255 230 100 Cellar_shaft_2 remix 3500.000 0.00 0.250 0.00 spot -0.246 -0.947 0.204 18 0.3

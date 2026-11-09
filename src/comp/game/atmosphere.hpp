@@ -67,7 +67,7 @@ namespace comp::game::atmosphere
 	// A light shaft (`light_shaft`, texture_names::is_light_shaft) with the game's ambient on it, seen from the side, and its own
 	// haze at `shaft_distance` (its centre's, metres; <= 0 unknown) by its own set (PS c103-c111, VS c128 in `vs_const`).
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
-		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false,
+		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false, const float* shaft_gain = nullptr,
 		const float* vs_const = nullptr, float shaft_distance = -1.0f);
 
 	// View fade: FRPG_NtoA multiplies its alpha by sat((|N.V| - c176.x) * c176.y), so its foliage cards
