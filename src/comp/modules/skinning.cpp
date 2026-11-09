@@ -1,3 +1,4 @@
+#include <unordered_map>
 #include "std_include.hpp"
 #include "skinning.hpp"
 
@@ -61,7 +62,8 @@ namespace comp
 		UINT stride = ffp.stream_stride(0);
 		UINT total_verts = min_vtx + num_verts;
 		// A fur shell carries its vertex colour (ffp_state::cur_draw_is_fur_shell).
-		const bool fur = skin_overlay_decl_ && ffp.cur_draw_is_fur_shell(dev);
+		const bool priscilla_fur = game::texture_names::name_of(ffp.cur_texture(0)) == "c2730_2" && ffp.cur_decl_has_color();
+		const bool fur = skin_overlay_decl_ && (priscilla_fur || ffp.cur_draw_is_fur_shell(dev));
 		// A body part's vertices carry their place on the body, for the runtime's wet player. Hair reads the grid too,
 		// but its cards are not body-tagged in lightmap_sun, so only the body wets the grid.
 		// Not on what the game blends otherwise (ghosts, a fading body), which needs its alpha as it is.
@@ -106,7 +108,7 @@ namespace comp
 		const bool toned = ffp.apply_skin_tone(dev, false);
 		// Priscilla's fur (c2730_2): many overlapping blended cards at a quarter coverage. Remix's alpha-blended layers lose most of her against the dark behind
 		// (half the game's brightness). The game's velocity pass draws the same cards as a cutout, alpha test 128: so do these.
-		const bool fur_cards = game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) == "c2730_2" && ffp.ps_const_data()[139 * 4 + 3] >= 0.99f; // not while she fades (invisibility goes through c139.w)
+		const bool fur_cards = priscilla_fur && ffp.ps_const_data()[139 * 4 + 3] >= 0.99f; // not while she fades (invisibility goes through c139.w)
 		DWORD fur_blend = FALSE, fur_test = FALSE, fur_ref = 0, fur_func = 0;
 		if (fur_cards)
 		{
@@ -116,12 +118,28 @@ namespace comp
 			dev->GetRenderState(D3DRS_ALPHAFUNC, &fur_func);
 			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 			dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-			dev->SetRenderState(D3DRS_ALPHAREF, 128);
+			// Tested against texture alpha times the shell's vertex alpha, which falls layer by layer: lower layers keep most of the hair, the outer ones only its tips.
+			static const int fur_alpha_ref = shared::common::config::get().get_int("Fur", "AlphaRef", 64);
+			dev->SetRenderState(D3DRS_ALPHAREF, fur_alpha_ref);
 			dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
 		}
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+		// More shells than the mesh has: the same triangles again between its layers (expand_skin_vertex).
+		// Her cutout only: blended shells (rats) gained nothing measurable and would only stack up coverage.
+		if (fur && fur_cards && SUCCEEDED(hr))
+		{
+			static const int extra = std::clamp(shared::common::config::get().get_int("Fur", "ExtraLayers", 1), 0, 3);
+			fur_layer_count_ = extra;
+			static constexpr skin_layout layers[3] = { skin_layout::fur_layer_1, skin_layout::fur_layer_2, skin_layout::fur_layer_3 };
+			for (int k = 0; k < extra; k++)
+				if (auto* layer_vb = get_expanded_vb(dev, src_vb, base_vtx, total_verts, stride, layers[k]))
+				{
+					dev->SetStreamSource(0, layer_vb, 0, SKIN_OVERLAY_VTX_SIZE);
+					dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+				}
+		}
 		if (scrolled)
 			game::texture_scroll::clear(dev);
 		if (toned)
@@ -307,6 +325,8 @@ namespace comp
 
 		cur_max_idx_ = 0;
 		cur_raw_max_idx_ = 0;
+		if (layout == skin_layout::fur_layer_1 || layout == skin_layout::fur_layer_2 || layout == skin_layout::fur_layer_3)
+			measure_fur_shells(src_data, num_verts, stride);
 		for (UINT v = 0; v < num_verts; v++)
 			expand_skin_vertex(&dst_data[v * vtx_size], &src_data[v * stride], layout);
 
@@ -318,6 +338,54 @@ namespace comp
 		entry.raw_max_idx = cur_raw_max_idx_;
 
 		return exp_vb;
+	}
+
+	// Shell fur: the same uv at several distances along the normal. The median gap between neighbours is the mesh's layer spacing, the median alpha lost per gap its fade.
+	void skinning::measure_fur_shells(const unsigned char* src, UINT num_verts, UINT stride)
+	{
+		auto& ffp = shared::common::ffp_state::get();
+		fur_step_ = 0.015f;
+		fur_alpha_step_ = 0.0f;
+		if (!ffp.cur_decl_has_texcoord() || !ffp.cur_decl_has_normal())
+			return;
+		struct entry { float along, alpha; };
+		std::unordered_map<uint32_t, std::vector<entry>> groups;
+		const int tc_off = ffp.cur_decl_texcoord_off();
+		for (UINT v = 0; v < num_verts; v++)
+		{
+			const unsigned char* at = src + static_cast<size_t>(v) * stride;
+			float n[3] = {};
+			decode_normal(&at[ffp.cur_decl_normal_off()], ffp.cur_decl_normal_type(), n);
+			const auto* pos = reinterpret_cast<const float*>(&at[ffp.cur_decl_pos_off()]);
+			const auto* uv = reinterpret_cast<const uint16_t*>(&at[tc_off]);
+			const float len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+			if (len < 1e-3f)
+				continue;
+			groups[static_cast<uint32_t>(uv[0]) | static_cast<uint32_t>(uv[1]) << 16].push_back({ (pos[0] * n[0] + pos[1] * n[1] + pos[2] * n[2]) / len,
+				static_cast<float>(ffp.cur_vertex_color(at) >> 24) });
+		}
+		std::vector<float> gaps, fades;
+		for (auto& [uv, list] : groups)
+		{
+			if (list.size() < 3 || list.size() > 32)
+				continue;
+			std::sort(list.begin(), list.end(), [](const entry& a, const entry& b) { return a.along < b.along; });
+			for (size_t i = 1; i < list.size(); i++)
+			{
+				const float gap = list[i].along - list[i - 1].along;
+				if (gap > 0.001f && gap < 0.1f)
+				{
+					gaps.push_back(gap);
+					fades.push_back(list[i - 1].alpha - list[i].alpha);
+				}
+			}
+		}
+		if (gaps.size() < 8)
+			return;
+		std::nth_element(gaps.begin(), gaps.begin() + gaps.size() / 2, gaps.end());
+		std::nth_element(fades.begin(), fades.begin() + fades.size() / 2, fades.end());
+		fur_step_ = gaps[gaps.size() / 2];
+		fur_alpha_step_ = std::max(fades[fades.size() / 2], 0.0f);
 	}
 
 	void skinning::expand_skin_vertex(unsigned char* dst, const unsigned char* src, skin_layout layout)
@@ -448,10 +516,22 @@ namespace comp
 			const DWORD argb = (ffp.cur_vertex_color(src) & 0xFF000000u) | 0x00FFFFFFu;
 			std::memcpy(&dst[48], &argb, sizeof(argb));
 		}
-		else if (layout == skin_layout::vertex_colour)
+		else if (layout == skin_layout::vertex_colour || layout == skin_layout::fur_layer_1 || layout == skin_layout::fur_layer_2 || layout == skin_layout::fur_layer_3)
 		{
 			const DWORD argb = ffp.cur_vertex_color(src);
 			std::memcpy(&dst[48], &argb, sizeof(argb));
+			if (layout != skin_layout::vertex_colour)
+			{
+				// Between this layer and the next: part of the way out along the normal, with part of the alpha it would lose.
+				const float f = static_cast<float>(static_cast<int>(layout) - static_cast<int>(skin_layout::fur_layer_1) + 1) / static_cast<float>(fur_layer_count_ + 1);
+				for (int k = 0; k < 3; k++)
+					out[k] += out[7 + k] * fur_step_ * f;
+				DWORD faded = 0;
+				std::memcpy(&faded, &dst[48], sizeof(faded));
+				const float alpha = std::max(static_cast<float>(faded >> 24) - fur_alpha_step_ * f, 0.0f);
+				faded = (faded & 0x00FFFFFFu) | (static_cast<DWORD>(alpha + 0.5f) << 24);
+				std::memcpy(&dst[48], &faded, sizeof(faded));
+			}
 		}
 		else if (layout == skin_layout::body)
 		{

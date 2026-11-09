@@ -61,7 +61,8 @@ namespace comp
 		// base: SKIN_VTX_SIZE; overlay: the second uv set and the vertex alpha (a two-layer draw's second
 		// diffuse); vertex_colour: the first uv set and the whole vertex colour (fur shells).
 		// body: the SKIN_OVERLAY_VTX_SIZE layout, the colour being the vertex's bind position (a body part's draw).
-		enum class skin_layout : uint8_t { base, overlay, vertex_colour, body };
+		// fur_layer_1..3: a fur shell's in-between copies (expand_skin_vertex).
+		enum class skin_layout : uint8_t { base, overlay, vertex_colour, body, fur_layer_1, fur_layer_2, fur_layer_3 };
 
 		struct skin_key {
 			IDirect3DVertexBuffer9* src_vb;
@@ -108,6 +109,11 @@ namespace comp
 		IDirect3DVertexBuffer9* get_expanded_vb(IDirect3DDevice9* dev,
 			IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride, skin_layout layout);
 		void expand_skin_vertex(unsigned char* dst, const unsigned char* src, skin_layout layout);
+		// A shell mesh's own layer spacing and how much alpha a layer loses, from its vertices.
+		void measure_fur_shells(const unsigned char* src, UINT num_verts, UINT stride);
+		float fur_step_ = 0.015f;
+		float fur_alpha_step_ = 0.0f;
+		int fur_layer_count_ = 1;
 
 		// A two-layer draw's second diffuse, re-drawn as a coplanar decal (see draw_skinned_dip).
 		HRESULT draw_overlay(IDirect3DDevice9* dev, D3DPRIMITIVETYPE pt, IDirect3DVertexBuffer9* src_vb,
