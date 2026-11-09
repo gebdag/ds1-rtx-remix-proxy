@@ -23,6 +23,7 @@ using comp::tracer;
 #include "../game/render_toggles.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
+#include "../game/vanilla_view.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/lightmap_sun.hpp"
@@ -564,7 +565,10 @@ namespace {
 			return S_OK;
 		if (cls == sfx_class::DepthEncode || cls == sfx_class::Distortion || cls == sfx_class::Blur)
 		{
-			if (cfg.drop_screen_effects)
+			// The distortion (heat shimmer, the bonfire's rest) reads a copy of the frame. In the F8 vanilla view, which passes the
+			// screen effects since d22cc0f (2026-11-02), that copy is black, and the distortion's mesh drew a black shape over the
+			// frame, and over every capture's reference image taken in that view.
+			if (cfg.drop_screen_effects || cls == sfx_class::Distortion)
 				return S_OK;
 			ffp.with_cached_transforms([&] { ffp.disengage(dev); });
 			return draw();
@@ -602,6 +606,13 @@ namespace {
 	shared::common::sfx_class current_sfx()
 	{
 		return shared::common::ffp_state::get().cur_ps_sfx_class();
+	}
+
+	// The distortion (heat shimmer, the bonfire's rest) reads a copy of the frame, which is black in the F8 vanilla view: its mesh
+	// drew a black shape over the frame and over F9 capture reference images (since d22cc0f passed screen effects there).
+	bool drop_distortion_in_vanilla_view()
+	{
+		return comp::game::vanilla_view::active() && current_sfx() == shared::common::sfx_class::Distortion;
 	}
 
 	// Sprite particles of UP draws go fixed-function (ffp_state::draw_sprite_up);
@@ -1501,7 +1512,13 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawPrimitive, PrimitiveType, StartVertex, PrimitiveCount);
 		draw_split_scope split_scope;
 		if (lookdev_passthrough())
-			return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
+		{
+			// An F9 capture's reference frame is drawn in the vanilla view with the proxy out of the way: the distortion would
+			// read the same black frame copy there (drop_distortion_in_vanilla_view).
+			if (drop_distortion_in_vanilla_view())
+				return S_OK;
+				return m_pIDirect3DDevice9->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
+		}
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			// Particles skip the renderer, where draws are tagged: no lightmap of their own.
@@ -1526,7 +1543,13 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_DrawIndexedPrimitive, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		draw_split_scope split_scope;
 		if (lookdev_passthrough())
-			return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+		{
+			// An F9 capture's reference frame is drawn in the vanilla view with the proxy out of the way: the distortion would
+			// read the same black frame copy there (drop_distortion_in_vanilla_view).
+			if (drop_distortion_in_vanilla_view())
+				return S_OK;
+				return m_pIDirect3DDevice9->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+		}
 		if (const auto sfx = current_sfx(); sfx != shared::common::sfx_class::None)
 		{
 			// Particles skip the renderer, where draws are tagged: no lightmap of their own.
@@ -1551,7 +1574,13 @@ namespace comp
 			pVertexStreamZeroData = comp::game::aspect_ratio::final_quad(pVertexStreamZeroData, VertexStreamZeroStride, PrimitiveCount + 2, shared::common::ffp_state::get().last_decl());
 		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9, pVertexStreamZeroData, VertexStreamZeroStride, up_vertex_count(PrimitiveType, PrimitiveCount));
 		if (lookdev_passthrough())
-			return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		{
+			// An F9 capture's reference frame is drawn in the vanilla view with the proxy out of the way: the distortion would
+			// read the same black frame copy there (drop_distortion_in_vanilla_view).
+			if (drop_distortion_in_vanilla_view())
+				return S_OK;
+				return m_pIDirect3DDevice9->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+		}
 		// UP draws (sprites, UI, post passes) carry no haze set, self-lit ambient or lightmap of their own.
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		comp::game::atmosphere::tag_self_lit(m_pIDirect3DDevice9, false, nullptr);
@@ -1647,7 +1676,13 @@ namespace comp
 		}
 		comp::game::hud_scale::draw_scope hud_scale_scope(m_pIDirect3DDevice9, static_cast<const char*>(pVertexStreamZeroData) + size_t(MinVertexIndex) * VertexStreamZeroStride, VertexStreamZeroStride, NumVertices);
 		if (lookdev_passthrough())
-			return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		{
+			// An F9 capture's reference frame is drawn in the vanilla view with the proxy out of the way: the distortion would
+			// read the same black frame copy there (drop_distortion_in_vanilla_view).
+			if (drop_distortion_in_vanilla_view())
+				return S_OK;
+				return m_pIDirect3DDevice9->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+		}
 		comp::game::atmosphere::tag_haze_set(m_pIDirect3DDevice9, false, nullptr, nullptr, 0);
 		comp::game::atmosphere::tag_self_lit(m_pIDirect3DDevice9, false, nullptr);
 		comp::game::atmosphere::tag_view_fade(m_pIDirect3DDevice9, false, nullptr);
