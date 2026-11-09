@@ -53,6 +53,9 @@ namespace comp
 		bool sun_enabled = true;
 		float sun_intensity_scale = 1.0f;
 		float sun_angular_diameter = 0.53f;
+		// [Ambient] Lock (gamma, usually from an area override): the ambient as this one value on every side, whatever the game's dominant region says this frame.
+		bool ambient_lock_set = false;
+		float ambient_lock[3] = {};
 		float sun_fallback_colour[3] = { 0.7f, 0.7f, 0.7f };
 		// An area's own sun ([Sun] Colour and Direction, from area_overrides.ini) where the game bakes its sun into the
 		// lightmaps and its probe holds none. Colour in the game's gamma units, direction of travel.

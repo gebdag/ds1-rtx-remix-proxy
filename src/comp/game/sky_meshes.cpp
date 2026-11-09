@@ -14,7 +14,7 @@ namespace comp::game::sky_meshes
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow };
 
 		struct range_key
 		{
@@ -118,6 +118,7 @@ namespace comp::game::sky_meshes
 			// Last: a face set already listed as another kind keeps it.
 			load_table_locked("thin_wall_meshes.txt", kind::thin_wall, "thin wall", "no map mesh gets the thin-wall tag");
 			load_table_locked("emitter_meshes.txt", kind::emitter, "light emitter", "no character lights");
+			load_table_locked("glow_meshes.txt", kind::glow, "glow", "nothing glows of its own");
 		}
 
 		uint64_t fnv1a64(const uint8_t* data, size_t size)
@@ -151,7 +152,7 @@ namespace comp::game::sky_meshes
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
-					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : "light emitter";
+					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : "light emitter";
 				shared::common::log("SkyMeshes", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -235,6 +236,11 @@ namespace comp::game::sky_meshes
 		first = m.e->hide_first;
 		last = m.e->hide_last;
 		return true;
+	}
+
+	bool is_glow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		return lookup(ib, type, start_index, prim_count).k == kind::glow;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

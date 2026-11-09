@@ -11,6 +11,7 @@
 #include "sun_light.hpp"
 #include "map_lights.hpp"
 #include "texture_names.hpp"
+#include "sky_meshes.hpp"
 #include "../modules/game_lights.hpp"
 
 #include <cmath>
@@ -679,7 +680,7 @@ namespace comp::game::atmosphere
 	}
 
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
-		bool light_shaft, const float* shaft_gain, const float* vs_const, float shaft_distance)
+		bool light_shaft, const float* shaft_gain, const float* vs_const, float shaft_distance, bool glow_mesh)
 	{
 		DWORD tag = 0;
 		g_self_lit_below_tag = 0;
@@ -696,9 +697,24 @@ namespace comp::game::atmosphere
 			dev->GetRenderState(D3DRS_DESTBLEND, &dst_blend);
 			dev->GetRenderState(D3DRS_SRCBLEND, &src_blend);
 		}
+		// The Skull Lantern's eyes and mouth: their own 348-triangle piece, unbumped, drawn at c100 2 from the cream patches of its texture. The game's only "glow" is
+		// that doubling under its lights, so in the dark it shows nothing. A little light of its own at rest, more held up: the game's head light (c116) is 2.4 or 4
+		// then and 1.26 otherwise. [Lights] LanternIdle, LanternHeld, gamma.
+		if (ambient && ps_const && glow_mesh)
+		{
+			static const float idle = shared::common::config::get().get_float("Lights", "LanternIdle", 0.6f);
+			static const float held = shared::common::config::get().get_float("Lights", "LanternHeld", 1.6f);
+			// Only the Tomb's head light is 1.26 unless the lantern is up: elsewhere the game's own colour says nothing about it.
+			const bool raised = map_lights::current_map_name() == "m13_01_00_00" && std::max({ ps_const[116 * 4], ps_const[116 * 4 + 1], ps_const[116 * 4 + 2] }) >= 1.8f;
+			const float value = raised ? held : idle;
+			static constexpr float kWarm[3] = { 1.0f, 0.85f, 0.6f };
+			tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+				tag |= static_cast<DWORD>(std::clamp(std::lround(value * kWarm[c] / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+		}
 		// The shaft's light is the HemEnv shader's ambient (c86, c98, c99, probe): only a lit one, blended as the unlit layer
 		// marker requires (ffp_state::apply_unlit_layer_marker), which the renderer then sets.
-		if (light_shaft && ambient && !unlit && blended && src_blend == D3DBLEND_SRCALPHA && dst_blend == D3DBLEND_INVSRCALPHA && ps_const)
+		else if (light_shaft && ambient && !unlit && blended && src_blend == D3DBLEND_SRCALPHA && dst_blend == D3DBLEND_INVSRCALPHA && ps_const)
 		{
 			// A light shaft: the game lights it as a map surface, texture * c100 * (c86 * probe(N) + lerp(c99, c98, N.y / 2 + 1 / 2)).
 			// It hangs in the air and is seen from every side: the probe's mean over its faces and the hemisphere's middle.
@@ -1085,6 +1101,10 @@ namespace comp::game::atmosphere
 			sun_light::set_probe_sun(split.sun);
 			std::array<std::array<float, 3>, 6> cube;
 			ambient_cube(g_ambient_ready, split, cube);
+			if (const auto* gl = game_lights::get(); gl && gl->ambient_lock_set)
+				for (auto& face : cube)
+					for (int c = 0; c < 3; c++)
+						face[c] = gl->ambient_lock[c];
 			// A menu's view has no sun to split off (its shaders read no c175): the game's light is the probe's own faces.
 			if (shared::common::ffp_state::get().menu_is_path_traced() && g_ambient_ready.has_faces)
 				for (int f = 0; f < 6; f++)

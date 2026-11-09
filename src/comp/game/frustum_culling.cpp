@@ -716,6 +716,9 @@ namespace comp::game::frustum_culling
 	void reread_light_blockers()
 	{
 		const auto& culling = shared::common::config::get().culling;
+		enabled_ = culling.enable_frustum_culling;
+		radius_ = std::max(0.0f, culling.frustum_relaxation_radius);
+		keep_light_blockers_ = culling.keep_light_blockers;
 		blocker_settings_ = sanitized({
 			culling.light_blocker_min_size,
 			culling.light_blocker_near_range,

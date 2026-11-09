@@ -1803,6 +1803,7 @@ namespace comp
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
 		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", true));
 
+		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		sun_enabled = cfg.get_bool("Sun", "Enabled", true);
 		sun_intensity_scale = cfg.get_float("Sun", "IntensityScale", 1.0f);
 		sun_angular_diameter = cfg.get_float("Sun", "AngularDiameter", 0.53f);
