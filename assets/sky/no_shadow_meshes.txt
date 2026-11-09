@@ -8,3 +8,7 @@
 # quad at x -12.21 facing the wall 5 cm behind it: passing lighting rays was not enough, it still kept every bounce ray from that
 # wall, which in the intro cutscene (no direct light there) went black (frame_20261108_033848).
 4bd3fc480980e512 6045 m18_01_00_00/m0300B1A18/mesh9/lod0 hide 3252 3253
+#
+# Anor Londo, the terrace above Gwyndolin's corridor: a 1 km wide plane at height 50 (m15_floor_stone_04, 102 indices). The corridor, at height 30, is under it, so no
+# ray at the game's sun angle reaches the windows there: every band the game shows on that floor is baked (frame_20261109_150311, 150041).
+991750b6b73c79dd 102 m15_01_00_00/terrace_plane/m15_floor_stone_04
