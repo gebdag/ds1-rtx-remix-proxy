@@ -10,6 +10,7 @@
 #include "shared/globals.hpp"
 #include "sun_light.hpp"
 #include "map_lights.hpp"
+#include "texture_names.hpp"
 #include "../modules/game_lights.hpp"
 
 #include <cmath>
@@ -610,6 +611,17 @@ namespace comp::game::atmosphere
 			{
 				value[c] = std::max(diffuse[c] * ((probed ? faces[2][c] : 0.0f) * scale[c] + upper[c]), 0.0f);
 				below[c] = std::max(diffuse[c] * ((probed ? faces[3][c] : 0.0f) * scale[c] + lower[c]), 0.0f);
+			}
+			// Gwynevere's curtains: the game's value is only how they look. As an emitter it floods a room the game keeps dark. [Lights] CurtainGlow, gamma.
+			auto& ffp = shared::common::ffp_state::get();
+			if (std::string_view(texture_names::name_of(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)))).rfind("m15_queen_curtain_", 0) == 0)
+			{
+				static const float glow = shared::common::config::get().get_float("Lights", "CurtainGlow", 0.15f);
+				for (int c = 0; c < 3; c++)
+				{
+					value[c] *= glow;
+					below[c] *= glow;
+				}
 			}
 			return std::max({ value[0], value[1], value[2], below[0], below[1], below[2] }) > 0.0f;
 		}
@@ -1268,6 +1280,11 @@ namespace comp::game::atmosphere
 			g_sun_gamma[1][c] = lobe[c];
 		}
 		g_have_sun_gamma = true;
+	}
+
+	bool ambient_is_cold()
+	{
+		return g_have_ambient && g_ambient_ready.scale[2] > 1.3f * g_ambient_ready.scale[0];
 	}
 
 	bool ambient_toward(const float* normal, float* out_gamma)

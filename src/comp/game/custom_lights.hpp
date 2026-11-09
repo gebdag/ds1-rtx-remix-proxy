@@ -25,6 +25,7 @@ namespace comp::game::custom_lights
 		float pos[3] = {};
 		float colour[3] = { 1.0f, 0.85f, 0.6f };   // 0-1
 		bool enabled = true;
+		int when = 0;                               // 0 always, 1 only in the map's dark version, 2 only in its light one (words 'dark' / 'light' in the file)
 		// Lit with the game's falloff instead of as a Remix light.
 		bool game_falloff = false;
 		// Remix sphere light.

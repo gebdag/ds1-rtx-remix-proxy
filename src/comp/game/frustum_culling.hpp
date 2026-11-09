@@ -34,6 +34,8 @@ namespace comp::game::frustum_culling
 	void set_keep_light_blockers(bool keep);
 	light_blocker_settings light_blockers();
 	void set_light_blockers(const light_blocker_settings& settings);
+	// After the config changed underneath (an area override came or went).
+	void reread_light_blockers();
 	light_blocker_stats last_frame_light_blockers();
 
 	// Camera position recovered from a frustum's own planes. The engine builds those

@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "custom_lights.hpp"
+#include "atmosphere.hpp"
 #include "map_lights.hpp"
 
 #include <algorithm>
@@ -65,6 +66,14 @@ namespace comp::game::custom_lights
 				{
 					l.enabled = false;
 				}
+				else if (word == "dark")
+				{
+					l.when = 1;
+				}
+				else if (word == "light")
+				{
+					l.when = 2;
+				}
 			}
 			return true;
 		}
@@ -129,7 +138,7 @@ namespace comp::game::custom_lights
 		for (size_t i = 0; i < g_lights.size(); ++i)
 		{
 			const auto& l = g_lights[i];
-			if (!l.enabled)
+			if (!l.enabled || (l.when && (l.when == 1) != atmosphere::ambient_is_cold()))
 				continue;
 			point_lights::light p {};
 			p.slot = kFirstSlot + static_cast<int>(i);
@@ -192,6 +201,8 @@ namespace comp::game::custom_lights
 				file << std::format("  focus {:.2f}", l.focus);
 			if (!l.enabled)
 				file << "  off";
+			if (l.when)
+				file << (l.when == 1 ? "  dark" : "  light");
 			file << '\n';
 		}
 		g_dirty = false;

@@ -1,6 +1,8 @@
 #include "std_include.hpp"
 #include "area_overrides.hpp"
+#include "atmosphere.hpp"
 #include "camera.hpp"
+#include "frustum_culling.hpp"
 #include "map_lights.hpp"
 
 #include "../modules/game_lights.hpp"
@@ -24,6 +26,7 @@ namespace comp::game::area_overrides
 			bool has_box = false;
 			float box_min[3] = {};
 			float box_max[3] = {};
+			int when = 0; // 0 always, 1 only in the map's dark version, 2 only in its light one (atmosphere::ambient_is_cold), -1 never (a bad value)
 			std::vector<std::pair<std::string, std::string>> values;
 		};
 
@@ -87,6 +90,13 @@ namespace comp::game::area_overrides
 					}
 					else
 						shared::common::log("AreaOverrides", std::format("line {}: a box is six numbers: x y z x y z", number), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+				}
+				else if (key == "when")
+				{
+					// Anything else (a typo) leaves the section off rather than always on.
+					a.when = value == "dark" ? 1 : value == "light" ? 2 : -1;
+					if (a.when < 0)
+						shared::common::log("AreaOverrides", std::format("line {}: when is dark or light; section ignored", number), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 				}
 				else if (key.rfind("rtx.", 0) == 0 || (key.rfind("proxy.", 0) == 0 && key.find('.', 6) != std::string::npos))
 					a.values.emplace_back(key, value);
@@ -245,6 +255,8 @@ namespace comp::game::area_overrides
 		{
 			if (a.map != map)
 				continue;
+			if (a.when < 0 || (a.when && (a.when == 1) != atmosphere::ambient_is_cold()))
+				continue;
 			if (a.has_box)
 			{
 				// No player position (a menu, a load): the place is not known, so a box does not match.
@@ -299,6 +311,7 @@ namespace comp::game::area_overrides
 		if (proxy_changed)
 		{
 			shared::common::config::get().set_area_values(std::move(proxy_values));
+			frustum_culling::reread_light_blockers();
 			if (auto* gl = comp::game_lights::get())
 				gl->reread_settings();
 		}

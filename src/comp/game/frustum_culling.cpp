@@ -713,6 +713,16 @@ namespace comp::game::frustum_culling
 		return blocker_settings_;
 	}
 
+	void reread_light_blockers()
+	{
+		const auto& culling = shared::common::config::get().culling;
+		blocker_settings_ = sanitized({
+			culling.light_blocker_min_size,
+			culling.light_blocker_near_range,
+			culling.light_blocker_sun_reach,
+		});
+	}
+
 	void set_light_blockers(const light_blocker_settings& settings)
 	{
 		blocker_settings_ = sanitized(settings);

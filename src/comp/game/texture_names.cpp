@@ -223,6 +223,9 @@ namespace comp::game::texture_names
 
 		bool classify_lava(const std::string& s)
 		{
+			// Gwynevere's curtains too: the game's region light (c86 3, 2, 1.65; 1.18, 3, 3 in the dark version) makes them glow as if backlit, and nothing real lights them.
+			if (s.rfind("m15_queen_curtain_", 0) == 0)
+				return true;
 			return s.size() > 10 && s[0] == 'm' && std::isdigit(static_cast<unsigned char>(s[1])) &&
 				std::isdigit(static_cast<unsigned char>(s[2])) && s.compare(3, 8, "_n_lava_") == 0;
 		}

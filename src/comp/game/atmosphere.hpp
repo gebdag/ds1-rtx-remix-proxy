@@ -101,6 +101,10 @@ namespace comp::game::atmosphere
 	// surface facing `normal`, from the last frame's ambient cube. False before one was seen.
 	bool ambient_toward(const float* normal, float* out_gamma);
 
+	// The game's probe scale (c86) of most of the frame is blue rather than red: how Anor Londo's dark version shows (0.39, 1, 1 against 2, 1.33, 0.94).
+	// Follows the dominant set (a new set needs 20 frames in the lead while the current one is still drawn).
+	bool ambient_is_cold();
+
 	// The sun as game_lights::sync_sun submits it, in gamma space: the ambient on a surface facing
 	// it and its own colour. Sent as rtx.ds1Ambient.sunBase / sunLobe: lightmapped surfaces add
 	// lightmap * lobe to that ambient in the game, and the runtime scales the sun on them to match
