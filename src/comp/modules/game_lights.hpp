@@ -282,6 +282,8 @@ namespace comp
 		// config::player_light_settings). Found by attachment: the live light nearest
 		// the player's head, then held while it stays with the player.
 		shared::common::config::player_light_settings player_cfg_;
+		// The last frame's player light, for the log of its sudden changes (sync_player_light).
+		struct { bool seen = false; int slot = -1; float peak = 0.0f; float pos[3] = {}; int budget = 300; } player_trace_;
 		live_light player_light_;
 		int player_slot_ = -1;            // KPointLightMan slot currently taken as the player light
 		bool player_seen_ = false;        // found on the last harvest

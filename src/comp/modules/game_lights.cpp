@@ -1241,6 +1241,13 @@ namespace comp
 	{
 		const auto& c = player_cfg_;
 		const float mult = edit_multiplier(KEY_PLAYER);
+		// A short log of what goes wrong with this light in play (the first few hundred events of a session).
+		if (!src && c.enabled && player_trace_.seen && player_trace_.budget > 0)
+		{
+			--player_trace_.budget;
+			log("PlayerLight", std::format("frame {}: no player light this frame (last slot {})", shared::common::ffp_state::get().frame_count(), player_trace_.slot));
+			player_trace_.seen = false;
+		}
 		if (!c.enabled || !src || mult <= 0.0f)
 		{
 			release_light(player_light_);
@@ -1348,6 +1355,24 @@ namespace comp
 			}
 			if (player_clearance_refused_)
 				shared::common::log("GameLights", "Remix refused the player light's wall clearance options (older runtime)");
+		}
+
+		{
+			auto& t = player_trace_;
+			const float peak = std::max({ radiance.x, radiance.y, radiance.z });
+			const float dx = position.x - t.pos[0], dy = position.y - t.pos[1], dz = position.z - t.pos[2];
+			const float moved = std::sqrt(dx * dx + dy * dy + dz * dz);
+			const bool jump = t.seen && (src->slot != t.slot || moved > 0.75f || peak > t.peak * 1.4f || peak < t.peak * 0.7f);
+			if (jump && t.budget > 0)
+			{
+				--t.budget;
+				log("PlayerLight", std::format("frame {}: slot {} -> {}, moved {:.2f} m, peak radiance {:.3f} -> {:.3f}, colour ({:.3f}, {:.3f}, {:.3f}), dwindle {:.2f}-{:.2f}, params {}",
+					shared::common::ffp_state::get().frame_count(), t.slot, src->slot, moved, t.peak, peak, src->r, src->g, src->b, src->dwindle_begin, src->dwindle_end, src->has_params));
+			}
+			t.seen = true;
+			t.slot = src->slot;
+			t.peak = peak;
+			t.pos[0] = position.x; t.pos[1] = position.y; t.pos[2] = position.z;
 		}
 
 		auto& light = player_light_;
