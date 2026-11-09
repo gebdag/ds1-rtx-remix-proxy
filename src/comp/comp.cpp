@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "game/waterfall.hpp"
+#include "game/hit_sparks.hpp"
 #include "game/fog_gates.hpp"
 
 #include "modules/imgui.hpp"
@@ -115,6 +116,7 @@ namespace comp
 			});
 			ffp.set_sprite_observer(observe_sprites);
 			ffp.set_sprite_batch_taker(game::fog_gates::observe_batch);
+			ffp.set_spark_source(game::hit_sparks::collect);
 			ffp.set_mote_texture_test([](IDirect3DBaseTexture9* texture) { return game::texture_names::name_of(texture) == "s01003"; });
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);

@@ -179,6 +179,11 @@ namespace shared::common
 		struct sprite_point { float x, y, z, alpha; float r, g, b; float area; bool additive; };
 		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
 		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
+
+		// One record of a game hit: where (world), its colour, how fast its sparks leave (m/s), how many streaks the game gives it.
+		struct spark_emission { float pos[3]; float rgb[3]; float speed; UINT streaks; };
+		using spark_source_fn = void(*)(std::vector<spark_emission>& out);
+		void set_spark_source(spark_source_fn fn) { spark_source_fn_ = fn; }
 		// The bound indexed draw's area-weighted centre in world space (rigid draws: VS c8 rows and the world offset), from up to
 		// 64 of its triangles. False when its buffers cannot be read. Call with the game's state, before the rigid expansion
 		// replaces stream 0.
@@ -782,11 +787,18 @@ namespace shared::common
 		// texture bound. Gives Remix a constant texture hash to remap.
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
 		IDirect3DTexture9* white_sprite_tex_ = nullptr;
-		// Hit spark bursts seen lately (draw_sprite_up): where, the frame it first showed, the last frame it did, how many
-		// streaks it had then and its batch (orange 0 or pale 1). Remix particles spawn for a burst's new streaks only (all of
-		// them in its first frame, then whatever it gains); otherwise its streaks only hide.
-		struct spark_burst { float x, y, z; UINT first_frame, last_frame, streaks; int batch; };
-		std::vector<spark_burst> spark_bursts_;
+		// The game's hits this frame and the triangles they become (draw_spark_emitter); where hits were lately, for the log.
+		spark_source_fn spark_source_fn_ = nullptr;
+		UINT spark_emit_frame_ = ~0u;
+		std::vector<spark_emission> spark_emissions_;
+		struct spark_vertex { float x, y, z; DWORD color; float u, v; };
+		std::vector<spark_vertex> spark_vertices_;
+		struct spark_recent { float x = 0.0f, y = 0.0f, z = 0.0f; UINT frame = 0; };
+		std::array<spark_recent, 64> spark_recent_ {};
+		UINT spark_recent_next_ = 0;
+		void ensure_white_sprite_tex(IDirect3DDevice9* dev);
+		void draw_spark_emitter(IDirect3DDevice9* dev);
+		void note_spark_streaks(const float* position);
 
 		// Vertex declaration tracking
 		IDirect3DVertexDeclaration9* last_decl_ = nullptr;
