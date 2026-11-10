@@ -898,6 +898,28 @@ namespace comp
 		return hr;
 	}
 
+	namespace
+	{
+		// Per frame, for the hitch log in Present: what the game created between two Presents.
+		struct frame_creates { unsigned textures = 0, cubes = 0, vbs = 0, ibs = 0, vs = 0, ps = 0, decls = 0; double create_ms = 0.0; };
+		frame_creates s_creates;
+		double s_last_present_call_ms = 0.0;
+		struct create_timer
+		{
+			LARGE_INTEGER start {};
+			create_timer() { QueryPerformanceCounter(&start); }
+			~create_timer()
+			{
+				static LARGE_INTEGER freq {};
+				if (!freq.QuadPart)
+					QueryPerformanceFrequency(&freq);
+				LARGE_INTEGER now {};
+				QueryPerformanceCounter(&now);
+				s_creates.create_ms += static_cast<double>(now.QuadPart - start.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart);
+			}
+		};
+	}
+
 	HRESULT d3d9ex::D3D9Device::Present(CONST RECT* pSourceRect, CONST RECT* pDestRect, HWND hDestWindowOverride, CONST RGNDATA* pDirtyRegion)
 	{
 		TRACE_IF_ACTIVE(trace_Present, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
@@ -908,9 +930,11 @@ namespace comp
 		s_composite_requested = false;
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
-		// A frame presented over 300 ms after the last one is a hitch the player sees: logged with the wall clock (the remix log's
-		// times) and the frame count, to match against what loaded around it.
+		// A frame presented over [Diagnostics] HitchMs (300) after the last one is a hitch the player sees: logged with the wall clock
+		// (the remix log's times), the frame count, how long the last Present call blocked (Remix's side) against the rest (the game and
+		// the proxy between Presents), and what the game created in between, to match against what loaded around it.
 		{
+			static const double hitch_ms = shared::common::config::get().get_float("Diagnostics", "HitchMs", 300.0f);
 			static LARGE_INTEGER s_last {}, s_freq {};
 			LARGE_INTEGER now {};
 			QueryPerformanceCounter(&now);
@@ -919,15 +943,19 @@ namespace comp
 			if (s_last.QuadPart)
 			{
 				const double ms = static_cast<double>(now.QuadPart - s_last.QuadPart) * 1000.0 / static_cast<double>(s_freq.QuadPart);
-				if (ms > 300.0)
+				if (ms > hitch_ms)
 				{
 					SYSTEMTIME t {};
 					GetLocalTime(&t);
-					shared::common::log("Hitch", std::format("{:02}:{:02}:{:02}.{:03} frame {}: {:.0f} ms since the last Present",
-						t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, ffp.frame_count(), ms));
+					const auto& c = s_creates;
+					shared::common::log("Hitch", std::format("{:02}:{:02}:{:02}.{:03} frame {}: {:.0f} ms since the last Present (that Present {:.0f} ms, "
+						"the rest {:.0f} ms; creates {:.0f} ms: tex {} cube {} vb {} ib {} vs {} ps {} decl {}; draws {})",
+						t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, ffp.frame_count(), ms, s_last_present_call_ms, ms - s_last_present_call_ms,
+						c.create_ms, c.textures, c.cubes, c.vbs, c.ibs, c.vs, c.ps, c.decls, ffp.draw_call_count()));
 				}
 			}
 			s_last = now;
+			s_creates = {};
 		}
 		rt_tracker::on_present();
 		perf::on_present();
@@ -941,7 +969,12 @@ namespace comp
 				s_split.limiter_ticks += split_now() - limiter_start;
 		}
 		const long long present_start = shared::common::ffp_prof::profiling() ? split_now() : 0;
+		LARGE_INTEGER call_start {}, call_end {}, call_freq {};
+		QueryPerformanceCounter(&call_start);
 		auto hr = m_pIDirect3DDevice9->Present(pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+		QueryPerformanceCounter(&call_end);
+		QueryPerformanceFrequency(&call_freq);
+		s_last_present_call_ms = static_cast<double>(call_end.QuadPart - call_start.QuadPart) * 1000.0 / static_cast<double>(call_freq.QuadPart);
 		split_on_present(present_start ? split_now() - present_start : 0);
 		benchmark::on_present();
 		if (auto* t = tracer::get()) t->on_present();
@@ -980,6 +1013,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9** ppTexture, HANDLE* pSharedHandle)
 	{
+		s_creates.textures++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateTexture, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
 		const UINT asked_width = Width, asked_height = Height;
@@ -1059,6 +1094,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateCubeTexture(UINT EdgeLength, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DCubeTexture9** ppCubeTexture, HANDLE* pSharedHandle)
 	{
+		s_creates.cubes++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateCubeTexture, EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
 		const crash_context::stopwatch sw;
 		const auto hr = m_pIDirect3DDevice9->CreateCubeTexture(EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
@@ -1071,6 +1108,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateVertexBuffer(UINT Length, DWORD Usage, DWORD FVF, D3DPOOL Pool, IDirect3DVertexBuffer9** ppVertexBuffer, HANDLE* pSharedHandle)
 	{
+		s_creates.vbs++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateVertexBuffer, Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
 		const crash_context::stopwatch sw;
 		const auto hr = m_pIDirect3DDevice9->CreateVertexBuffer(Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
@@ -1081,6 +1120,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateIndexBuffer(UINT Length, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DIndexBuffer9** ppIndexBuffer, HANDLE* pSharedHandle)
 	{
+		s_creates.ibs++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateIndexBuffer, Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle);
 		const crash_context::stopwatch sw;
 		const auto hr = m_pIDirect3DDevice9->CreateIndexBuffer(Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle);
@@ -1754,6 +1795,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateVertexDeclaration(CONST D3DVERTEXELEMENT9* pVertexElements, IDirect3DVertexDeclaration9** ppDecl)
 	{
+		s_creates.decls++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateVertexDeclaration, pVertexElements, ppDecl);
 		auto hr = m_pIDirect3DDevice9->CreateVertexDeclaration(pVertexElements, ppDecl);
 		if (SUCCEEDED(hr) && ppDecl && *ppDecl)
@@ -1788,6 +1831,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreateVertexShader(CONST DWORD* pFunction, IDirect3DVertexShader9** ppShader)
 	{
+		s_creates.vs++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateVertexShader, pFunction, ppShader);
 		auto hr = m_pIDirect3DDevice9->CreateVertexShader(pFunction, ppShader);
 		if (SUCCEEDED(hr) && ppShader && *ppShader)
@@ -1893,6 +1938,8 @@ namespace comp
 
 	HRESULT d3d9ex::D3D9Device::CreatePixelShader(CONST DWORD* pFunction, IDirect3DPixelShader9** ppShader)
 	{
+		s_creates.ps++;
+		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreatePixelShader, pFunction, ppShader);
 		auto hr = m_pIDirect3DDevice9->CreatePixelShader(pFunction, ppShader);
 		if (SUCCEEDED(hr) && ppShader && *ppShader)
