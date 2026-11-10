@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "atmosphere.hpp"
+#include "custom_lights.hpp"
 #include "eye_sprites.hpp"
 
 #include "estus.hpp"
@@ -997,6 +998,9 @@ namespace comp::game::atmosphere
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }
+		// Reads the current map's custom lights file again (rtx_comp\lights\<map>.custom.txt), for placing lights from outside the F4 menu.
+		// Only on a new value: the live file is replayed whole on every write, and a reload throws unsaved menu edits away.
+		else if (key == "Lights.ReloadCustom") { static std::string last; if (value != last) { last = value; game::custom_lights::reload(); } }
 		else if (key == "Lights.SelectSun") { if (auto* gl = game_lights::get()) gl->select_sun(); }
 		// Menu.Tab=<name>: opens the F4 menu on that tab (lookdev screenshots of the UI); "Lights+" also
 		// opens every section of the Lights tab. Menu.Tab=0 closes the menu.

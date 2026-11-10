@@ -3081,7 +3081,10 @@ namespace comp
 		{
 			auto& l = lights[custom_selected_];
 			ImGui::SeparatorText(l.name.c_str());
+			// The same fields are drawn in a custom row's own editor: each place needs its own IDs, or a button drawn in both never takes a click.
+			ImGui::PushID("custom_section");
 			changed |= custom_light_fields_imgui(l);
+			ImGui::PopID();
 			if (const auto* saved = game::custom_lights::saved(l))
 			{
 				if (ImGui::Button("Revert this light"))
@@ -3098,9 +3101,67 @@ namespace comp
 				custom_selected_ = -1;
 				changed = true;
 			}
+			if (custom_selected_ >= 0)
+			{
+				ImGui::PushID("custom_section");
+				custom_light_actions_imgui(custom_selected_);
+				ImGui::PopID();
+			}
 		}
 		if (changed)
 			game::custom_lights::mark_dirty();
+	}
+
+	void game_lights::custom_light_actions_imgui(int index)
+	{
+		auto& lights = game::custom_lights::edit();
+		if (index < 0 || index >= static_cast<int>(lights.size()))
+			return;
+		float cam[3] = {};
+		const bool have_cam = shared::common::ffp_state::get().world_offset(cam[0], cam[1], cam[2]);
+		// A new light from the given one: its own entry in the file, selected and shown under 'Custom lights for this map'.
+		auto append = [&](game::custom_lights::light l, const std::string& name)
+		{
+			l.name = name;
+			l.file_index = -1;
+			lights.push_back(std::move(l));
+			custom_selected_ = static_cast<int>(lights.size()) - 1;
+			open_custom_ = true;
+			game::custom_lights::mark_dirty();
+		};
+		bool duplicate = ImGui::Button("Duplicate");
+		tip("A new light with everything this one has, at the same spot, to move or change on its own.");
+		ImGui::SameLine();
+		if (ImGui::Button("Copy"))
+		{
+			custom_clipboard_ = lights[index];
+			have_custom_clipboard_ = true;
+		}
+		tip("Remembers this light's settings, also for another map.");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!have_custom_clipboard_);
+		const bool paste_new = ImGui::Button("Paste at the camera");
+		tip("A new light with the copied settings where the camera is.");
+		ImGui::SameLine();
+		if (ImGui::Button("Paste onto this"))
+		{
+			auto pasted = custom_clipboard_;
+			pasted.name = lights[index].name;
+			pasted.file_index = lights[index].file_index;
+			std::copy(std::begin(lights[index].pos), std::end(lights[index].pos), std::begin(pasted.pos));
+			lights[index] = std::move(pasted);
+			game::custom_lights::mark_dirty();
+		}
+		tip("Gives this light the copied settings; it keeps its name and position.");
+		ImGui::EndDisabled();
+		if (duplicate)
+			append(lights[index], lights[index].name + "_copy");
+		else if (paste_new && have_cam)
+		{
+			auto pasted = custom_clipboard_;
+			std::copy(std::begin(cam), std::end(cam), std::begin(pasted.pos));
+			append(std::move(pasted), custom_clipboard_.name + "_copy");
+		}
 	}
 
 	bool game_lights::custom_light_fields_imgui(game::custom_lights::light& l)
@@ -3547,11 +3608,14 @@ namespace comp
 				return;
 			form_value("Sent to Remix", std::format("radiance {:.2f} {:.2f} {:.2f}", row.radiance[0], row.radiance[1], row.radiance[2]));
 			ImGui::Spacing();
+			ImGui::PushID("custom_row");
 			if (custom_light_fields_imgui(lights[index]))
 				game::custom_lights::mark_dirty();
 			solo_flash_imgui(row.key);
 			ImGui::Spacing();
+			custom_light_actions_imgui(index);
 			custom_lights_file_buttons();
+			ImGui::PopID();
 			return;
 		}
 		form_value("Source", kKindSection[static_cast<int>(row.kind)]);

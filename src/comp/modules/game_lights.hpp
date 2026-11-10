@@ -159,6 +159,8 @@ namespace comp
 		void custom_lights_imgui();
 		// Every setting of one custom light (the custom section and a custom row's panel); true when one changed.
 		bool custom_light_fields_imgui(game::custom_lights::light& l);
+		// Duplicate, copy and paste for one custom light. May add to the list: nothing held into it stays valid after.
+		void custom_light_actions_imgui(int index);
 		// Save / reload of the current map's custom lights file.
 		void custom_lights_file_buttons();
 		int custom_selected_ = -1;
@@ -323,6 +325,8 @@ namespace comp
 		// Copy / Paste of a light's edits in the list.
 		light_override clipboard_;
 		bool have_clipboard_ = false;
+		game::custom_lights::light custom_clipboard_;
+		bool have_custom_clipboard_ = false;
 		// Duplicate: a custom light made from a row (its spot, colour and reach).
 		void duplicate_as_custom(const light_row& row);
 		std::unordered_set<uint64_t> decoupled_;   // own_key of the lights edited apart from their group, saved
