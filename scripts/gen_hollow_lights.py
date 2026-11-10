@@ -373,8 +373,15 @@ def main():
     print(f'{len(kept)} of {len(tube)} tunnel stops have a light')
     text = '\n'.join(lines) + '\n'
     out = os.path.join(HERE, '..', 'assets', 'lights', f'{MAP}.custom.txt')
+    # Ash Lake shares the map: its hand-placed lights at the end of the file stay.
+    keep = ''
+    if os.path.exists(out):
+        previous = open(out, encoding='utf-8').read()
+        at = previous.find("# Ash Lake, the Everlasting Dragon's end")
+        keep = previous[at:] if at >= 0 else ''
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(text)
+        f.write(text if text.endswith('\n') else text + '\n')
+        f.write(keep)
     if args.deploy:
         shutil.copy2(out, os.path.join(os.path.dirname(args.data), 'rtx_comp', 'lights', f'{MAP}.custom.txt'))
     print('wrote', os.path.normpath(out))

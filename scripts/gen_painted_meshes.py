@@ -22,7 +22,8 @@ sys.path.insert(0, str(br.BBFORMATS))
 from bbformats.flver import read_flver  # noqa: E402
 
 WATER_PLANE = -322.4  # m0120B2A13, the lake's water mesh
-BEACH = {"m13_n_floor_12", "m13_n_floor_14"}
+# floor_70 too: the sand strips that run through the beaches, drawn with grey colour like the rest (left out, they stood out as bright polygons).
+BEACH = {"m13_n_floor_12", "m13_n_floor_14", "m13_n_floor_70"}
 OUT = Path(__file__).parent.parent / "assets" / "mesh_tables" / "painted_meshes.txt"
 
 

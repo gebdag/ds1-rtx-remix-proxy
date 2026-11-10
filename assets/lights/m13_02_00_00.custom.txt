@@ -166,3 +166,11 @@
 -337.6 -224.2 129.5 8 12 213 255 205 600 Hollow_tunnel_22 remix 42.62 0.00 0.800 1.00
 -329.0 -225.0 131.3 8 12 213 255 205 600 Hollow_tunnel_23 remix 66.82 0.00 0.800 1.00
 -327.9 -225.5 131.2 8 12 213 255 205 600 Hollow_tunnel_24 remix 39.93 0.00 0.800 1.00
+# Ash Lake, the Everlasting Dragon's end. Above the branches at the nest: its sand takes their shadows, as the game's lightmaps paint them.
+-702.0 -380.0 -340.0 8 12 190 231 255 600 AshDragon_key remix 10250.0 0.00 0.300 1.00 spot 0.0000 -1.0000 0.2500 30.0 0.60
+# Along the sand path to it.
+-698.5 -372.0 -303.0 8 12 190 231 255 600 AshDragon_path1 remix 500.0 0.00 0.500 1.00 spot 0.0000 -1.0000 0.0000 30.0 0.60
+-701.0 -372.0 -283.0 8 12 190 231 255 600 AshDragon_path2 remix 1000.0 0.00 0.500 1.00 spot 0.0000 -1.0000 0.0000 30.0 0.60
+# Fill from the side, for what the game's probes light and the great trees shut off here: the trunks by the path, whoever stands on it.
+-702.0 -406.0 -312.0 8 12 235 255 205 600 AshDragon_fill1 remix 5.0 0.00 1.000 1.00
+-699.0 -406.0 -292.0 8 12 235 255 205 600 AshDragon_fill2 remix 5.0 0.00 1.000 1.00
