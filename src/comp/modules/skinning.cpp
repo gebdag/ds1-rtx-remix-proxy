@@ -155,6 +155,19 @@ namespace comp
 			dev->SetRenderState(D3DRS_ALPHAREF, game::atmosphere::seath_alpha_ref());
 			dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
 		}
+		// Blended fur (a diffuse named for fur: the Taurus Demon's c2250_fur, Priscilla's, the DLC's) carries the fur marker: Remix blends
+		// its denser texels in order rather than stochastically (rtx.stochasticAlphaBlendOpacityThresholdFur, Surface::isDs1Fur). By name,
+		// not by fur_shell: that test (punch-through DXT1 with vertex colour) also takes bushes and misses the Taurus. Stage 4 put back after.
+		constexpr DWORD kFurMarker = 0xD400000F;
+		DWORD fur_stage4 = 0, fur_alpha_blend = FALSE;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &fur_alpha_blend);
+		const std::string diffuse_name = game::texture_names::name_of(ffp.cur_texture(0));
+		const bool fur_marked = fur_alpha_blend && (diffuse_name.find("_fur") != std::string::npos || priscilla_fur);
+		if (fur_marked)
+		{
+			dev->GetTextureStageState(4, D3DTSS_CONSTANT, &fur_stage4);
+			dev->SetTextureStageState(4, D3DTSS_CONSTANT, kFurMarker);
+		}
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
 		if (seath_glow && seath_mode == 1)
 			dev->SetRenderState(D3DRS_DESTBLEND, seath_dest);
@@ -179,6 +192,8 @@ namespace comp
 					dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
 				}
 		}
+		if (fur_marked)
+			dev->SetTextureStageState(4, D3DTSS_CONSTANT, fur_stage4);
 		if (scrolled)
 			game::texture_scroll::clear(dev);
 		if (toned)
