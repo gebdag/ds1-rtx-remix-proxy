@@ -31,6 +31,10 @@ namespace comp
 {
 	namespace
 	{
+		// The own sun's reach when Save writes it: the whole map, or a box this far around the player.
+		int g_sun_scope_area = 0;
+		float g_sun_box_reach = 30.0f;
+
 		using kind = game_lights::light_kind;
 
 		// A slot may be reused by a different light later, so the hash mixes the slot
@@ -1810,6 +1814,35 @@ namespace comp
 		for (const auto& h : holds)
 			game::map_lights::set_category(h.index, h.current.intensity, h.current.radius, h.current.enabled, h.current.follows_effect);
 
+		// This map's own sun, for the map or for a box around the player, or none.
+		{
+			auto close3 = [](const float* x, const float* y)
+			{ return std::fabs(x[0] - y[0]) <= 5e-4f && std::fabs(x[1] - y[1]) <= 5e-4f && std::fabs(x[2] - y[2]) <= 5e-4f; };
+			const auto map_name = game::map_lights::current_map_name();
+			float saved_colour[3] = {}, saved_direction[3] = {};
+			bool saved_box = false;
+			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box);
+			const bool own = sun_colour_set && sun_direction_set;
+			const bool differs = own != have_saved ||
+				(own && (!close3(sun_colour, saved_colour) || !close3(sun_direction, saved_direction) || saved_box != (g_sun_scope_area != 0)));
+			if (!map_name.empty() && differs && !save_skip_.count("sun:" + map_name))
+			{
+				if (!own)
+					ok &= game::area_overrides::remove_sun(map_name);
+				else
+				{
+					float x = 0.0f, depth = 0.0f, up = 0.0f;
+					const bool have_position = game::camera::get_char_pos(x, depth, up) && !(x == 0.0f && depth == 0.0f && up == 0.0f);
+					const float r = g_sun_box_reach;
+					const float box_min[3] = { x - r, up - r, depth - r }, box_max[3] = { x + r, up + r, depth + r };
+					const bool box = g_sun_scope_area != 0 && have_position;
+					ok &= game::area_overrides::save_sun(map_name, box ? box_min : nullptr, box ? box_max : nullptr, sun_colour, sun_direction);
+				}
+			}
+			if (game::custom_lights::dirty() && !save_skip_.count("custom:" + map_name))
+				ok &= game::custom_lights::save();
+		}
+
 		saved_overrides_.clear();
 		for (const auto& [key, o] : written)
 			saved_overrides_[key] = o;
@@ -2095,9 +2128,9 @@ namespace comp
 
 		if (ImGui::Button("Save"))
 			save_all();
-		tip("Writes [Lights], [Sun] and [PlayerLight] to remix-comp-proxy.ini, per-light edits to\n"
-			"rtx_comp\\lights\\light_overrides.txt and the stand-in categories to categories.txt.\n"
-			"Custom lights have their own Save button.");
+		tip("Writes every light change listed below: [Lights], [Sun] and [PlayerLight] to remix-comp-proxy.ini, per-light edits to\n"
+			"rtx_comp\\lights\\light_overrides.txt, the stand-in categories to categories.txt, this map's own sun to\n"
+			"rtx_comp\\settings\\area_overrides.ini and this map's custom lights to their file.");
 		ImGui::SameLine();
 		if (ImGui::Button("Revert to saved"))
 			revert_to_saved();
@@ -2261,6 +2294,53 @@ namespace comp
 				static_cast<int>(reverts.size()) - 1 });
 		}
 
+		// This map's own sun (written to area_overrides.ini) and its custom lights (their file).
+		{
+			const auto map_name = game::map_lights::current_map_name();
+			float saved_colour[3] = {}, saved_direction[3] = {};
+			bool saved_box = false;
+			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box);
+			const bool own = sun_colour_set && sun_direction_set;
+			const bool differs = own != have_saved ||
+				(own && (!near_equal3(sun_colour, saved_colour) || !near_equal3(sun_direction, saved_direction) || saved_box != (g_sun_scope_area != 0)));
+			if (!map_name.empty() && differs)
+			{
+				auto text = [](bool on, const float* colour, const float* direction, bool box)
+				{
+					if (!on)
+						return std::string("the game's");
+					const float elevation = std::asin(std::clamp(-direction[1], -1.0f, 1.0f)) * kRadToDeg;
+					const float heading = std::atan2(-direction[0], -direction[2]) * kRadToDeg;
+					return std::format("{:.3f},{:.3f},{:.3f} at {:.1f} / {:.1f} deg{}", colour[0], colour[1], colour[2], elevation, heading,
+						box ? ", an area" : "");
+				};
+				reverts.push_back([this, have_saved, saved_box]()
+				{
+					float c[3] = {}, d[3] = {};
+					bool box = false;
+					if (have_saved && game::area_overrides::saved_sun(game::map_lights::current_map_name(), c, d, box))
+					{
+						std::memcpy(sun_colour, c, sizeof(c));
+						std::memcpy(sun_direction, d, sizeof(d));
+						sun_colour_set = sun_direction_set = true;
+						g_sun_scope_area = box ? 1 : 0;
+					}
+					else
+						sun_colour_set = sun_direction_set = false;
+				});
+				items.push_back({ "sun:" + map_name, std::format("Sun of {}", map_name),
+					std::format("{} -> {}", text(have_saved, saved_colour, saved_direction, saved_box),
+						text(own, sun_colour, sun_direction, g_sun_scope_area != 0)),
+					static_cast<int>(reverts.size()) - 1 });
+			}
+			if (game::custom_lights::dirty())
+			{
+				reverts.push_back([this]() { game::custom_lights::reload(); custom_selected_ = -1; });
+				items.push_back({ "custom:" + map_name, std::format("Custom lights of {}", map_name), "changed",
+					static_cast<int>(reverts.size()) - 1 });
+			}
+		}
+
 		// Ticks of items that no longer differ are forgotten.
 		for (auto it = save_skip_.begin(); it != save_skip_.end();)
 		{
@@ -2282,8 +2362,6 @@ namespace comp
 		{
 			if (items.empty())
 				ImGui::TextDisabled("Save would write nothing: everything is as the files have it.");
-			if (game::custom_lights::dirty())
-				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Custom lights for this map are changed: they have their own Save button.");
 			for (const auto& x : items)
 			{
 				ImGui::PushID(x.id.c_str());
@@ -2372,8 +2450,8 @@ namespace comp
 
 			bool own = sun_colour_set && sun_direction_set;
 			form_checkbox("Set my own colour and direction", "##sun_own", &own,
-				"Not saved until you press a Save button; unsaved settings are lost when you enter another area.\n"
-				"Turning this off deletes a saved sun for this map.\n"
+				"Saved with Save at the top, like every light change; unsaved, it is lost when you enter another area.\n"
+				"Turning this off and saving takes the saved sun of this map away.\n"
 				"Lightmaps still dim it on lightmapped surfaces, as they do the game's sun.");
 			{
 				// Saved: the colour and direction the INI or area_overrides.ini give here. Default: the game's sun, for
@@ -2402,8 +2480,6 @@ namespace comp
 			if (own != (sun_colour_set && sun_direction_set))
 			{
 				sun_colour_set = sun_direction_set = own;
-				if (!own && saved)
-					game::area_overrides::remove_sun(map_name);
 				if (own)
 				{
 					// From what is there now, so turning it on changes nothing until it is edited.
@@ -2442,33 +2518,22 @@ namespace comp
 					sun_direction[2] = -std::cos(e) * std::cos(h);
 				}
 
-				static float box_reach = 30.0f;
-				if (ImGui::Button("Save for this map"))
-					game::area_overrides::save_sun(map_name, nullptr, nullptr, sun_colour, sun_direction);
+				form_label("Applies to", "Where Save puts this sun: the whole map, or a box this far around where you stand now.\n"
+					"Written to rtx_comp\\settings\\area_overrides.ini, which you can also edit by hand. Each map keeps one saved sun.");
+				ImGui::RadioButton("This map##sun_scope_map", &g_sun_scope_area, 0);
 				ImGui::SameLine();
-				float x = 0.0f, depth = 0.0f, up = 0.0f;
-				const bool have_position = game::camera::get_char_pos(x, depth, up) && !(x == 0.0f && depth == 0.0f && up == 0.0f);
-				ImGui::BeginDisabled(!have_position);
-				if (ImGui::Button("Save for this area"))
+				ImGui::RadioButton("An area##sun_scope_area", &g_sun_scope_area, 1);
+				if (g_sun_scope_area)
 				{
-					const float box_min[3] = { x - box_reach, up - box_reach, depth - box_reach };
-					const float box_max[3] = { x + box_reach, up + box_reach, depth + box_reach };
-					game::area_overrides::save_sun(map_name, box_min, box_max, sun_colour, sun_direction);
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+					ImGui::SliderFloat("##sun_own_box", &g_sun_box_reach, 2.0f, 200.0f, "%.0f m around you");
 				}
-				ImGui::EndDisabled();
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
-				ImGui::SliderFloat("##sun_own_box", &box_reach, 2.0f, 200.0f, "%.0f m around you");
-				tip("Saves to rtx_comp\\settings\\area_overrides.ini, which you can also edit by hand. Each map keeps one saved sun.\n"
-					"An area's sun applies while you are inside it.");
 			}
 			if (saved)
-			{
-				ImGui::TextDisabled("A custom sun is saved for this map.");
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Delete"))
-					game::area_overrides::remove_sun(map_name);
-			}
+				ImGui::TextDisabled("This map has a saved sun of its own. Save at the top writes changes to it.");
+			else if (own)
+				ImGui::TextDisabled("Not saved yet: Save at the top writes it.");
 		}
 	}
 
@@ -3147,16 +3212,12 @@ namespace comp
 
 	void game_lights::custom_lights_file_buttons()
 	{
-		if (ImGui::Button("Save to file"))
-			game::custom_lights::save();
-		tip("Writes this map's custom lights to its file.");
-		ImGui::SameLine();
-		if (ImGui::Button("Reload file"))
+		if (ImGui::Button("Revert custom lights"))
 		{
 			game::custom_lights::reload();
 			custom_selected_ = -1;
 		}
-		tip("Throws away unsaved custom light changes and reads the file again.");
+		tip("Throws away unsaved custom light changes and reads the file again. Save at the top writes them.");
 		if (game::custom_lights::dirty())
 		{
 			ImGui::SameLine();

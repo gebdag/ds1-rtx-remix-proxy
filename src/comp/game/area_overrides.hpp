@@ -15,4 +15,6 @@ namespace comp::game::area_overrides
 	bool remove_sun(const std::string& map);
 	// Whether this map has a section from the panel.
 	bool has_saved_sun(const std::string& map);
+	// The panel's saved sun for this map: its colour, direction and whether it is for a box. False when none is saved.
+	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box);
 }

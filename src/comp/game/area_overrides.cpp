@@ -238,6 +238,34 @@ namespace comp::game::area_overrides
 		return std::any_of(g_areas.begin(), g_areas.end(), [&](const area& a) { return a.name.rfind(wanted, 0) == 0; });
 	}
 
+	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box)
+	{
+		if (map.empty())
+			return false;
+		const auto wanted = sun_section(map);
+		for (const auto& a : g_areas)
+		{
+			if (a.name.rfind(wanted, 0) != 0)
+				continue;
+			bool have_colour = false, have_direction = false;
+			for (const auto& [key, value] : a.values)
+			{
+				if (key == "proxy.Sun.Colour")
+					have_colour = std::sscanf(value.c_str(), "%f , %f , %f", &colour[0], &colour[1], &colour[2]) == 3;
+				else if (key == "proxy.Sun.Direction")
+					have_direction = std::sscanf(value.c_str(), "%f , %f , %f", &direction[0], &direction[1], &direction[2]) == 3;
+			}
+			if (!have_colour || !have_direction)
+				continue;
+			const float length = std::sqrt(direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
+			for (int c = 0; c < 3; ++c)
+				direction[c] /= std::max(length, 1e-6f);
+			in_box = a.has_box;
+			return true;
+		}
+		return false;
+	}
+
 	void frame_update(unsigned int frame)
 	{
 		if (frame % 15 != 0 || !shared::common::remix_api::is_initialized())
