@@ -44,4 +44,7 @@ namespace comp::game::ffx_lights
 	// The particles drawn this frame: lights that follow their effect's sprites (Tomb of the Giants' lantern halos) take their level from them.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);
 
+	// Live options Lights.FollowRiseSeconds, Lights.FollowFallSeconds, Lights.FollowFullAlpha: false for any other key.
+	bool set_follow_option(const std::string& key, float value);
+
 }

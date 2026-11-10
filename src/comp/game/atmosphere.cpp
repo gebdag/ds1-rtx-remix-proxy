@@ -3,6 +3,7 @@
 #include "eye_sprites.hpp"
 
 #include "estus.hpp"
+#include "ffx_lights.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
@@ -952,6 +953,7 @@ namespace comp::game::atmosphere
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
+		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
 		// HDR10 output: the final pass copy and the runtime's rtx.hdr.enable follow at once; the scene target's format
 		// is set when the game creates it (a restart).
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;

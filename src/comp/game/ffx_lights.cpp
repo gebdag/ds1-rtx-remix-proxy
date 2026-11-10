@@ -45,7 +45,7 @@ namespace comp::game::ffx_lights
 			int slot;
 			UINT seen;
 		};
-		std::unordered_map<unsigned, tracked> g_slots;
+		std::unordered_map<unsigned long long, tracked> g_slots; // by instance address, or kSpotKey | a spot's id
 		std::vector<point_lights::light> g_out;
 
 		// How bright the effect's sprite is, this far into its life: 0 past the end.
@@ -73,28 +73,40 @@ namespace comp::game::ffx_lights
 		std::unordered_map<unsigned, fade> g_fades;
 
 		// Effects whose light follows the sprites they draw at their spot, as bright as those are opaque: Tomb of the Giants' lantern halos
-		// (FFX 540). Their placed stand-ins did this (map_lights, category lantern, full at alpha 0.196); with those off by default the table's
-		// light for the effect went on and off at once while its halo faded in and out. Same rule and timing as map_lights' effect gate.
-		struct follow_rule { unsigned ffx_id; float full_alpha; };
-		constexpr follow_rule kFollow[] = { { 540, 0.196f } };
+		// (FFX 540, the Skull Lantern's resonance: EMEVD 11315150 creates and deletes it per lantern). It streams halo particles (s02000,
+		// alpha 0.39, 0.67 s) and core particles (s01037, alpha 0.19, 1.33 s); when the game deletes the effect its last particles still fade
+		// out. So the light belongs to the lantern's spot, not to the instance: it starts dark, rises and falls with what is drawn there
+		// (full at the halo's own alpha, so the core alone gives about half), and outlives the instance until the particles are gone.
+		// Their placed stand-ins did the same (map_lights, category lantern, against the highest alpha seen).
+		struct follow_rule { int ffx_id; };
+		constexpr follow_rule kFollow[] = { { 540 } };
 		constexpr float kFollowRadius = 1.5f;
-		constexpr float kFollowRiseSeconds = 0.05f;
-		constexpr float kFollowFallSeconds = 0.2f;
+		// Live: proxy.Lights.FollowRiseSeconds / FollowFallSeconds / FollowFullAlpha (set_follow_option).
+		float g_follow_rise_seconds = 0.05f;
+		float g_follow_fall_seconds = 0.2f;
+		float g_follow_full_alpha = 0.39f; // FFX 540's halo records: rgba(0.39, 0.82, 1.00, 0.39); the captures' strongest halo is 99/255
+		// An instance this close to a spot is that lantern again (a new instance after the game deleted the last one).
+		constexpr float kFollowSameSpot = 0.75f;
+		constexpr unsigned long long kSpotKey = 1ull << 32;
 		// Only a spot the game would draw its effect at, and shows nothing, has lost it: inside the view less this margin, within this range.
 		constexpr float kFollowViewRange = 30.0f;
 		constexpr float kFollowViewMargin = 0.1f;
 		struct follower
 		{
+			unsigned id = 0;
+			int ffx_id = 0;
+			int top_id = 0;
+			const entry* e = nullptr;
 			float pos[3] = {};
 			float alpha_frame = 0.0f; // strongest sprite alpha at the spot since the last collect
-			float level = 1.0f;       // lit, as before this followed anything, until its spot is in view or a sprite is drawn there
-			float full_alpha = 1.0f;
-			UINT seen = 0;
+			float level = 0.0f;
+			UINT instance_seen = 0;   // last frame an instance of the effect stood here
 		};
-		std::unordered_map<unsigned, follower> g_followers; // by instance address
+		std::vector<follower> g_followers;
+		unsigned g_next_follower = 1;
 		std::chrono::steady_clock::time_point g_follow_time;
 
-		const follow_rule* follow_rule_for(unsigned ffx_id)
+		const follow_rule* follow_rule_for(int ffx_id)
 		{
 			for (const auto& r : kFollow)
 				if (r.ffx_id == ffx_id)
@@ -199,13 +211,22 @@ namespace comp::game::ffx_lights
 		for (UINT v = 0; v < count; ++v)
 		{
 			const auto& p = points[v];
-			for (auto& [address, fl] : g_followers)
+			for (auto& fl : g_followers)
 			{
 				const float dx = p.x - fl.pos[0], dy = p.y - fl.pos[1], dz = p.z - fl.pos[2];
 				if (dx * dx + dy * dy + dz * dz <= kFollowRadius * kFollowRadius)
 					fl.alpha_frame = std::max(fl.alpha_frame, p.alpha);
 			}
 		}
+	}
+
+	bool set_follow_option(const std::string& key, float value)
+	{
+		if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
+		else if (key == "Lights.FollowFallSeconds") g_follow_fall_seconds = std::max(value, 0.001f);
+		else if (key == "Lights.FollowFullAlpha") g_follow_full_alpha = std::max(value, 0.001f);
+		else return false;
+		return true;
 	}
 
 	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale)
@@ -222,9 +243,10 @@ namespace comp::game::ffx_lights
 		const float now = std::chrono::duration<float>(time_now - g_origin).count();
 		const float follow_dt = std::clamp(std::chrono::duration<float>(time_now - g_follow_time).count(), 0.0f, 0.5f);
 		g_follow_time = time_now;
-		const float follow_rise = 1.0f - std::exp(-follow_dt / kFollowRiseSeconds);
-		const float follow_fall = 1.0f - std::exp(-follow_dt / kFollowFallSeconds);
-		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; float level; };
+		const float follow_rise = 1.0f - std::exp(-follow_dt / g_follow_rise_seconds);
+		const float follow_fall = 1.0f - std::exp(-follow_dt / g_follow_fall_seconds);
+		// inst is null for a spot that follows its effect's sprites (its key is kSpotKey | its id).
+		struct candidate { const ffx_instances::instance* inst; const entry* e; float pos[3]; float distance; float level; unsigned long long key; int ffx_id; int top_id; };
 		std::vector<candidate> candidates;
 		for (const auto& inst : ffx_instances::current())
 		{
@@ -234,6 +256,27 @@ namespace comp::game::ffx_lights
 			candidate c { &inst, &it->second };
 			if (!ffx_instances::world_position(inst.address, c.pos))
 				continue;
+			c.key = inst.address;
+			c.ffx_id = inst.ffx_id;
+			// One that follows its effect's sprites: its light is the spot's, below.
+			if (follow_rule_for(inst.ffx_id))
+			{
+				auto spot = std::find_if(g_followers.begin(), g_followers.end(), [&](const follower& fl)
+					{
+						const float dx = fl.pos[0] - c.pos[0], dy = fl.pos[1] - c.pos[1], dz = fl.pos[2] - c.pos[2];
+						return fl.ffx_id == inst.ffx_id && dx * dx + dy * dy + dz * dz <= kFollowSameSpot * kFollowSameSpot;
+					});
+				if (spot == g_followers.end())
+				{
+					g_followers.push_back({ g_next_follower++, inst.ffx_id });
+					spot = std::prev(g_followers.end());
+				}
+				std::memcpy(spot->pos, c.pos, sizeof(spot->pos));
+				spot->e = c.e;
+				spot->top_id = ffx_instances::top_effect_id(inst.address);
+				spot->instance_seen = frame;
+				continue;
+			}
 			// How bright it is now: it ends with what it shows, not with the instance.
 			auto [f, fresh_fade] = g_fades.try_emplace(inst.address, fade { inst.ffx_id, 1.0f, frame, now });
 			if (fresh_fade || f->second.ffx_id != inst.ffx_id)
@@ -284,24 +327,6 @@ namespace comp::game::ffx_lights
 				f->second.ended = -1.0f;
 			}
 			c.level = f->second.level;
-			// One that follows its effect's sprites: as bright as the halo drawn at it is opaque.
-			if (const auto* rule = follow_rule_for(inst.ffx_id))
-			{
-				auto& fl = g_followers[inst.address];
-				std::memcpy(fl.pos, c.pos, sizeof(fl.pos));
-				fl.full_alpha = rule->full_alpha;
-				fl.seen = frame;
-				const float alpha = fl.alpha_frame;
-				fl.alpha_frame = 0.0f;
-				// Nothing drawn at the light: gone if the game would have drawn it there, else as it was.
-				if (alpha > 0.0f || follow_spot_in_view(c.pos))
-				{
-					// Against the halo's own full alpha only: a bright spark or spell near the lantern would otherwise have set the scale for good.
-					const float target = std::min(1.0f, alpha / fl.full_alpha);
-					fl.level += (target - fl.level) * (target > fl.level ? follow_rise : follow_fall);
-				}
-				c.level *= fl.level;
-			}
 			if (c.level < kFadeOff)
 				continue;
 			if (c.e->persistent && std::any_of(covers.begin(), covers.end(), [&](const point_lights::light* l)
@@ -316,7 +341,33 @@ namespace comp::game::ffx_lights
 				candidates.push_back(c);
 		}
 		std::erase_if(g_fades, [&](const auto& t) { return t.second.seen != frame; });
-		std::erase_if(g_followers, [&](const auto& t) { return t.second.seen != frame; });
+
+		// The spots that follow their effect's sprites: as bright as what is drawn there is opaque, against the halo's full alpha. With the
+		// effect still placed there, a spot in view showing nothing has lost it and one out of view keeps its level; with the effect gone,
+		// its last particles fade and so does the light.
+		for (auto& fl : g_followers)
+		{
+			const float alpha = fl.alpha_frame;
+			fl.alpha_frame = 0.0f;
+			const bool placed = fl.instance_seen == frame;
+			if (alpha > 0.0f || !placed || follow_spot_in_view(fl.pos))
+			{
+				const float target = std::min(1.0f, alpha / g_follow_full_alpha);
+				fl.level += (target - fl.level) * (target > fl.level ? follow_rise : follow_fall);
+			}
+			if (fl.level < kFadeOff || !fl.e)
+				continue;
+			candidate c { nullptr, fl.e, { fl.pos[0], fl.pos[1], fl.pos[2] } };
+			c.level = fl.level;
+			c.key = kSpotKey | fl.id;
+			c.ffx_id = fl.ffx_id;
+			c.top_id = fl.top_id;
+			const float dx = c.pos[0] - cam[0], dy = c.pos[1] - cam[1], dz = c.pos[2] - cam[2];
+			c.distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+			if (c.distance - c.e->dwindle_end <= kReach)
+				candidates.push_back(c);
+		}
+		std::erase_if(g_followers, [&](const follower& fl) { return fl.instance_seen != frame && fl.level < kFadeOff; });
 		if (candidates.size() > kMaxLights)
 		{
 			std::nth_element(candidates.begin(), candidates.begin() + kMaxLights, candidates.end(),
@@ -326,9 +377,9 @@ namespace comp::game::ffx_lights
 
 		for (const auto& c : candidates)
 		{
-			auto [it, fresh] = g_slots.try_emplace(c.inst->address, tracked { c.inst->ffx_id, 0, frame });
-			if (fresh || it->second.ffx_id != c.inst->ffx_id)
-				it->second = { c.inst->ffx_id, free_slot(), frame };
+			auto [it, fresh] = g_slots.try_emplace(c.key, tracked { c.ffx_id, 0, frame });
+			if (fresh || it->second.ffx_id != c.ffx_id)
+				it->second = { c.ffx_id, free_slot(), frame };
 			it->second.seen = frame;
 
 			point_lights::light l {};
@@ -339,8 +390,8 @@ namespace comp::game::ffx_lights
 			l.dwindle_end = c.e->dwindle_end;
 			l.has_params = true;
 			l.source = point_lights::param_source::ffx_table;
-			l.ffx_id = c.inst->ffx_id;
-			l.ffx_top_id = ffx_instances::top_effect_id(c.inst->address);
+			l.ffx_id = c.ffx_id;
+			l.ffx_top_id = c.inst ? ffx_instances::top_effect_id(c.inst->address) : c.top_id;
 			g_out.push_back(l);
 		}
 		std::erase_if(g_slots, [&](const auto& t) { return t.second.seen != frame; });
