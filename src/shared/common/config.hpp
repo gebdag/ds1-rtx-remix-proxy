@@ -94,6 +94,9 @@ namespace shared::common
 			// texture-hash filtering: those hashes may be ignored/hidden in
 			// rtx.conf, making the water instance vanish.
 			bool water_fallback_albedo = true;
+			// [FFP] WaterAreaStandIn: 1 = the water draws with the second stand-in colour (0xFF2F5D74 instead of 0xFF2F5D73), so its
+			// own mod material applies (ds1_water: New Londo's murk). Meant for area_overrides.ini, not the main INI.
+			int water_area_stand_in = 0;
 			// Query D3DRS_ZWRITEENABLE from the device on every draw (one extra
 			// bridge round-trip per draw). Catches changes applied through
 			// StateBlock::Apply that the SetRenderState intercept can't see.

@@ -1274,6 +1274,7 @@ namespace shared::common
 		if (skinned_exp_decl_) { skinned_exp_decl_->Release(); skinned_exp_decl_ = nullptr; }
 
 		if (water_fallback_tex_) { water_fallback_tex_->Release(); water_fallback_tex_ = nullptr; }
+		if (water_area_tex_) { water_area_tex_->Release(); water_area_tex_ = nullptr; }
 		if (white_sprite_tex_) { white_sprite_tex_->Release(); white_sprite_tex_ = nullptr; }
 		cur_ps_is_water_surface_ = false;
 		cur_ps_swamp_pass_ = swamp_pass::None;
@@ -1448,26 +1449,30 @@ namespace shared::common
 
 		if (!chosen)
 		{
-			if (!water_fallback_tex_)
+			// The second stand-in differs in one bit, so Remix hashes it apart and the mod can give an area's water its own
+			// material ([FFP] WaterAreaStandIn from area_overrides.ini; ds1_water has New Londo's murk on it).
+			const bool area = cfg_->water_area_stand_in == 1;
+			IDirect3DTexture9*& tex = area ? water_area_tex_ : water_fallback_tex_;
+			if (!tex)
 			{
 				if (SUCCEEDED(dev->CreateTexture(8, 8, 1, 0, D3DFMT_A8R8G8B8,
-					D3DPOOL_MANAGED, &water_fallback_tex_, nullptr)))
+					D3DPOOL_MANAGED, &tex, nullptr)))
 				{
 					D3DLOCKED_RECT lr{};
-					if (SUCCEEDED(water_fallback_tex_->LockRect(0, &lr, nullptr, 0)))
+					if (SUCCEEDED(tex->LockRect(0, &lr, nullptr, 0)))
 					{
 						for (int y = 0; y < 8; y++)
 						{
 							auto* row = reinterpret_cast<DWORD*>(
 								static_cast<unsigned char*>(lr.pBits) + y * lr.Pitch);
 							for (int x = 0; x < 8; x++)
-								row[x] = 0xFF2F5D73; // muted water blue
+								row[x] = area ? 0xFF2F5D74 : 0xFF2F5D73; // muted water blue
 						}
-						water_fallback_tex_->UnlockRect(0);
+						tex->UnlockRect(0);
 					}
 				}
 			}
-			chosen = water_fallback_tex_;
+			chosen = tex;
 			if (!chosen) return false;
 		}
 
@@ -1476,7 +1481,7 @@ namespace shared::common
 		{
 			albedo_log_budget--;
 			log("WATER", std::format("albedo={} ptr={:#x}",
-				chosen == water_fallback_tex_ ? "fallback" : "static",
+				chosen == water_fallback_tex_ ? "fallback" : chosen == water_area_tex_ ? "area fallback" : "static",
 				reinterpret_cast<uintptr_t>(chosen)));
 		}
 

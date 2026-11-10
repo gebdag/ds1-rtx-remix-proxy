@@ -795,6 +795,7 @@ namespace shared::common
 		// Solid-color fallback albedo for water draws with no stable static
 		// texture bound. Gives Remix a constant texture hash to remap.
 		IDirect3DTexture9* water_fallback_tex_ = nullptr;
+		IDirect3DTexture9* water_area_tex_ = nullptr; // the second stand-in ([FFP] WaterAreaStandIn)
 		IDirect3DTexture9* white_sprite_tex_ = nullptr;
 		// The game's hits this frame and the triangles they become (draw_spark_emitter); where hits were lately, for the log.
 		stamp_texture_fn stamp_texture_fn_ = nullptr;

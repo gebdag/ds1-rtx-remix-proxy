@@ -182,6 +182,7 @@ namespace shared::common
 		ffp.water_surface = get_bool("FFP", "WaterSurface", true);
 		ffp.draw_tint = get_bool("FFP", "DrawTint", true);
 		ffp.water_fallback_albedo = get_bool("FFP", "WaterFallbackAlbedo", true);
+		ffp.water_area_stand_in = std::clamp(get_int("FFP", "WaterAreaStandIn", 0), 0, 1);
 		ffp.zwrite_query_per_draw = get_bool("FFP", "ZWriteQueryPerDraw", true);
 
 		// [FFPSteps] — per-step switches for the conversion pipeline. Every
