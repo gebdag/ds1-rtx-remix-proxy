@@ -135,6 +135,14 @@ def print_client(hwnd: int, timeout: float = 15.0) -> Image.Image | None:
     Raises:
         HostDown: the window did not answer within `timeout` seconds.
     """
+    # A minimised window has no client area to print. Restore it without focus and put it behind every other window:
+    # PrintWindow reads what the host drew whatever covers it, so it stays out of the way.
+    if user32.IsIconic(hwnd):
+        SW_SHOWNOACTIVATE, HWND_BOTTOM = 4, 1
+        SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0010
+        user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+        user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        time.sleep(0.5)
     rect = wintypes.RECT()
     user32.GetClientRect(hwnd, ctypes.byref(rect))
     result: list = []
