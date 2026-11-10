@@ -70,10 +70,6 @@ namespace comp::game::atmosphere
 	// and the cutout's alpha reference (proxy.Character.SeathAlphaRef, 0-255).
 	int seath_glow_mode();
 	DWORD seath_alpha_ref();
-	// New Londo's ghosts drawn as an ordinary alpha blend, not additive (renderer.cpp; proxy.Character.GhostAlphaBlend, on).
-	bool ghost_alpha_blend();
-	// A lit character below the bright-boss level (c100 under kBrightCharacterMin): with an additive blend, a ghost.
-	bool is_ghost_draw(const float* ps_const);
 
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
 		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false, const float* shaft_gain = nullptr,

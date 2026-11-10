@@ -138,7 +138,8 @@ namespace comp
 		const int seath_mode = game::atmosphere::seath_glow_mode();
 		DWORD seath_dest = 0, seath_blend = FALSE, seath_test = FALSE, seath_ref = 0, seath_func = 0;
 		const float* glow_ps = ffp.ps_const_data();
-		const bool seath_glow = seath_mode != 0 && glow_ps && glow_ps[100 * 4] >= 2.9f &&
+		// FFP conversion on only: the F8 vanilla view turns it off and must show the game's draws as they are.
+		const bool seath_glow = seath_mode != 0 && ffp.is_enabled() && glow_ps && glow_ps[100 * 4] >= 2.9f &&
 			game::texture_names::name_of(ffp.cur_texture(0)) == "c5290_2" &&
 			SUCCEEDED(dev->GetRenderState(D3DRS_DESTBLEND, &seath_dest)) && seath_dest == D3DBLEND_INVSRCALPHA;
 		if (seath_glow && seath_mode == 1)

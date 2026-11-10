@@ -173,8 +173,10 @@ namespace comp::game::atmosphere
 		constexpr DWORD kSelfLitBelowMarker = 0xD9000000;
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
-		bool g_ghost_alpha_blend = true; // proxy.Character.GhostAlphaBlend, live
 		int g_seath_glow = 2;            // proxy.Character.SeathGlow, live: 0 off, 1 additive, 2 cutout
+		// proxy.Character.GhostSelfLit, live, off: New Londo's ghosts take their look from their replacement material in the mod
+		// (z_pbr ghosts.usda: Remix's own additive blend with emission from the albedo), not from a proxy tag.
+		bool g_ghost_self_lit = false;
 		// proxy.Character.SeathAlphaRef, live. 64 cut most of the wing away (its alpha is low; the game's c100 3 makes even that solid light);
 		// 8 against the game: frame error 22.4 / 29.3 on frame_20261109_224107 / frame_20261110_001243 (36.6 / 38.4 as sent), 24 gave 23.6 / 29.8.
 		DWORD g_seath_alpha_ref = 8;
@@ -695,16 +697,6 @@ namespace comp::game::atmosphere
 		return g_seath_alpha_ref;
 	}
 
-	bool ghost_alpha_blend()
-	{
-		return g_ghost_alpha_blend;
-	}
-
-	bool is_ghost_draw(const float* ps_const)
-	{
-		return ps_const && std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] }) < kBrightCharacterMin;
-	}
-
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
 		bool light_shaft, const float* shaft_gain, const float* vs_const, float shaft_distance, bool glow_mesh)
 	{
@@ -796,9 +788,9 @@ namespace comp::game::atmosphere
 		// Or a character the game lights past its texture (c100 above 1: Seath 1.5-3, Bed of Chaos's body 1.7;
 		// every other character is 1 or below, frames across 158 captures): the game's ambient on it, as its
 		// own light. Remix's albedo stops at 1, and such a boss went dim in its cave.
-		else if (ambient && ps_const && additive_lit_colour(dev, ps_const, probe, value,
-			shared::common::ffp_state::get().cur_decl_is_skinned() &&
-				std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] }) >= kBrightCharacterMin))
+		else if (const bool bright_character = shared::common::ffp_state::get().cur_decl_is_skinned() && ps_const &&
+				std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] }) >= kBrightCharacterMin;
+			ambient && ps_const && (bright_character || g_ghost_self_lit) && additive_lit_colour(dev, ps_const, probe, value, bright_character))
 		{
 			// At least 1 per channel: the runtime tells a tagged additive surface by a non-zero value.
 			tag = kSelfLitMarker;
@@ -978,7 +970,7 @@ namespace comp::game::atmosphere
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
-		else if (key == "Character.GhostAlphaBlend") g_ghost_alpha_blend = b;
+		else if (key == "Character.GhostSelfLit") g_ghost_self_lit = b;
 		else if (key == "Character.SeathGlow") g_seath_glow = std::clamp(std::atoi(value.c_str()), 0, 2);
 		else if (key == "Character.SeathAlphaRef") g_seath_alpha_ref = static_cast<DWORD>(std::clamp(std::atoi(value.c_str()), 0, 255));
 		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
