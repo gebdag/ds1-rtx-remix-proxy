@@ -14,7 +14,7 @@ namespace comp::game::sky_meshes
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted, ground };
 
 		struct range_key
 		{
@@ -34,6 +34,7 @@ namespace comp::game::sky_meshes
 			bool hide = false;    // no-shadow: prims hide_first..hide_last of the draw are left out
 			UINT hide_first = 0;
 			UINT hide_last = 0;
+			std::vector<uint16_t> heights_mm; // ground card: each vertex's height above the ground, mm (0xFFFF: none)
 		};
 
 		// Entries live in g_hashes for good (a node map: pointers stay valid).
@@ -85,6 +86,20 @@ namespace comp::game::sky_meshes
 				if (std::string word; k == kind::sky && in >> texture >> word && word == "above")
 					in >> above_y;
 				entry e{ source, k, static_cast<uint8_t>(cut), texture, derived, above_y };
+				// A ground card: '<texture> <vertex count> <height mm> ...'.
+				if (k == kind::ground)
+				{
+					std::string tex;
+					size_t n = 0;
+					if (!(in >> tex >> n) || n == 0 || n > 65536)
+						continue;
+					e.heights_mm.resize(n);
+					size_t got = 0;
+					for (unsigned h = 0; got < n && in >> h; got++)
+						e.heights_mm[got] = static_cast<uint16_t>(std::min(h, 0xFFFFu));
+					if (got != n)
+						continue;
+				}
 				// A no-shadow mesh may name prims of its draw that no view shows: 'hide <first> <last>'.
 				if (std::string word; k == kind::no_shadow && in >> word && word == "hide")
 				{
@@ -120,6 +135,7 @@ namespace comp::game::sky_meshes
 			load_table_locked("emitter_meshes.txt", kind::emitter, "light emitter", "no character lights");
 			load_table_locked("glow_meshes.txt", kind::glow, "glow", "nothing glows of its own");
 			load_table_locked("painted_meshes.txt", kind::painted, "painted colour", "vertex colours stay normalised");
+			load_table_locked("ground_cards.txt", kind::ground, "ground card", "ground cards keep their lift");
 		}
 
 		uint64_t fnv1a64(const uint8_t* data, size_t size)
@@ -153,7 +169,7 @@ namespace comp::game::sky_meshes
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
-					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : "light emitter";
+					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : "light emitter";
 				shared::common::log("SkyMeshes", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -247,6 +263,12 @@ namespace comp::game::sky_meshes
 	bool is_painted_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
 		return lookup(ib, type, start_index, prim_count).k == kind::painted;
+	}
+
+	const std::vector<uint16_t>* ground_card_heights(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		const match m = lookup(ib, type, start_index, prim_count);
+		return m.k == kind::ground ? &m.e->heights_mm : nullptr;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

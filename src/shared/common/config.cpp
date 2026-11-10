@@ -299,6 +299,9 @@ namespace shared::common
 		sky.glass_split = get_bool("Sky", "GlassSplit", true);
 		sky.thin_walls = get_bool("Sky", "ThinWalls", true);
 		sky.no_shadow_meshes = get_bool("Sky", "NoShadowMeshes", true);
+		sky.ground_cards = get_bool("Sky", "GroundCards", true);
+		sky.ground_card_height_kept = std::clamp(get_float("Sky", "GroundCardHeightKept", 0.2f), 0.0f, 1.0f);
+		sky.ground_card_clearance = std::clamp(get_float("Sky", "GroundCardClearance", 0.003f), 0.0f, 0.05f);
 
 		// [Resolution]
 		resolution.ini_render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));

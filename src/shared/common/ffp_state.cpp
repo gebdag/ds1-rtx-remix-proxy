@@ -3888,7 +3888,16 @@ namespace shared::common
 		// Fingerprint first: only the reuse path below records one, and it only runs on
 		// ranges found palette-free, so a match also answers the palette question.
 		const bool reuse_enabled = steps_ && steps_->expand_reuse;
-		const uint64_t fp = reuse_enabled ? fingerprint_source(src_data, total_verts, stride, layer) : 0;
+		uint64_t fp = reuse_enabled ? fingerprint_source(src_data, total_verts, stride, layer) : 0;
+		// Lowered ground cards: the expanded vertices also depend on the lowering and its settings.
+		if (reuse_enabled && ground_heights_mm_)
+		{
+			uint32_t kept_bits = 0, clearance_bits = 0;
+			std::memcpy(&kept_bits, &ground_kept_, 4);
+			std::memcpy(&clearance_bits, &ground_clearance_, 4);
+			fp ^= (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ground_heights_mm_)) * 0x9E3779B97F4A7C15ull) ^
+				((static_cast<uint64_t>(kept_bits) << 32) | clearance_bits) ^ 0x6C0D5A11CA4D5ull;
+		}
 		const bool fingerprint_match = reuse_enabled &&
 			entry.has_fingerprint &&
 			entry.fingerprint == fp &&
@@ -4088,6 +4097,12 @@ namespace shared::common
 			// Position (FLOAT3)
 			auto* pos = reinterpret_cast<const float*>(&sv[p_off]);
 			pos_out[0] = pos[0]; pos_out[1] = pos[1]; pos_out[2] = pos[2];
+			// A ground card's vertex comes down to clearance + kept * its height above the ground (never up).
+			if (ground_heights_mm_ && v < ground_heights_count_ && ground_heights_mm_[v] != 0xFFFF)
+			{
+				const float h = ground_heights_mm_[v] * 0.001f;
+				pos_out[1] += std::min(0.0f, ground_clearance_ + ground_kept_ * h - h);
+			}
 
 			// Normal (UBYTE4N -> FLOAT3, with fallbacks)
 			if (cur_decl_has_normal_ && n_type == D3DDECLTYPE_UBYTE4N)

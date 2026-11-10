@@ -359,6 +359,12 @@ namespace comp
 			ImGui::Checkbox("No-Shadow Meshes", &cfg.sky.no_shadow_meshes);
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Sky] NoShadowMeshes: the faces in no_shadow_meshes.txt cast no shadow");
+
+			ImGui::Checkbox("Ground Cards Lowered", &cfg.sky.ground_cards);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Sky] GroundCards: leaves, lily pads, bones lifted off the ground are brought down to it");
+			ImGui::SliderFloat("Ground Card Height Kept", &cfg.sky.ground_card_height_kept, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Ground Card Clearance (m)", &cfg.sky.ground_card_clearance, 0.0f, 0.05f, "%.3f");
 			ImGui::Separator();
 		}
 

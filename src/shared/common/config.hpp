@@ -387,6 +387,12 @@ namespace shared::common
 			// No-shadow meshes (rtx_comp\sky\no_shadow_meshes.txt): tagged so lighting rays pass them (Surface::isDs1NoShadow).
 			// Off: they cast shadows like any mesh. Lamp meshes (mesh_lights) keep their tag.
 			bool no_shadow_meshes = true;
+			// Ground cards (rtx_comp\sky\ground_cards.txt): flat alpha-tested leaves, lily pads, bones and rubble the artists lifted
+			// a few centimetres off the ground are brought down vertex by vertex: each vertex keeps ground_card_height_kept of its
+			// height above the ground under it, plus ground_card_clearance metres; shadows stay. Off: drawn where the game has them.
+			bool ground_cards = true;
+			float ground_card_height_kept = 0.2f;
+			float ground_card_clearance = 0.003f;
 		} sky;
 
 		struct resolution_settings

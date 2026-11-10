@@ -893,6 +893,15 @@ namespace comp
 				const bool inside_out = !water_draw && shared::common::config::get().sky.thin_walls &&
 					game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 
+				// A ground card the artists lifted off the ground comes down onto it, vertex by vertex (game/sky_meshes.hpp
+				// ground_card_heights), in this expansion and the overlay pass's; cleared after the draw.
+				const auto& sky_cfg = shared::common::config::get().sky;
+				const std::vector<uint16_t>* card_heights = water_draw || !sky_cfg.ground_cards ? nullptr :
+					game::sky_meshes::ground_card_heights(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+				if (card_heights)
+					ffp.set_ground_lowering(card_heights->data(), static_cast<UINT>(card_heights->size()),
+						sky_cfg.ground_card_height_kept, sky_cfg.ground_card_clearance);
+
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);
 
@@ -1071,6 +1080,8 @@ namespace comp
 				}
 				im->m_stats._drawcall_indexed_prim.track_single();
 
+				if (card_heights)
+					ffp.clear_ground_lowering();
 				ffp.restore_rigid_source(dev);
 				ffp.restore_textures(dev);
 			}

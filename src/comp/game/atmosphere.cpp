@@ -978,6 +978,9 @@ namespace comp::game::atmosphere
 		// is set when the game creates it (a restart).
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
+		else if (key == "Sky.GroundCards") shared::common::config::get().sky.ground_cards = b;
+		else if (key == "Sky.GroundCardHeightKept") shared::common::config::get().sky.ground_card_height_kept = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 1.0f);
+		else if (key == "Sky.GroundCardClearance") shared::common::config::get().sky.ground_card_clearance = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 0.05f);
 		else if (key == "MenuScene.AmbientScale") g_menu_ambient_scale = static_cast<float>(std::atof(value.c_str()));
 		else if (key == "MenuScene.RowDistance") shared::common::ffp_state::get().set_menu_row_distance(static_cast<float>(std::atof(value.c_str())));
 		else if (key == "MenuScene.Key")

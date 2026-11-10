@@ -61,6 +61,14 @@ namespace comp::game::sky_meshes
 	// A face set in rtx_comp\sky\painted_meshes.txt: its vertex colour is shade the artists painted, shown as the game shows it.
 	bool is_painted_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A flat alpha-tested card lying over the ground (rtx_comp\sky\ground_cards.txt, scripts/gen_ground_cards.py): the leaves,
+	// lily pads, bones and rubble the artists placed a few centimetres up so the game's depth test never let the ground through.
+	// The game draws them without shadows, so the gap never shows; ray traced, they float and their shadows sit off them. For a
+	// listed draw: each vertex's height above the ground straight below it in mm (0xFFFF = no ground found), in the mesh's vertex
+	// order, which is the draw's from its base vertex. The rigid expansion brings the vertices down (ffp_state set_ground_lowering);
+	// they keep their shadows. Null for any other draw.
+	const std::vector<uint16_t>* ground_card_heights(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }
