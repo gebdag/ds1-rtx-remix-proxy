@@ -269,10 +269,13 @@ if not "!DEPLOY_TARGET!"=="" (
         if exist "%ROOT%assets\lights" robocopy "%ROOT%assets\lights" "!DEPLOY_TARGET!\rtx_comp\lights" *.txt /XC /XN /XO >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy light tables
         ver >nul
-        :: The sky mesh table is generated from the game files (scripts\gen_sky_meshes.py),
-        :: never hand-edited, so it is always refreshed.
+        :: The lookdev host's map suns from scripts\gen_map_suns.py, and the per-mesh tables of game/mesh_tables.hpp with
+        :: the sky layers among them: generated from the game files by scripts\gen_*.py, never hand-edited, so always refreshed.
         if exist "%ROOT%assets\sky" robocopy "%ROOT%assets\sky" "!DEPLOY_TARGET!\rtx_comp\sky" *.txt >nul 2>&1
-        if errorlevel 8 echo WARNING: could not deploy the sky mesh table
+        if errorlevel 8 echo WARNING: could not deploy the map suns
+        ver >nul
+        if exist "%ROOT%assets\mesh_tables" robocopy "%ROOT%assets\mesh_tables" "!DEPLOY_TARGET!\rtx_comp\mesh_tables" *.txt >nul 2>&1
+        if errorlevel 8 echo WARNING: could not deploy the mesh tables
         ver >nul
         :: The derived window glass textures (scripts\gen_glass.py) go with the glass table.
         if exist "%ROOT%assets\glass" robocopy "%ROOT%assets\glass" "!DEPLOY_TARGET!\rtx_comp\glass" *.dds >nul 2>&1

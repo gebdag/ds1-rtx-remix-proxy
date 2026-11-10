@@ -10,7 +10,7 @@
 #include "skinning.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
-#include "../game/sky_meshes.hpp"
+#include "../game/mesh_tables.hpp"
 #include "../game/estus.hpp"
 #include "../game/shaft_source.hpp"
 #include "../game/glass.hpp"
@@ -42,7 +42,7 @@ namespace comp
 		// game's cull mode, though it is blended. Anor Londo builds many windows twice, an outer pane
 		// facing out and an inner one facing in, and the game shows each view only its own pane.
 		constexpr DWORD kSingleSidedGlassMarker = 0xD4000002;
-		// Stage 4's D3DTSS_CONSTANT on a thin wall (the confirmed map meshes, sky_meshes::is_thin_wall_draw, and the Moonlight
+		// Stage 4's D3DTSS_CONSTANT on a thin wall (the confirmed map meshes, mesh_tables::is_thin_wall_draw, and the Moonlight
 		// Butterfly's wings, texture_names::is_butterfly_wing): the runtime lets lighting rays through its faces where they face
 		// the surface the ray left (Surface::isDs1ThinWall).
 		constexpr DWORD kThinWallMarker = 0xD4000003;
@@ -50,7 +50,7 @@ namespace comp
 		constexpr DWORD kLampMarker = 0xD4000004;
 		// Stage 4's D3DTSS_CONSTANT on foliage (texture_names::is_foliage): lighting rays pass it in part (Surface::isDs1Foliage).
 		constexpr DWORD kFoliageMarker = 0xD4000006;
-		// Stage 4's D3DTSS_CONSTANT on a surface whose vertex colour is painted shade (rtx_comp\sky\painted_meshes.txt, Surface::isDs1PaintedColour).
+		// Stage 4's D3DTSS_CONSTANT on a surface whose vertex colour is painted shade (rtx_comp\mesh_tables\painted_meshes.txt, Surface::isDs1PaintedColour).
 		constexpr DWORD kPaintedColourMarker = 0xD400000C;
 
 		// A draw of a sky model mesh (dome, far cloud layers, the backdrop they
@@ -60,7 +60,7 @@ namespace comp
 		bool is_sky_layer_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 		{
 			auto& ffp = shared::common::ffp_state::get();
-			if (!game::sky_meshes::is_sky_draw(ffp.cur_ib(), type, start_index, prim_count))
+			if (!game::mesh_tables::is_sky_draw(ffp.cur_ib(), type, start_index, prim_count))
 				return false;
 
 			DWORD clip_planes = 0;
@@ -78,7 +78,7 @@ namespace comp
 		constexpr UINT kCatacombsBeamStart = 823;
 		bool s_force_shaft = false;
 		bool s_beam_split = false;
-		// A no-shadow mesh with prims no view shows (game/sky_meshes.hpp, no_shadow_hidden_prims) is drawn in the pieces
+		// A no-shadow mesh with prims no view shows (game/mesh_tables.hpp, no_shadow_hidden_prims) is drawn in the pieces
 		// around them (on_draw_indexed_prim). The pieces no longer match the table by their index range, so they carry the
 		// mesh's no-shadow tag through s_force_no_shadow.
 		bool s_hidden_split = false;
@@ -214,16 +214,16 @@ namespace comp
 			ctx.save_rs(dev, state);
 	}
 
-	// A window glass draw (sky_meshes::glass_texture) with a derived glass texture: the derived
+	// A window glass draw (mesh_tables::glass_texture) with a derived glass texture: the derived
 	// texture, else null (the draw then goes through as before).
 	IDirect3DBaseTexture9* glass_split_texture(IDirect3DDevice9* dev, shared::common::ffp_state& ffp,
 		D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count, DWORD& cut)
 	{
-		if (!shared::common::config::get().sky.glass_split)
+		if (!shared::common::config::get().meshes.glass_split)
 			return nullptr;
 		uint8_t table_cut = 0;
 		const std::string* derived = nullptr;
-		const std::string* listed = game::sky_meshes::glass_texture(ffp.cur_ib(), type, start_index, prim_count,
+		const std::string* listed = game::mesh_tables::glass_texture(ffp.cur_ib(), type, start_index, prim_count,
 			table_cut, derived);
 		if (!listed)
 			return nullptr;
@@ -479,15 +479,15 @@ namespace comp
 		}
 
 		// A no-shadow mesh with prims no view shows: drawn around them, so Remix never gets them.
-		if (!s_hidden_split && !s_beam_split && shared::common::config::get().sky.no_shadow_meshes &&
+		if (!s_hidden_split && !s_beam_split && shared::common::config::get().meshes.no_shadow_meshes &&
 			(PrimitiveType == D3DPT_TRIANGLESTRIP || PrimitiveType == D3DPT_TRIANGLELIST) &&
-			game::sky_meshes::any_hidden_prims() && shared::common::ffp_state::get().view_proj_valid() &&
+			game::mesh_tables::any_hidden_prims() && shared::common::ffp_state::get().view_proj_valid() &&
 			!shared::common::ffp_state::get().cur_decl_is_skinned())
 		{
 			UINT hide_first = 0, hide_last = 0;
 			if (IDirect3DIndexBuffer9* ib = shared::common::ffp_state::get().cur_ib())
 			{
-				const bool hidden = game::sky_meshes::no_shadow_hidden_prims(ib, PrimitiveType, startIndex, primCount, hide_first, hide_last);
+				const bool hidden = game::mesh_tables::no_shadow_hidden_prims(ib, PrimitiveType, startIndex, primCount, hide_first, hide_last);
 				if (hidden)
 				{
 					s_hidden_split = true;
@@ -601,7 +601,7 @@ namespace comp
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
-			shaft_draw, shaft_gain, ffp.vs_const_data(), shaft_distance, game::sky_meshes::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
+			shaft_draw, shaft_gain, ffp.vs_const_data(), shaft_distance, game::mesh_tables::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());
@@ -769,7 +769,7 @@ namespace comp
 				if (swamp)
 					dev->SetTextureStageState(0, D3DTSS_CONSTANT, game::swamp::kMarker);
 				// A character with thin wall faces (the Moonlight Butterfly's wings: black patches otherwise).
-				const bool thin_wall_skin = shared::common::config::get().sky.thin_walls && game::texture_names::is_butterfly_wing(
+				const bool thin_wall_skin = shared::common::config::get().meshes.thin_walls && game::texture_names::is_butterfly_wing(
 					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 				if (thin_wall_skin)
 					dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
@@ -888,19 +888,19 @@ namespace comp
 				}
 
 				// A wall of two single-sided faces turned towards each other goes to Remix tagged: only the meshes in the
-				// confirmed table (sky_meshes::is_thin_wall_draw). Measuring every drawn mesh, and listing every mesh the rule
+				// confirmed table (mesh_tables::is_thin_wall_draw). Measuring every drawn mesh, and listing every mesh the rule
 				// found offline, tagged walls nothing had shown black, and lit through them (Undead Asylum, 2026-11-07).
-				const bool inside_out = !water_draw && shared::common::config::get().sky.thin_walls &&
-					game::sky_meshes::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+				const bool inside_out = !water_draw && shared::common::config::get().meshes.thin_walls &&
+					game::mesh_tables::is_thin_wall_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 
-				// A ground card the artists lifted off the ground comes down onto it, vertex by vertex (game/sky_meshes.hpp
+				// A ground card the artists lifted off the ground comes down onto it, vertex by vertex (game/mesh_tables.hpp
 				// ground_card_heights), in this expansion and the overlay pass's; cleared after the draw.
-				const auto& sky_cfg = shared::common::config::get().sky;
-				const std::vector<uint16_t>* card_heights = water_draw || !sky_cfg.ground_cards ? nullptr :
-					game::sky_meshes::ground_card_heights(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+				const auto& mesh_cfg = shared::common::config::get().meshes;
+				const std::vector<uint16_t>* card_heights = water_draw || !mesh_cfg.ground_cards ? nullptr :
+					game::mesh_tables::ground_card_heights(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 				if (card_heights)
 					ffp.set_ground_lowering(card_heights->data(), static_cast<UINT>(card_heights->size()),
-						sky_cfg.ground_card_height_kept, sky_cfg.ground_card_clearance);
+						mesh_cfg.ground_card_height_kept, mesh_cfg.ground_card_clearance);
 
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);
@@ -911,16 +911,16 @@ namespace comp
 					// Remix composites them onto the surface beneath. Free-standing
 					// atmospheric layers are not: a decal only survives on a surface
 					// behind it, so mist or a backdrop card in front of the sky vanished.
-					// Nor are blended shells (sky_meshes::is_shell_draw): they do not lie on
+					// Nor are blended shells (mesh_tables::is_shell_draw): they do not lie on
 					// a surface, so as decals they took the lighting of whatever lay behind
 					// them; they are shaded as their own surface instead ([Sky] ShellMode).
 					// Nor is the Estus flask (game/estus.hpp), which goes opaque: the game draws it twice at 0.86, so it
 					// is all but solid there, and a decal needs something behind it.
-					const int shell_mode = shared::common::config::get().sky.shell_mode;
+					const int shell_mode = shared::common::config::get().meshes.shell_mode;
 					const bool flask = !water_draw && game::texture_names::is_estus_flask(
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 					const bool shell = flask || (shell_mode != 0 &&
-						game::sky_meshes::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
+						game::mesh_tables::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
 					// Window glass is split into its came and its glass (game/glass.hpp): the base
 					// draw becomes the came, and neither pass is a decal.
 					DWORD glass_cut = 0;
@@ -955,15 +955,15 @@ namespace comp
 					}
 					const bool tinted = ffp.apply_draw_tint(dev);
 					const bool effect = ffp.apply_sp_effect(dev);
-					if (game::sky_meshes::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount))
+					if (game::mesh_tables::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount))
 						skinning::log_glow_draw(dev, static_cast<UINT>(BaseVertexIndex), startIndex, primCount);
 					if (inside_out)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
 					// A lamp holds its light inside: lighting rays pass it (game/mesh_lights.hpp).
 					const bool lamp = game::mesh_lights::is_lamp(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
-					// So do the faces in rtx_comp\sky\no_shadow_meshes.txt (game/sky_meshes.hpp): same marker.
-					const bool no_shadow = !water_draw && shared::common::config::get().sky.no_shadow_meshes &&
-						(s_force_no_shadow || game::sky_meshes::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
+					// So do the faces in rtx_comp\mesh_tables\no_shadow_meshes.txt (game/mesh_tables.hpp): same marker.
+					const bool no_shadow = !water_draw && shared::common::config::get().meshes.no_shadow_meshes &&
+						(s_force_no_shadow || game::mesh_tables::is_no_shadow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
 					if (lamp || no_shadow)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
 					// Leaf cards the game lights without occlusion let indirect light through in part (Surface::isDs1Foliage). Only in Firelink
@@ -976,7 +976,7 @@ namespace comp
 					// Ash Lake's bed and the trunks in its water fade to black by painted vertex colour. Only there: the table is one map's.
 					const bool painted = !water_draw && !inside_out && !lamp && !no_shadow && !foliage &&
 						((game::map_lights::current_map_id() >> 16) & 0xFFFF) == ((13u << 8) | 2u) &&
-						game::sky_meshes::is_painted_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+						game::mesh_tables::is_painted_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 					if (painted)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kPaintedColourMarker);
 					// Effects the game lights only briefly get a stand-in light (lightning breath bolts).

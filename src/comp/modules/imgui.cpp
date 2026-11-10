@@ -348,23 +348,23 @@ namespace comp
 			ImGui::TextDisabled("  - [M] materials: g_Diffuse_2 re-drawn as a vertex-alpha decal pass");
 			ImGui::TextDisabled("  - game's own alpha-blended edge-fade draws tagged as decals");
 
-			ImGui::Checkbox("Window Glass Split", &cfg.sky.glass_split);
+			ImGui::Checkbox("Window Glass Split", &cfg.meshes.glass_split);
 			ImGui::SameLine();
 			ImGui::TextDisabled("leaded came as an opaque cutout, glass as its own (ds1_glass translucent) surface");
 
-			ImGui::Checkbox("Thin Walls", &cfg.sky.thin_walls);
+			ImGui::Checkbox("Thin Walls", &cfg.meshes.thin_walls);
 			ImGui::SameLine();
-			ImGui::TextDisabled("[Sky] ThinWalls: lighting rays pass a facing wall face within 0.5 m. Off to test light leaks");
+			ImGui::TextDisabled("[Meshes] ThinWalls: lighting rays pass a facing wall face within 0.5 m. Off to test light leaks");
 
-			ImGui::Checkbox("No-Shadow Meshes", &cfg.sky.no_shadow_meshes);
+			ImGui::Checkbox("No-Shadow Meshes", &cfg.meshes.no_shadow_meshes);
 			ImGui::SameLine();
-			ImGui::TextDisabled("[Sky] NoShadowMeshes: the faces in no_shadow_meshes.txt cast no shadow");
+			ImGui::TextDisabled("[Meshes] NoShadowMeshes: the faces in no_shadow_meshes.txt cast no shadow");
 
-			ImGui::Checkbox("Ground Cards Lowered", &cfg.sky.ground_cards);
+			ImGui::Checkbox("Ground Cards Lowered", &cfg.meshes.ground_cards);
 			ImGui::SameLine();
-			ImGui::TextDisabled("[Sky] GroundCards: leaves, lily pads, bones lifted off the ground are brought down to it");
-			ImGui::SliderFloat("Ground Card Height Kept", &cfg.sky.ground_card_height_kept, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Ground Card Clearance (m)", &cfg.sky.ground_card_clearance, 0.0f, 0.05f, "%.3f");
+			ImGui::TextDisabled("[Meshes] GroundCards: leaves, lily pads, bones lifted off the ground are brought down to it");
+			ImGui::SliderFloat("Ground Card Height Kept", &cfg.meshes.ground_card_height_kept, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Ground Card Clearance (m)", &cfg.meshes.ground_card_clearance, 0.0f, 0.05f, "%.3f");
 			ImGui::Separator();
 		}
 

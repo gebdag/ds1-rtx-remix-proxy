@@ -1,4 +1,4 @@
-"""Generate assets/sky/sky_meshes.txt: the map meshes the proxy sends to Remix as sky.
+"""Generate assets/mesh_tables/sky_meshes.txt: the map meshes the proxy sends to Remix as sky.
 
 Dark Souls draws its skies as ordinary map pieces. A sky model holds the dome, the far cloud layers
 and the backdrop they are composited over (e.g. Firelink's m9000B2A10: a 5 km ground bowl, the cloud
@@ -18,7 +18,7 @@ Rules (per FLVER in map/mNN_NN_NN_NN):
     CAMERA_ABOVE holds one such mesh in the sky only while the camera is higher than that (the proxy reads
     `above <y>` at the end of its lines): sky draws behind all world geometry, which is wrong near it.
 
-Also writes assets/sky/shell_meshes.txt, same format: the blended shells (see blended_shells), which
+Also writes assets/mesh_tables/shell_meshes.txt, same format: the blended shells (see blended_shells), which
 the proxy draws as their own surfaces instead of decals. Outside SHELL_MAPS only solid shells count (see
 solid_shell): terrain pieces the game draws blended but paints opaque, fading only at their vertex edges.
 
@@ -283,7 +283,7 @@ def main():
     ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
                                       r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
     ap.add_argument('--bbformats', default=r'<other project>\tools')
-    ap.add_argument('--out', default=os.path.join(here, '..', 'assets', 'sky', 'sky_meshes.txt'))
+    ap.add_argument('--out', default=os.path.join(here, '..', 'assets', 'mesh_tables', 'sky_meshes.txt'))
     args = ap.parse_args()
 
     sys.path.insert(0, args.bbformats)

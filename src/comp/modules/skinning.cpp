@@ -7,7 +7,7 @@
 #include "shared/common/ffp_prof.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/texture_names.hpp"
-#include "../game/sky_meshes.hpp"
+#include "../game/mesh_tables.hpp"
 #include "../game/effect_lights.hpp"
 #include "../game/atmosphere.hpp"
 #include "../game/map_lights.hpp"
@@ -104,7 +104,7 @@ namespace comp
 		else if (body)
 			ffp.apply_texture_only_stage(dev);
 
-		if (game::sky_meshes::is_emitter_draw(ffp.cur_ib(), pt, start_idx, prim_count))
+		if (game::mesh_tables::is_emitter_draw(ffp.cur_ib(), pt, start_idx, prim_count))
 			game::effect_lights::observe_emitter(ffp.vs_const_data());
 		const bool tinted = ffp.apply_draw_tint(dev);
 		const bool effect = ffp.apply_sp_effect(dev);

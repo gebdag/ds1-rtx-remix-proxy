@@ -1,4 +1,4 @@
-"""Generate assets/sky/emitter_meshes.txt: character meshes the proxy gives a faint light of their own.
+"""Generate assets/mesh_tables/emitter_meshes.txt: character meshes the proxy gives a faint light of their own.
 
 The crystal lizard (chr/c3300) carries a glowing gem, but the game gives it no light. The proxy recognises its
 meshes by the hash of the index range it draws, as for the sky meshes (scripts/gen_sky_meshes.py), and game/effect_lights
@@ -24,7 +24,7 @@ def main():
     ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
                                       r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
     ap.add_argument('--bbformats', default=r'<other project>\tools')
-    ap.add_argument('--out', default=os.path.join(here, '..', 'assets', 'sky', 'emitter_meshes.txt'))
+    ap.add_argument('--out', default=os.path.join(here, '..', 'assets', 'mesh_tables', 'emitter_meshes.txt'))
     args = ap.parse_args()
 
     sys.path.insert(0, args.bbformats)

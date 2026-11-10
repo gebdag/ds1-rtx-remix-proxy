@@ -1,12 +1,17 @@
 #pragma once
 
-namespace comp::game::sky_meshes
+namespace comp::game::mesh_tables
 {
+	// Per-mesh tables: map and character meshes recognised by the FNV-1a hash of the index range a draw draws (the engine's
+	// index buffers hold the FLVER face sets verbatim), each table in rtx_comp\mesh_tables\ generated from the game's files by a
+	// script under scripts\. Sky layers are one of the tables; the others tag glass, shells, thin walls, no-shadow faces,
+	// emitters, glow pieces, painted colour and ground cards.
+
 	// Dark Souls draws its skies as ordinary map pieces: a sky model holds the
 	// dome, the far cloud layers and the backdrop they are blended over (e.g.
 	// Firelink's 5 km ground bowl under the cloud sea). The proxy sends all of
 	// them to Remix as sky together, recognising each mesh by the hash of the
-	// index range it draws. rtx_comp\sky\sky_meshes.txt lists the hashes; it is
+	// index range it draws. rtx_comp\mesh_tables\sky_meshes.txt lists the hashes; it is
 	// generated from the game's FLVERs by scripts/gen_sky_meshes.py (the
 	// engine's index buffers hold the FLVER face sets verbatim).
 
@@ -17,12 +22,12 @@ namespace comp::game::sky_meshes
 
 	// True when this indexed draw is a blended shell: an alpha-faded map mesh that does not lie on
 	// an opaque surface (the giant trees' fading tops and offset shells around trunks), listed in
-	// rtx_comp\sky\shell_meshes.txt by the same generator. The rest of the game's straight-alpha
+	// rtx_comp\mesh_tables\shell_meshes.txt by the same generator. The rest of the game's straight-alpha
 	// map draws are edge-fade strips lying on their surface, which the proxy tags as decals. A shell
 	// tagged as a decal took the lighting of whatever lay behind it, or vanished in front of the sky.
 	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
-	// For a window glass mesh (rtx_comp\sky\glass_meshes.txt, scripts/gen_glass.py): the diffuse it is
+	// For a window glass mesh (rtx_comp\mesh_tables\glass_meshes.txt, scripts/gen_glass.py): the diffuse it is
 	// listed with, its alpha cut, and the texture its glass pass draws with. The texture paints the
 	// leaded came at alpha >= cut and the glass below it; the renderer draws the two apart
 	// (game/glass.hpp). Null for any other draw. Index data alone can collide (short face sets of
@@ -31,7 +36,7 @@ namespace comp::game::sky_meshes
 	const std::string* glass_texture(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
 		uint8_t& cut, const std::string*& derived);
 
-	// True when this indexed draw is a thin-wall mesh (rtx_comp\sky\thin_wall_meshes.txt, scripts/gen_thin_walls.py):
+	// True when this indexed draw is a thin-wall mesh (rtx_comp\mesh_tables\thin_wall_meshes.txt, scripts/gen_thin_walls.py):
 	// a wall built from two single-sided faces whose fronts face each other a few centimetres apart. The game culls the
 	// face seen from behind and its lights cast no shadows; ray traced, each face shadows the other and the wall goes
 	// black, so the renderer tags these draws and the runtime lets lighting rays pass a tagged face turned back towards
@@ -39,7 +44,7 @@ namespace comp::game::sky_meshes
 	// m0100B2A10, Blighttown's m0300B0A14 mesh2).
 	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
-	// True when this indexed draw is a mesh listed in rtx_comp\sky\no_shadow_meshes.txt: a face no view shows that only shuts
+	// True when this indexed draw is a mesh listed in rtx_comp\mesh_tables\no_shadow_meshes.txt: a face no view shows that only shuts
 	// light out (the Asylum's duplicate wall face in front of the wall under its cell windows). Lighting rays pass it.
 	bool is_no_shadow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
@@ -52,16 +57,16 @@ namespace comp::game::sky_meshes
 	bool no_shadow_hidden_prims(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count,
 		UINT& first, UINT& last);
 
-	// True when this indexed draw is a mesh listed in rtx_comp\sky\emitter_meshes.txt: a character that gives off a
+	// True when this indexed draw is a mesh listed in rtx_comp\mesh_tables\emitter_meshes.txt: a character that gives off a
 	// little light the game bakes into nothing (the crystal lizard), see game/effect_lights.hpp.
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
-	// True for a mesh listed in rtx_comp\sky\glow_meshes.txt: a piece the game only brightens, given a light of its own (the Skull Lantern's eyes).
+	// True for a mesh listed in rtx_comp\mesh_tables\glow_meshes.txt: a piece the game only brightens, given a light of its own (the Skull Lantern's eyes).
 	bool is_glow_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
-	// A face set in rtx_comp\sky\painted_meshes.txt: its vertex colour is shade the artists painted, shown as the game shows it.
+	// A face set in rtx_comp\mesh_tables\painted_meshes.txt: its vertex colour is shade the artists painted, shown as the game shows it.
 	bool is_painted_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
-	// A flat alpha-tested card lying over the ground (rtx_comp\sky\ground_cards.txt, scripts/gen_ground_cards.py): the leaves,
+	// A flat alpha-tested card lying over the ground (rtx_comp\mesh_tables\ground_cards.txt, scripts/gen_ground_cards.py): the leaves,
 	// lily pads, bones and rubble the artists placed a few centimetres up so the game's depth test never let the ground through.
 	// The game draws them without shadows, so the gap never shows; ray traced, they float and their shadows sit off them. For a
 	// listed draw: each vertex's height above the ground straight below it in mm (0xFFFF = no ground found), in the mesh's vertex

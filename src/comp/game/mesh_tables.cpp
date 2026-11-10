@@ -1,5 +1,5 @@
 #include "std_include.hpp"
-#include "sky_meshes.hpp"
+#include "mesh_tables.hpp"
 
 #include "shared/common/ffp_state.hpp"
 
@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace comp::game::sky_meshes
+namespace comp::game::mesh_tables
 {
 	namespace
 	{
@@ -60,11 +60,11 @@ namespace comp::game::sky_meshes
 
 		void load_table_locked(const char* file_name, kind k, const char* what, const char* missing)
 		{
-			const auto path = shared::globals::root_path + "\\rtx_comp\\sky\\" + file_name;
+			const auto path = shared::globals::root_path + "\\rtx_comp\\mesh_tables\\" + file_name;
 			std::ifstream file(path);
 			if (!file)
 			{
-				shared::common::log("SkyMeshes", std::format("{} not found - {}", path, missing),
+				shared::common::log("MeshTables", std::format("{} not found - {}", path, missing),
 					shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 				return;
 			}
@@ -112,14 +112,14 @@ namespace comp::game::sky_meshes
 						g_any_hide = true;
 					}
 					else
-						shared::common::log("SkyMeshes", std::format("{}: bad 'hide <first> <last>' for {}, ignored", file_name, source),
+						shared::common::log("MeshTables", std::format("{}: bad 'hide <first> <last>' for {}, ignored", file_name, source),
 							shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 				}
 				g_hashes.emplace(std::stoull(hash_hex, nullptr, 16), std::move(e));
 				g_counts.insert(count);
 				loaded++;
 			}
-			shared::common::log("SkyMeshes", std::format("{} {} face sets loaded", loaded, what));
+			shared::common::log("MeshTables", std::format("{} {} face sets loaded", loaded, what));
 		}
 
 		void load_locked()
@@ -170,7 +170,7 @@ namespace comp::game::sky_meshes
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
 					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : "light emitter";
-				shared::common::log("SkyMeshes", std::format("{} drawn: {}", what, it->second.source));
+				shared::common::log("MeshTables", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
 		}

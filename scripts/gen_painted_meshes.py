@@ -1,4 +1,4 @@
-"""Generates assets/sky/painted_meshes.txt: the Ash Lake meshes whose vertex colour is shade the artists painted.
+"""Generates assets/mesh_tables/painted_meshes.txt: the Ash Lake meshes whose vertex colour is shade the artists painted.
 
 The lake bed, the beaches and the trunks standing in the water fade to black towards the bottom by grey vertex colour.
 Remix's vertexColorIsBakedLighting divides a colour by its largest channel, which turns any grey into white, so the bed
@@ -23,7 +23,7 @@ from bbformats.flver import read_flver  # noqa: E402
 
 WATER_PLANE = -322.4  # m0120B2A13, the lake's water mesh
 BEACH = {"m13_n_floor_12", "m13_n_floor_14"}
-OUT = Path(__file__).parent.parent / "assets" / "sky" / "painted_meshes.txt"
+OUT = Path(__file__).parent.parent / "assets" / "mesh_tables" / "painted_meshes.txt"
 
 
 def fnv1a64(data):

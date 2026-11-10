@@ -595,7 +595,7 @@ namespace shared::common
 		bool expand_rigid_texcoords(IDirect3DDevice9* dev, INT base_vtx, UINT min_vtx, UINT num_verts,
 			rigid_layer layer = rigid_layer::base);
 
-		// Ground cards (game/sky_meshes.hpp ground_card_heights): while set, the rigid expansion lowers vertex v (counted from
+		// Ground cards (game/mesh_tables.hpp ground_card_heights): while set, the rigid expansion lowers vertex v (counted from
 		// the draw's base vertex) along the model's y by its height above the ground, heights_mm[v], so that it ends at
 		// clearance + kept * height. Cleared after the draw. The reuse fingerprint takes the settings in, so a change re-expands.
 		void set_ground_lowering(const uint16_t* heights_mm, UINT count, float kept, float clearance)

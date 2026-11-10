@@ -1,4 +1,4 @@
-"""Generate assets/sky/thin_wall_meshes.txt: the map meshes the proxy tags as thin walls, which are only the meshes in
+"""Generate assets/mesh_tables/thin_wall_meshes.txt: the map meshes the proxy tags as thin walls, which are only the meshes in
 CONFIRMED below, each a wall seen black in a capture and lit by its entry. The rule further down finds candidates; it
 does not decide what is listed (`--candidates` prints them).
 
@@ -111,7 +111,7 @@ def main():
     ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
                                       r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
     ap.add_argument('--bbformats', default=r'<other project>\tools')
-    ap.add_argument('--out', default=None, help='default assets/sky/thin_wall_meshes.txt; with --map, none unless given')
+    ap.add_argument('--out', default=None, help='default assets/mesh_tables/thin_wall_meshes.txt; with --map, none unless given')
     ap.add_argument('--map', default='', help='only maps whose id contains this (for testing)')
     ap.add_argument('--candidates', action='store_true',
                     help='print every mesh the rule finds (to be checked in the game one by one); writes nothing')
@@ -168,7 +168,7 @@ def main():
     if args.out is None:
         if args.map:
             return
-        args.out = os.path.join(here, '..', 'assets', 'sky', 'thin_wall_meshes.txt')
+        args.out = os.path.join(here, '..', 'assets', 'mesh_tables', 'thin_wall_meshes.txt')
     with open(args.out, 'w', newline='\n') as f:
         f.write('# Dark Souls thin-wall map meshes (single-sided faces facing each other across a few cm), each confirmed '
                 'in a capture (CONFIRMED in scripts/gen_thin_walls.py): <index FNV-1a 64> <index count> <source> <diffuse>\n')

@@ -79,8 +79,8 @@ def main():
     sys.path.insert(0, args.bbformats)
     from bbformats.flver import read_flver
 
-    sky_dir = os.path.join(HERE, '..', 'assets', 'sky')
-    no_block = table_sources(os.path.join(sky_dir, 'sky_meshes.txt')) | table_sources(os.path.join(sky_dir, 'glass_meshes.txt'))
+    tables_dir = os.path.join(HERE, '..', 'assets', 'mesh_tables')
+    no_block = table_sources(os.path.join(tables_dir, 'sky_meshes.txt')) | table_sources(os.path.join(tables_dir, 'glass_meshes.txt'))
     msb = os.path.join(args.data, 'map', 'MapStudio', f'{MAP}.msb')
     area = MAP[1:3]
     flvers, world_tris, blockers = {}, [], []

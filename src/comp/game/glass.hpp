@@ -4,7 +4,7 @@ namespace comp::game::glass
 {
 	// DS1 paints a window into one texture: the leaded came (and frame) at alpha >= a cut, the glass
 	// below it, its alpha the glass opacity in the game's blend. The renderer draws a listed glass
-	// mesh (sky_meshes::glass_texture) twice: the came as an alpha-tested opaque surface, and the glass
+	// mesh (mesh_tables::glass_texture) twice: the came as an alpha-tested opaque surface, and the glass
 	// 2 mm off it with a derived texture, the game texture with the came's alpha zeroed
 	// (rtx_comp\glass\<name>.dds, written by scripts/gen_glass.py). Its own Remix hash lets the
 	// ds1_glass mod make the glass translucent. Glass over an interior that was never built gets the

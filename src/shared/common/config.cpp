@@ -295,13 +295,14 @@ namespace shared::common
 
 		// [Sky]
 		sky.mark_sky_draws = get_bool("Sky", "MarkSkyDraws", true);
-		sky.shell_mode = std::clamp(get_int("Sky", "ShellMode", 2), 0, 2);
-		sky.glass_split = get_bool("Sky", "GlassSplit", true);
-		sky.thin_walls = get_bool("Sky", "ThinWalls", true);
-		sky.no_shadow_meshes = get_bool("Sky", "NoShadowMeshes", true);
-		sky.ground_cards = get_bool("Sky", "GroundCards", true);
-		sky.ground_card_height_kept = std::clamp(get_float("Sky", "GroundCardHeightKept", 0.2f), 0.0f, 1.0f);
-		sky.ground_card_clearance = std::clamp(get_float("Sky", "GroundCardClearance", 0.003f), 0.0f, 0.05f);
+		// [Meshes]: the old [Sky] names are the fallback, so an INI written before the move keeps working.
+		meshes.shell_mode = std::clamp(get_int("Meshes", "ShellMode", get_int("Sky", "ShellMode", 2)), 0, 2);
+		meshes.glass_split = get_bool("Meshes", "GlassSplit", get_bool("Sky", "GlassSplit", true));
+		meshes.thin_walls = get_bool("Meshes", "ThinWalls", get_bool("Sky", "ThinWalls", true));
+		meshes.no_shadow_meshes = get_bool("Meshes", "NoShadowMeshes", get_bool("Sky", "NoShadowMeshes", true));
+		meshes.ground_cards = get_bool("Meshes", "GroundCards", get_bool("Sky", "GroundCards", true));
+		meshes.ground_card_height_kept = std::clamp(get_float("Meshes", "GroundCardHeightKept", get_float("Sky", "GroundCardHeightKept", 0.2f)), 0.0f, 1.0f);
+		meshes.ground_card_clearance = std::clamp(get_float("Meshes", "GroundCardClearance", get_float("Sky", "GroundCardClearance", 0.003f)), 0.0f, 0.05f);
 
 		// [Resolution]
 		resolution.ini_render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));

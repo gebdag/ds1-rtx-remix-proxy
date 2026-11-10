@@ -368,32 +368,37 @@ namespace shared::common
 		{
 			// Send the meshes of the map sky models (domes, far cloud layers and
 			// the backdrop they are blended over, recognised by their index data
-			// via rtx_comp\sky\sky_meshes.txt) through with the game's own shaders
+			// via rtx_comp\mesh_tables\sky_meshes.txt) through with the game's own shaders
 			// and the stage-0 D3DTSS_CONSTANT sky marker, so the custom Remix runtime
 			// (rtx.skyMarkerEnabled) rasterizes them into its sky exactly as the
 			// game shades them: tint, fog, light scattering, scrolling, blending.
 			bool mark_sky_draws = true;
-			// Blended shells (rtx_comp\sky\shell_meshes.txt): 0 = decals like the other blended map
+		} sky;
+
+		// [Meshes] (old name [Sky], still read): what the per-mesh tables (game/mesh_tables.hpp) do.
+		struct meshes_settings
+		{
+			// Blended shells (rtx_comp\mesh_tables\shell_meshes.txt): 0 = decals like the other blended map
 			// draws (the old behaviour), 1 = plain blended geometry, 2 = alpha-tested cutouts.
 			int shell_mode = 2;
-			// Window glass (rtx_comp\sky\glass_meshes.txt): draw the leaded came as an alpha-tested
+			// Window glass (rtx_comp\mesh_tables\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.
 			bool glass_split = true;
-			// Thin walls (rtx_comp\sky\thin_wall_meshes.txt, the Moonlight Butterfly's wings): tagged
+			// Thin walls (rtx_comp\mesh_tables\thin_wall_meshes.txt, the Moonlight Butterfly's wings): tagged
 			// so lighting rays pass a face turned back towards the surface they left, within 0.5 m (Surface::isDs1ThinWall). Off:
 			// no draw is tagged, every face stops rays (for testing light leaks; walls of two facing faces go dark).
 			bool thin_walls = true;
-			// No-shadow meshes (rtx_comp\sky\no_shadow_meshes.txt): tagged so lighting rays pass them (Surface::isDs1NoShadow).
+			// No-shadow meshes (rtx_comp\mesh_tables\no_shadow_meshes.txt): tagged so lighting rays pass them (Surface::isDs1NoShadow).
 			// Off: they cast shadows like any mesh. Lamp meshes (mesh_lights) keep their tag.
 			bool no_shadow_meshes = true;
-			// Ground cards (rtx_comp\sky\ground_cards.txt): flat alpha-tested leaves, lily pads, bones and rubble the artists lifted
+			// Ground cards (rtx_comp\mesh_tables\ground_cards.txt): flat alpha-tested leaves, lily pads, bones and rubble the artists lifted
 			// a few centimetres off the ground are brought down vertex by vertex: each vertex keeps ground_card_height_kept of its
 			// height above the ground under it, plus ground_card_clearance metres; shadows stay. Off: drawn where the game has them.
 			bool ground_cards = true;
 			float ground_card_height_kept = 0.2f;
 			float ground_card_clearance = 0.003f;
-		} sky;
+		} meshes;
 
 		struct resolution_settings
 		{

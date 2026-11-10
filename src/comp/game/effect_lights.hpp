@@ -23,7 +23,7 @@ namespace comp::game::effect_lights
 	// reads the blend state; every other draw pays one texture-name flag lookup.
 	void observe_draw(IDirect3DDevice9* dev, IDirect3DBaseTexture9* diffuse, const float* vs_const, const float* ps_const);
 
-	// The skinning path, for a listed mesh of a crystal lizard (sky_meshes::is_emitter_draw): its faint blue light.
+	// The skinning path, for a listed mesh of a crystal lizard (mesh_tables::is_emitter_draw): its faint blue light.
 	void observe_emitter(const float* vs_const);
 
 	// The sprite observer (ffp_state::set_sprite_observer): drawn particle triangles.

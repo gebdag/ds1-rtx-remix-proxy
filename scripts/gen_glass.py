@@ -1,4 +1,4 @@
-"""Generate the stained- and leaded-glass split: assets/sky/glass_meshes.txt, assets/glass/*.dds and
+"""Generate the stained- and leaded-glass split: assets/mesh_tables/glass_meshes.txt, assets/glass/*.dds and
 the ds1_glass Remix mod.
 
 DS1 paints its windows into one texture: the leaded came (and the window frame) at alpha >= ~248, the
@@ -521,7 +521,7 @@ def main():
                 f.write(blend_variant(derived, width, height, mips))
             print(f'derived {name}_blend (game blend, not in the mod)')
 
-    table = os.path.join(ROOT, 'assets', 'sky', 'glass_meshes.txt')
+    table = os.path.join(ROOT, 'assets', 'mesh_tables', 'glass_meshes.txt')
     with open(table, 'w', encoding='utf-8', newline='\n') as f:
         f.write('# Dark Souls window glass meshes: <index FNV-1a 64> <index count> <source> <diffuse> <alpha cut> '
                 '<glass pass texture>\n')
