@@ -2629,6 +2629,7 @@ namespace shared::common
 				}
 			}
 		}
+		DWORD sprite_stage6_tag = 0;
 		// Point sprites are sparkles, nothing the effect lights follow; nor are streaks whose pixel shader samples no texture
 		// (FRPG_Sfx_LineType0: a weapon's sparks off stone, orange and additive like fire, which the game lights with nothing).
 		if (sprite_observer_fn_ && count && !points && (cur_ps_sampler_mask_ & 1u))
@@ -2686,7 +2687,11 @@ namespace shared::common
 					sprite_points_.push_back(p);
 			}
 			if (!sprite_points_.empty())
+			{
 				sprite_observer_fn_(sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
+				if (sprite_tag_fn_)
+					sprite_stage6_tag = sprite_tag_fn_(cur_texture_[0], sprite_points_.data(), static_cast<UINT>(sprite_points_.size()));
+			}
 		}
 		// Fog takes from what shows, after the lights above have read the particle: not a fire's light with the camera's distance.
 		if (!points)
@@ -2781,6 +2786,13 @@ namespace shared::common
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, batch_marker);
 		if (effect_marker)
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, effect_marker);
+		// Put back after the draw: lightmap_sun remembers what it last set on this stage.
+		DWORD stage6_constant = 0;
+		if (sprite_stage6_tag)
+		{
+			dev->GetTextureStageState(6, D3DTSS_CONSTANT, &stage6_constant);
+			dev->SetTextureStageState(6, D3DTSS_CONSTANT, sprite_stage6_tag);
+		}
 		// Soft sprite feather in stage 2's constant (0xD8000000 | millimetres, Surface::ds1ParticleFeather):
 		// stage 2 otherwise carries the map meshes' view fade, never a sprite's, so its value is put back after.
 		// A sprite whose shader never reads the scene depth (SimpleSpriteType0: a message's runes, laid on the
@@ -2881,6 +2893,8 @@ namespace shared::common
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 		if (feathered)
 			dev->SetTextureStageState(2, D3DTSS_CONSTANT, stage2_constant);
+		if (sprite_stage6_tag)
+			dev->SetTextureStageState(6, D3DTSS_CONSTANT, stage6_constant);
 		if (debug_opaque)
 		{
 			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, blend);

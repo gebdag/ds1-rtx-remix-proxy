@@ -117,6 +117,7 @@ namespace comp
 				return id != 0 && ((id >> 24) & 0xFF) < 99; // the bound of map_lights' current_map_name
 			});
 			ffp.set_sprite_observer(observe_sprites);
+			ffp.set_sprite_tag(game::waterfall::landing_tag);
 			ffp.set_sprite_batch_taker(game::fog_gates::observe_batch);
 			ffp.set_spark_source(game::hit_sparks::collect);
 			ffp.set_stamp_texture_source(game::swamp::stamp_textures);

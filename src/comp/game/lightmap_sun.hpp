@@ -46,6 +46,8 @@ namespace comp::game::lightmap_sun
 	// A waterfall's mesh (texture_names::kRippleWaterfall), no character: where its falling sheet meets water, the runtime's
 	// ripple field stirs the water (rtx.ds1Ripple.fallStrength).
 	constexpr DWORD kFallingWaterMarker = 0xD2000040;
+	// A sprite draw of where falling water lands (game::waterfall::landing_tag): the ripple field is stirred under it.
+	constexpr DWORD kFallLandingMarker = 0xD2000080;
 
 	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped,
 	// kSkinnedMarker / kSkinnedCardMarker when it is skinned, kRigidPartMarker on a character's rigid part, else none.

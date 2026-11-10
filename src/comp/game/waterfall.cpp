@@ -2,6 +2,7 @@
 #include "waterfall.hpp"
 #include "camera.hpp"
 #include "ffx_instances.hpp"
+#include "lightmap_sun.hpp"
 #include "map_lights.hpp"
 #include "texture_names.hpp"
 #include "shared/common/config.hpp"
@@ -53,6 +54,9 @@ namespace comp::game::waterfall
 		std::unordered_set<uint64_t> g_read;
 		std::unordered_map<IDirect3DBaseTexture9*, bool> g_is_fall;
 		std::unordered_map<IDirect3DBaseTexture9*, bool> g_is_sprite;
+		std::unordered_map<IDirect3DBaseTexture9*, bool> g_is_landing;
+		// Landing sprites have been drawn on this map: from then on it is stirred under them alone.
+		bool g_landing_seen = false;
 		size_t g_triangle_count = 0;
 
 		// The latest sprite contact, set from the sprite observer, and whether a live effect allows it.
@@ -318,6 +322,8 @@ namespace comp::game::waterfall
 		if (map != g_map)
 		{
 			g_map = map;
+			g_landing_seen = false;
+			g_is_landing.clear();
 			g_pieces.clear();
 			g_read.clear();
 			g_triangle_count = 0;
@@ -361,6 +367,53 @@ namespace comp::game::waterfall
 				g_sprites_this_frame++;
 			}
 		}
+	}
+
+	DWORD landing_tag(IDirect3DBaseTexture9* texture, const shared::common::ffp_state::sprite_point* points, UINT count)
+	{
+		// As far from a fall's sheet as its landing splashes come, sideways, and as far below its lowest point.
+		constexpr float kLandingReach = 14.0f;
+		constexpr float kLandingBelow = 4.0f;
+		// A fall's landing is one draw of 120 triangles or more in every capture; a footstep or a hit on water, which use the same
+		// texture, 18 at the most.
+		constexpr UINT kLandingTriangles = 60;
+		if (!texture || count < kLandingTriangles || g_pieces.empty())
+			return 0;
+		const auto known = g_is_landing.find(texture);
+		bool is_landing;
+		if (known != g_is_landing.end())
+			is_landing = known->second;
+		else
+		{
+			const auto name = texture_names::name_of(texture);
+			if (name.empty())
+				return 0;
+			is_landing = g_is_landing[texture] = name == "s05212";
+		}
+		// The pieces are the last map's until a fall of this one is drawn.
+		if (!is_landing || map_lights::current_map_name() != g_map)
+			return 0;
+		for (UINT i = 0; i < count; i++)
+		{
+			const auto& s = points[i];
+			if (s.alpha < 0.1f)
+				continue;
+			for (const auto& part : g_pieces)
+			{
+				if (s.x > part.lo[0] - kLandingReach && s.x < part.hi[0] + kLandingReach && s.z > part.lo[2] - kLandingReach && s.z < part.hi[2] + kLandingReach &&
+					s.y > part.lo[1] - kLandingBelow && s.y < part.hi[1])
+				{
+					g_landing_seen = true;
+					return lightmap_sun::kFallLandingMarker;
+				}
+			}
+		}
+		return 0;
+	}
+
+	bool landing_seen()
+	{
+		return g_landing_seen;
 	}
 
 	namespace

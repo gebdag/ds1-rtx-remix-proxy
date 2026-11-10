@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "lightmap_sun.hpp"
 #include "texture_names.hpp"
+#include "waterfall.hpp"
 
 #include "shared/common/ffp_state.hpp"
 
@@ -449,7 +450,7 @@ namespace comp::game::lightmap_sun
 				tag = kNoSunMarker;
 		}
 		// A waterfall's mesh, when nothing above took the channel.
-		if (!tag && (ripple & texture_names::kRippleWaterfall))
+		if (!tag && (ripple & texture_names::kRippleWaterfall) && !waterfall::landing_seen())
 			tag = kFallingWaterMarker;
 		set_tag(dev, tag);
 

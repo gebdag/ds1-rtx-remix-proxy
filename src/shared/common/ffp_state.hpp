@@ -181,6 +181,9 @@ namespace shared::common
 		struct sprite_point { float x, y, z, alpha; float r, g, b; float area; bool additive; };
 		using sprite_observer_fn = void(*)(const sprite_point* points, UINT count);
 		void set_sprite_observer(sprite_observer_fn fn) { sprite_observer_fn_ = fn; }
+		// A stage 6 tag for a sprite draw, from its texture and points; 0 for none (where falling water lands, game::waterfall).
+		using sprite_tag_fn = DWORD(*)(IDirect3DBaseTexture9* texture, const sprite_point* points, UINT count);
+		void set_sprite_tag(sprite_tag_fn fn) { sprite_tag_fn_ = fn; }
 
 		// One record of a game hit: where (world), its colour, how fast its sparks leave (m/s), how many streaks the game gives it.
 		struct spark_emission { float pos[3]; float rgb[3]; float speed; UINT streaks; };
@@ -641,6 +644,7 @@ namespace shared::common
 		camera_pos_fn camera_override_fn_ = nullptr;
 		map_loaded_fn map_loaded_fn_ = nullptr;
 		sprite_observer_fn sprite_observer_fn_ = nullptr;
+		sprite_tag_fn sprite_tag_fn_ = nullptr;
 		bool inject_view_pos_ = false;
 		bool offset_world_ = false;
 
