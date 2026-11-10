@@ -352,6 +352,10 @@ namespace shared::common
 			// Diagnostic: draw those sprites with blending and alpha test off, as solid
 			// quads, to see where they land.
 			bool debug_opaque = false;
+			// Sprites on the game's plain white textures (s00917, a fog gate's quad) are drawn with the proxy's own white texture:
+			// Remix finds a mod's material by the texture's content, and a character part with the same plain white diffuse (the
+			// ghost armour's arms) gave its additive ghost material to the gate's quad, which then covered nothing.
+			bool own_white = true;
 			// Express what each particle shader computes as stage state Remix reads:
 			// colour and alpha = texture * vertex colour. Off leaves whatever stage
 			// state the last converted draw left (alpha often texture-only).

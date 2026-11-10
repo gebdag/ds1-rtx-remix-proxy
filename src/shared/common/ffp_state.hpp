@@ -223,6 +223,8 @@ namespace shared::common
 		// Whether a sprite texture is the bloodstain's motes (s01003): such a draw is tagged for Remix particles (draw_sprite_up).
 		using sprite_texture_fn = bool(*)(IDirect3DBaseTexture9* texture);
 		void set_mote_texture_test(sprite_texture_fn fn) { mote_texture_fn_ = fn; }
+		// Whether a sprite texture is one of the game's plain white ones (s00917, s00915): drawn with the proxy's own white texture (draw_sprite_up).
+		void set_white_texture_test(sprite_texture_fn fn) { white_texture_fn_ = fn; }
 		// Cube textures the device created, by address: the game reaches its probes through handles of its own.
 		void note_cube(IDirect3DBaseTexture9* cube)
 		{
@@ -887,6 +889,7 @@ namespace shared::common
 		uint32_t known_cube_vtable_ = 0;
 		sprite_batch_fn sprite_batch_fn_ = nullptr;
 		sprite_texture_fn mote_texture_fn_ = nullptr;
+		sprite_texture_fn white_texture_fn_ = nullptr;
 		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking

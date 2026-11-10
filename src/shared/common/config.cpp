@@ -317,6 +317,7 @@ namespace shared::common
 		// [Sfx]
 		sfx.ffp_sprites = get_bool("Sfx", "FFPSprites", true);
 		sfx.debug_opaque = get_bool("Sfx", "DebugOpaque", false);
+		sfx.own_white = get_bool("Sfx", "OwnWhite", true);
 		sfx.translate = get_bool("Sfx", "Translate", true);
 		sfx.drop_screen_effects = get_bool("Sfx", "DropScreenEffects", true);
 		sfx.hide = get_bool("Sfx", "Hide", false);

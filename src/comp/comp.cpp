@@ -121,6 +121,12 @@ namespace comp
 			ffp.set_spark_source(game::hit_sparks::collect);
 			ffp.set_stamp_texture_source(game::swamp::stamp_textures);
 			ffp.set_mote_texture_test([](IDirect3DBaseTexture9* texture) { return game::texture_names::name_of(texture) == "s01003"; });
+			// The effect textures that are plain white, 32 x 32 (of the 329 in sfx	ex, by content): the fog gates' quad and s00915.
+			ffp.set_white_texture_test([](IDirect3DBaseTexture9* texture)
+			{
+				const auto name = game::texture_names::name_of(texture);
+				return name == "s00917" || name == "s00915";
+			});
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}

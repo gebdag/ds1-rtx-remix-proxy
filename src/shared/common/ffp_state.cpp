@@ -2741,9 +2741,15 @@ namespace shared::common
 		// FRPG_Sfx_LineType0 samples nothing: what is on stage 0 is left from an earlier draw, and at its uv of
 		// (0, 0) usually black, which took the sparks' streaks away. A white texture stands in: Remix reads the
 		// draw's markers only from a draw with a texture.
-		if (!(cur_ps_sampler_mask_ & 1u))
+		// A sprite on one of the game's plain white textures (s00917: a fog gate's opaque quad) gets the proxy's white one too: the same
+		// picture under an identity no other draw has. Remix finds a mod's material by the texture's content, and a character part with the
+		// same plain white diffuse (the ghost armour's arms, z_pbr ghosts.usda) gave its additive ghost material to the gate's quad: the quad
+		// covered nothing, and the sky behind the doorway showed in the fog (frame_20261110_121323).
+		const bool sampled = (cur_ps_sampler_mask_ & 1u) != 0;
+		const bool plain_white = sampled && config::get().sfx.own_white && white_texture_fn_ && white_texture_fn_(cur_texture_[0]);
+		if (!sampled || plain_white)
 			ensure_white_sprite_tex(dev);
-		dev->SetTexture(0, (cur_ps_sampler_mask_ & 1u) ? cur_texture_[0] : white_sprite_tex_);
+		dev->SetTexture(0, !sampled || (plain_white && white_sprite_tex_) ? white_sprite_tex_ : cur_texture_[0]);
 		for (DWORD ts = 1; ts < 8; ts++)
 			dev->SetTexture(ts, nullptr);
 		dev->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(world));
