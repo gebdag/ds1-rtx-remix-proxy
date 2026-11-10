@@ -9,6 +9,7 @@
 #include "../game/texture_names.hpp"
 #include "../game/sky_meshes.hpp"
 #include "../game/effect_lights.hpp"
+#include "../game/atmosphere.hpp"
 #include "../game/map_lights.hpp"
 
 namespace comp
@@ -127,7 +128,42 @@ namespace comp
 		}
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
+		// Seath's wings, tentacles and band (c5290_2 at c100 3): alpha-blended layers the game brightens past white, so they read as solid
+		// light. As lit see-through layers Remix showed them dim and see-through. They carry the bright-character tag already (atmosphere
+		// tag_self_lit), so Remix gives them texture * c100 * light as their own light once it draws them as a surface:
+		// - mode 2 (default): a cutout (alpha test, no blend), as Priscilla's fur: an ordinary surface of the frame, upscaled, denoised and
+		//   hazed at its own depth like the rest;
+		// - mode 1: added (destination One), as the game's additive effects; flickers, as additive layers come back at render resolution.
+		// proxy.Character.SeathGlow (0 off), proxy.Character.SeathAlphaRef.
+		const int seath_mode = game::atmosphere::seath_glow_mode();
+		DWORD seath_dest = 0, seath_blend = FALSE, seath_test = FALSE, seath_ref = 0, seath_func = 0;
+		const float* glow_ps = ffp.ps_const_data();
+		const bool seath_glow = seath_mode != 0 && glow_ps && glow_ps[100 * 4] >= 2.9f &&
+			game::texture_names::name_of(ffp.cur_texture(0)) == "c5290_2" &&
+			SUCCEEDED(dev->GetRenderState(D3DRS_DESTBLEND, &seath_dest)) && seath_dest == D3DBLEND_INVSRCALPHA;
+		if (seath_glow && seath_mode == 1)
+			dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		else if (seath_glow)
+		{
+			dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &seath_blend);
+			dev->GetRenderState(D3DRS_ALPHATESTENABLE, &seath_test);
+			dev->GetRenderState(D3DRS_ALPHAREF, &seath_ref);
+			dev->GetRenderState(D3DRS_ALPHAFUNC, &seath_func);
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+			dev->SetRenderState(D3DRS_ALPHAREF, game::atmosphere::seath_alpha_ref());
+			dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+		}
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
+		if (seath_glow && seath_mode == 1)
+			dev->SetRenderState(D3DRS_DESTBLEND, seath_dest);
+		else if (seath_glow)
+		{
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, seath_blend);
+			dev->SetRenderState(D3DRS_ALPHATESTENABLE, seath_test);
+			dev->SetRenderState(D3DRS_ALPHAREF, seath_ref);
+			dev->SetRenderState(D3DRS_ALPHAFUNC, seath_func);
+		}
 		// More shells than the mesh has: the same triangles again between its layers (expand_skin_vertex).
 		// Her cutout only: blended shells (rats) gained nothing measurable and would only stack up coverage.
 		if (fur && fur_cards && SUCCEEDED(hr))

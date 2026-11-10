@@ -66,6 +66,10 @@ namespace comp::game::atmosphere
 	// A lit effect mesh (`lit_effect`, ffp_state cur_is_lit_effect_mesh) likewise, tagged with c100 times its light.
 	// A light shaft (`light_shaft`, texture_names::is_light_shaft) with the game's ambient on it, seen from the side, and its own
 	// haze at `shaft_distance` (its centre's, metres; <= 0 unknown) by its own set (PS c103-c111, VS c128 in `vs_const`).
+	// How Seath's glow layers are drawn (skinning.cpp; proxy.Character.SeathGlow): 0 as the game sends them, 1 added, 2 a cutout (default),
+	// and the cutout's alpha reference (proxy.Character.SeathAlphaRef, 0-255).
+	int seath_glow_mode();
+	DWORD seath_alpha_ref();
 	// New Londo's ghosts drawn as an ordinary alpha blend, not additive (renderer.cpp; proxy.Character.GhostAlphaBlend, on).
 	bool ghost_alpha_blend();
 	// A lit character below the bright-boss level (c100 under kBrightCharacterMin): with an additive blend, a ghost.

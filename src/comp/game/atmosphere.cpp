@@ -174,6 +174,10 @@ namespace comp::game::atmosphere
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		bool g_ghost_alpha_blend = true; // proxy.Character.GhostAlphaBlend, live
+		int g_seath_glow = 2;            // proxy.Character.SeathGlow, live: 0 off, 1 additive, 2 cutout
+		// proxy.Character.SeathAlphaRef, live. 64 cut most of the wing away (its alpha is low; the game's c100 3 makes even that solid light);
+		// 8 against the game: frame error 22.4 / 29.3 on frame_20261109_224107 / frame_20261110_001243 (36.6 / 38.4 as sent), 24 gave 23.6 / 29.8.
+		DWORD g_seath_alpha_ref = 8;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
 
 		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
@@ -681,6 +685,16 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	int seath_glow_mode()
+	{
+		return g_seath_glow;
+	}
+
+	DWORD seath_alpha_ref()
+	{
+		return g_seath_alpha_ref;
+	}
+
 	bool ghost_alpha_blend()
 	{
 		return g_ghost_alpha_blend;
@@ -965,6 +979,8 @@ namespace comp::game::atmosphere
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
 		else if (key == "Character.GhostAlphaBlend") g_ghost_alpha_blend = b;
+		else if (key == "Character.SeathGlow") g_seath_glow = std::clamp(std::atoi(value.c_str()), 0, 2);
+		else if (key == "Character.SeathAlphaRef") g_seath_alpha_ref = static_cast<DWORD>(std::clamp(std::atoi(value.c_str()), 0, 255));
 		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
 		// HDR10 output: the final pass copy and the runtime's rtx.hdr.enable follow at once; the scene target's format
 		// is set when the game creates it (a restart).
