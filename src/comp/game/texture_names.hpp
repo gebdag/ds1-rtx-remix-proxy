@@ -31,6 +31,17 @@ namespace comp::game::texture_names
 	// objects (o####) do have names.
 	bool is_body_part(IDirect3DBaseTexture9* texture);
 
+	// What a draw with this diffuse is to the runtime's ripple field, in one lookup. kRippleCharacter: a character's or its
+	// equipment's (owner::character). kRippleEnemy: an enemy's own (c####, but not c0000, the player's model), a character
+	// that is certainly not the player; characters built from the player's parts have no such texture. kRippleWaterfall:
+	// a waterfall mesh's diffuse (*waterfall*, m13_n_water_*), the falling sheets and the flat pools that share the texture.
+	constexpr uint32_t kRippleCharacter = 1, kRippleEnemy = 2, kRippleWaterfall = 4;
+	uint32_t ripple_class(IDirect3DBaseTexture9* texture);
+
+	// Changes whenever a texture is named, renamed or forgotten: what a caller remembered about a texture pointer holds
+	// only as long as this does.
+	uint32_t generation();
+
 	// True for the Estus flask's diffuse (the drinking effect's model), see game/estus.hpp.
 	bool is_estus_flask(IDirect3DBaseTexture9* texture);
 

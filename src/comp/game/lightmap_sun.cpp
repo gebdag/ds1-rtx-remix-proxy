@@ -5,6 +5,7 @@
 #include "shared/common/ffp_state.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <unordered_map>
 #include <vector>
@@ -332,6 +333,30 @@ namespace comp::game::lightmap_sun
 		// body (bd_m_body_*) under what is worn. Armour that goes by no name does not count: then these stay as they are.
 		unsigned int g_helmet_frame = 0, g_chest_frame = 0;
 
+		// texture_names::ripple_class of the draw's diffuse, remembered per texture: tag_draw runs for every draw, on the game's
+		// render thread, and the lookup takes a lock.
+		uint32_t ripple_class_of(IDirect3DBaseTexture9* texture)
+		{
+			struct slot { IDirect3DBaseTexture9* texture = nullptr; uint32_t bits = 0; };
+			static std::array<slot, 256> cache;
+			static uint32_t generation = ~0u;
+			if (!texture)
+				return 0;
+			const uint32_t now = texture_names::generation();
+			if (now != generation)
+			{
+				generation = now;
+				cache.fill(slot{});
+			}
+			slot& s = cache[(reinterpret_cast<uintptr_t>(texture) >> 5) & 255u];
+			if (s.texture != texture)
+			{
+				s.texture = texture;
+				s.bits = texture_names::ripple_class(texture);
+			}
+			return s.bits;
+		}
+
 		bool is_covered_body(ffp_state& ffp, unsigned int frame)
 		{
 			const auto name = texture_names::name_of(ffp.cur_texture(0));
@@ -357,6 +382,7 @@ namespace comp::game::lightmap_sun
 			g_measures_left = kMeasuresPerFrame;
 		}
 		DWORD tag = 0;
+		const uint32_t ripple = ripple_class_of(ffp.cur_texture(0));
 		if (ffp.cur_decl_is_skinned())
 		{
 			// Read from the device: the game applies blend state through state blocks.
@@ -374,6 +400,14 @@ namespace comp::game::lightmap_sun
 			const bool card = blend && test && dest == D3DBLEND_INVSRCALPHA &&
 				!(ffp.cur_ps_sampler_mask() & (1u << 2)) && !fading;
 			tag = card ? kSkinnedCardMarker : !blend && texture_names::is_body_part(ffp.cur_texture(0)) ? (is_covered_body(ffp, frame) ? kWetBodyCoveredMarker : kWetBodyMarker) : kSkinnedMarker;
+			if (ripple & texture_names::kRippleEnemy)
+				tag |= kOtherCharacterBit;
+		}
+		else if (ffp.cur_decl_has_blend_indices() && (ripple & texture_names::kRippleCharacter))
+		{
+			// A weapon or a shield (wp_), or a rigid piece of an enemy: on bones, without weights. A lightmapped draw
+			// (below) is never one.
+			tag = kRigidPartMarker | ((ripple & texture_names::kRippleEnemy) ? kOtherCharacterBit : 0);
 		}
 		IDirect3DBaseTexture9* lightmap = ffp.cur_texture(6);
 		IDirect3DVertexBuffer9* vb = ffp.stream_vb(0);
@@ -414,6 +448,9 @@ namespace comp::game::lightmap_sun
 			if (ffp.cur_ps_swamp_pass() == ffp_state::swamp_pass::Surface && ffp.ps_const_data() && ffp.ps_const_data()[169 * 4 + 2] != 0.0f)
 				tag = kNoSunMarker;
 		}
+		// A waterfall's mesh, when nothing above took the channel.
+		if (!tag && (ripple & texture_names::kRippleWaterfall))
+			tag = kFallingWaterMarker;
 		set_tag(dev, tag);
 
 		if (frame - g_last_prune > kPruneFrames)

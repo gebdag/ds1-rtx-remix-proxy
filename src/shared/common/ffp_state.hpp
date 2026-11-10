@@ -136,6 +136,8 @@ namespace shared::common
 		bool view_proj_valid() const { return view_proj_valid_; }
 		bool is_ffp_active() const { return ffp_active_; }
 		bool cur_decl_is_skinned() const { return cur_decl_is_skinned_; }
+		// BLENDINDICES in the declaration, with or without weights: a rigid part on bones has only the indices.
+		bool cur_decl_has_blend_indices() const { return cur_decl_has_blend_indices_; }
 		bool cur_decl_has_normal() const { return cur_decl_has_normal_; }
 		bool cur_decl_has_pos_t() const { return cur_decl_has_pos_t_; }
 		bool cur_decl_has_texcoord() const { return cur_decl_has_texcoord_; }

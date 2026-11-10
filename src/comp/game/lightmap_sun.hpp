@@ -36,9 +36,19 @@ namespace comp::game::lightmap_sun
 	// The same, for what armour covers (the head under a helmet, the bare body under a chest piece): it gets wet too,
 	// but water does not reach it, so nothing bounces or drips off it.
 	constexpr DWORD kWetBodyCoveredMarker = 0xD2000003;
+	// A rigid part of a character, drawn on bones without weights: a weapon, a shield. Not a skinned draw to the
+	// runtime, but it moves water like the body does (the ripple field's map pass, ds1_ripple_map in the runtime).
+	constexpr DWORD kRigidPartMarker = 0xD2000010;
+	// Added to any of the 0xD2 tags: the draw is another character's than the player's, an enemy with textures of
+	// its own (c####). The runtime leaves those out of the ripples with rtx.ds1Ripple.enemies off. Characters built
+	// from the player's parts (human NPCs, phantoms) cannot be told from the player here and carry no bit.
+	constexpr DWORD kOtherCharacterBit = 0x00000020;
+	// A waterfall's mesh (texture_names::kRippleWaterfall), no character: where its falling sheet meets water, the runtime's
+	// ripple field stirs the water (rtx.ds1Ripple.fallStrength).
+	constexpr DWORD kFallingWaterMarker = 0xD2000040;
 
 	// Tags the next indexed draw: its lightmap level when its pixel shader is lightmapped,
-	// kSkinnedMarker / kSkinnedCardMarker when it is skinned, else none.
+	// kSkinnedMarker / kSkinnedCardMarker when it is skinned, kRigidPartMarker on a character's rigid part, else none.
 	// Levels are worked out once per draw (vertex, index and lightmap data are read back on the CPU,
 	// a few dozen draws per frame at most) and cached by the draw's buffers, range and lightmap.
 	void tag_draw(IDirect3DDevice9* dev, D3DPRIMITIVETYPE prim, INT base_vertex, UINT start_index,

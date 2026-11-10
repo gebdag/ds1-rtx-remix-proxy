@@ -20,6 +20,7 @@ namespace comp::game::texture_names
 			bool estus_flask = false;
 			bool butterfly_wing = false;
 			bool lava = false;
+			bool waterfall = false;
 			bool foliage = false;
 			bool light_shaft = false;
 			owner owned_by = owner::unknown;
@@ -28,6 +29,8 @@ namespace comp::game::texture_names
 		std::shared_mutex g_mutex;
 		std::unordered_map<IDirect3DBaseTexture9*, entry> g_entries;
 		std::atomic<uint32_t> g_named{ 0 }, g_unnamed{ 0 }, g_atmospheric{ 0 };
+		// Counts the changes to g_entries, for callers that keep what they looked up (generation()).
+		std::atomic<uint32_t> g_generation{ 0 };
 
 		// How far before the DDS to look for its TPF header. Map textures come
 		// one per TPF, so their header is a few hundred bytes back; only the
@@ -221,6 +224,13 @@ namespace comp::game::texture_names
 			return s == "m10_grass_02" || s == "m10_grass_03";
 		}
 
+		// The waterfall meshes' diffuse textures: m12_00_waterfall_01 (Darkroot Basin), m10_00_waterfall_01 (the Depths),
+		// m13_n_water_00. The same test as game::waterfall's.
+		bool classify_waterfall(const std::string& s)
+		{
+			return s.find("waterfall") != std::string::npos || s.rfind("m13_n_water_", 0) == 0;
+		}
+
 		bool classify_lava(const std::string& s)
 		{
 			// Gwynevere's curtains too: the game's region light (c86 3, 2, 1.65; 1.18, 3, 3 in the dark version) makes them glow as if backlit, and nothing real lights them.
@@ -261,7 +271,8 @@ namespace comp::game::texture_names
 			if (n <= 4)
 				shared::common::log("TexNames", std::format("no TPF header found for a {}-byte DDS", dds_size));
 			std::unique_lock lock(g_mutex);
-			g_entries.erase(texture);
+			if (g_entries.erase(texture))
+				++g_generation;
 			return;
 		}
 
@@ -271,6 +282,7 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.waterfall = classify_waterfall(e.name);
 		e.foliage = classify_foliage(e.name);
 		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
@@ -283,6 +295,7 @@ namespace comp::game::texture_names
 
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);
+		++g_generation;
 	}
 
 	void on_device_created(IDirect3DBaseTexture9* texture)
@@ -290,7 +303,8 @@ namespace comp::game::texture_names
 		if (!texture)
 			return;
 		std::unique_lock lock(g_mutex);
-		g_entries.erase(texture);
+		if (g_entries.erase(texture))
+			++g_generation;
 	}
 
 	bool is_atmospheric(IDirect3DBaseTexture9* texture)
@@ -300,6 +314,27 @@ namespace comp::game::texture_names
 		std::shared_lock lock(g_mutex);
 		const auto it = g_entries.find(texture);
 		return it != g_entries.end() && it->second.atmospheric;
+	}
+
+	uint32_t ripple_class(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return 0;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		if (it == g_entries.end())
+			return 0;
+		const std::string& s = it->second.name;
+		const auto digit = [&](size_t i) { return std::isdigit(static_cast<unsigned char>(s[i])) != 0; };
+		const bool enemy = s.size() >= 5 && (s[0] == 'c' || s[0] == 'C') && digit(1) && digit(2) && digit(3) && digit(4) &&
+			s.compare(1, 4, "0000") != 0;
+		return (it->second.owned_by == owner::character ? kRippleCharacter : 0u) | (enemy ? kRippleEnemy : 0u) |
+			(it->second.waterfall ? kRippleWaterfall : 0u);
+	}
+
+	uint32_t generation()
+	{
+		return g_generation.load(std::memory_order_relaxed);
 	}
 
 	bool is_lava(IDirect3DBaseTexture9* texture)
@@ -396,11 +431,13 @@ namespace comp::game::texture_names
 		e.estus_flask = e.name == "s00902";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
+		e.waterfall = classify_waterfall(e.name);
 		e.foliage = classify_foliage(e.name);
 		e.light_shaft = classify_light_shaft(e.name);
 		e.owned_by = classify_owner(e.name);
 		std::unique_lock lock(g_mutex);
 		g_entries[texture] = std::move(e);
+		++g_generation;
 	}
 
 	stats get_stats()
