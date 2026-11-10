@@ -173,10 +173,6 @@ namespace comp::game::atmosphere
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
-		float g_last_bright_character[3] = {}; // the bright character tag's value before it was rounded to bytes (scale_self_lit_for_seath)
-		bool g_have_bright_character = false;
-		float g_seath_glow_gain = 0.1f; // proxy.Character.SeathGlowGain, live: fitted to frame_20261109_224107 with the emission layer at 2.5
-		bool g_seath_unhazed = true;     // proxy.Character.SeathUnhazed, live
 
 		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
 		constexpr DWORD kViewFadeMarker = 0xD6000000;
@@ -689,7 +685,6 @@ namespace comp::game::atmosphere
 		DWORD tag = 0;
 		g_self_lit_below_tag = 0;
 		g_shaft_own_haze = false;
-		g_have_bright_character = false;
 		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
 		// (m18_ao, c100 7) is an ordinary surface Remix lights, and the tag would add its c100 glow on top of that
 		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
@@ -783,38 +778,12 @@ namespace comp::game::atmosphere
 			tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
 				tag |= static_cast<DWORD>(std::clamp(std::lround(value[c] / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
-			std::memcpy(g_last_bright_character, value, sizeof(g_last_bright_character));
-			g_have_bright_character = true;
 		}
 		if (tag != g_self_lit_tag_set)
 		{
 			dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
 			g_self_lit_tag_set = tag;
 		}
-	}
-
-	void tag_seath_unhazed(IDirect3DDevice9* dev)
-	{
-		// The game fogs these layers at their own short distance; the look's haze would use the far cave behind them, which washed his
-		// wings to a milky pink (frame_20261109_224107). The haze slot that the look leaves alone, as for a light shaft.
-		const DWORD tag = kHazeMarker | kUnhazedSlot;
-		if (dev && g_seath_unhazed && tag != g_tag_set)
-		{
-			dev->SetTextureStageState(7, D3DTSS_CONSTANT, tag);
-			g_tag_set = tag;
-		}
-	}
-
-	void scale_self_lit_for_seath(IDirect3DDevice9* dev)
-	{
-		if (!g_have_bright_character || (g_self_lit_tag_set >> 24) != (kSelfLitMarker >> 24) || g_seath_glow_gain == 1.0f)
-			return;
-		// From the value before it was rounded: at 0.1 the rounded bytes (16 to 48) kept only a few levels each.
-		DWORD tag = kSelfLitMarker;
-		for (int c = 0; c < 3; c++)
-			tag |= static_cast<DWORD>(std::clamp(std::lround(g_last_bright_character[c] * g_seath_glow_gain / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
-		dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
-		g_self_lit_tag_set = tag;
 	}
 
 	void tag_view_fade(IDirect3DDevice9* dev, bool fade, const float* ps_const)
@@ -996,8 +965,6 @@ namespace comp::game::atmosphere
 					&gl->menu_key[3], &gl->menu_key[4], &gl->menu_key[5], &gl->menu_key[6]);
 		}
 		else if (key == "Lights.Sun") { if (auto* gl = game_lights::get()) gl->sun_enabled = b; }
-		else if (key == "Character.SeathUnhazed") g_seath_unhazed = b;
-		else if (key == "Character.SeathGlowGain") g_seath_glow_gain = std::max(static_cast<float>(std::atof(value.c_str())), 0.0f);
 		else if (key == "Eyes.Gain") eye_sprites::set_gain(static_cast<float>(std::atof(value.c_str())));
 		else if (key == "Lights.PlayerIntensity") { if (auto* gl = game_lights::get()) gl->set_player_intensity(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.PlayerGammaAdd") { if (auto* gl = game_lights::get()) gl->set_player_gamma_add(b); }

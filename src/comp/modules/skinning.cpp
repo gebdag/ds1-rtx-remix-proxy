@@ -10,7 +10,6 @@
 #include "../game/sky_meshes.hpp"
 #include "../game/effect_lights.hpp"
 #include "../game/map_lights.hpp"
-#include "../game/atmosphere.hpp"
 
 namespace comp
 {
@@ -128,20 +127,7 @@ namespace comp
 		}
 		const bool scrolled = game::texture_scroll::apply(dev, false, false, src_vb, ffp.cur_ib(),
 			base_vtx, start_idx, prim_count, ffp.frame_count());
-		// Seath's wings and tentacles (c5290_2, c100 3): blended layers the game brightens past white, so they read as solid light where the texture's
-		// alpha is only half. As lit translucent layers they went see-through over his body. Composited as the game does, with the colour the self-lit
-		// tag carries (atmosphere.hpp tag_self_lit, a character past its texture).
-		const float* glow_ps = ffp.ps_const_data();
-		const bool seath_glow = glow_ps && glow_ps[100 * 4] >= 2.9f && game::texture_names::name_of(ffp.cur_texture(0)) == "c5290_2" &&
-			ffp.apply_skinned_glow_layer_marker(dev);
-		if (seath_glow)
-		{
-			game::atmosphere::scale_self_lit_for_seath(dev);
-			game::atmosphere::tag_seath_unhazed(dev);
-		}
 		auto hr = dev->DrawIndexedPrimitive(pt, 0, min_vtx, num_verts, start_idx, prim_count);
-		if (seath_glow)
-			ffp.clear_decal_marker(dev);
 		// More shells than the mesh has: the same triangles again between its layers (expand_skin_vertex).
 		// Her cutout only: blended shells (rats) gained nothing measurable and would only stack up coverage.
 		if (fur && fur_cards && SUCCEEDED(hr))
