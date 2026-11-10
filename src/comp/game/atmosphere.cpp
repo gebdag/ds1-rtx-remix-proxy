@@ -173,6 +173,7 @@ namespace comp::game::atmosphere
 		constexpr DWORD kSelfLitBelowMarker = 0xD9000000;
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
+		bool g_ghost_alpha_blend = true; // proxy.Character.GhostAlphaBlend, live
 		DWORD g_self_lit_tag_set = ~0u; // the stage 3 constant as last set; ~0 = unknown (set it)
 
 		// View fade tag (tag_view_fade): 0xD6000000 | c176.x * 255 << 8 | c176.y * 16.
@@ -680,6 +681,16 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	bool ghost_alpha_blend()
+	{
+		return g_ghost_alpha_blend;
+	}
+
+	bool is_ghost_draw(const float* ps_const)
+	{
+		return ps_const && std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] }) < kBrightCharacterMin;
+	}
+
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const, IDirect3DBaseTexture9* probe, bool lava, bool unlit, bool lit_effect,
 		bool light_shaft, const float* shaft_gain, const float* vs_const, float shaft_distance, bool glow_mesh)
 	{
@@ -953,6 +964,7 @@ namespace comp::game::atmosphere
 		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
+		else if (key == "Character.GhostAlphaBlend") g_ghost_alpha_blend = b;
 		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
 		// HDR10 output: the final pass copy and the runtime's rtx.hdr.enable follow at once; the scene target's format
 		// is set when the game creates it (a restart).

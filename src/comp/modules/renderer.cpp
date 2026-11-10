@@ -598,6 +598,19 @@ namespace comp
 			dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 			shaft_gain = kCellarShaftGain;
 		}
+		// New Londo's ghosts (and the one ghost armour): skinned, lit, added with SrcAlpha + One. Remix makes an additive surface a light
+		// source, so they glowed from afar; the game's are pale, faint shapes. Drawn as an ordinary alpha blend they are a lit see-through
+		// layer instead, and tag_self_lit leaves them alone (it tags only additive draws). proxy.Character.GhostAlphaBlend.
+		if (DWORD blend = FALSE, src = 0, dest = 0; game::atmosphere::ghost_alpha_blend() && ffp.view_proj_valid() && ffp.cur_decl_is_skinned() &&
+			(ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && !(ffp.cur_ps_light_flags() & ffp.PS_UNLIT) &&
+			game::atmosphere::is_ghost_draw(ffp.ps_const_data()) &&
+			SUCCEEDED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend)) && blend &&
+			SUCCEEDED(dev->GetRenderState(D3DRS_SRCBLEND, &src)) && src == D3DBLEND_SRCALPHA &&
+			SUCCEEDED(dev->GetRenderState(D3DRS_DESTBLEND, &dest)) && dest == D3DBLEND_ONE)
+		{
+			ctx.save_rs(dev, D3DRS_DESTBLEND);
+			dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		}
 		game::atmosphere::tag_self_lit(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT), ffp.ps_const_data(),
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
