@@ -22,7 +22,11 @@ MODS = Path(r"<game dir>\DATA\rtx-remix\mods")
 OUT = MODS / "ds1_water_murk"
 STANDIN_PIXEL = 0xFF2F5D74
 MURK_RGB = (0.012, 0.020, 0.024)
-MURK_OPACITY = 0.502 * 0.5
+# The game's mix weight is c127.w * vertex alpha = 0.502 * 0.5, but its water colour is then multiplied by the mesh's vertex colour
+# (FRPG_Water_Reflect: mul r0.xyz, r2, v3), and what shows in the game is near black water with no floor under it: the floor beside
+# the player reads (0, 0, 3) of 255 on frame_20261111_014707 and 014716, where a quarter of murk left it at (32, 34, 28) with the
+# cobbles plain to see. 0.9 hides the floor as the game does and keeps a trace of it in the shallows.
+MURK_OPACITY = 0.9
 
 standin = xxhash.xxh3_64_intdigest(struct.pack("<I", STANDIN_PIXEL) * 64)
 OUT.mkdir(parents=True, exist_ok=True)

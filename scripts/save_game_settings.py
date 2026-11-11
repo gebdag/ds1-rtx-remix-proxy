@@ -4,6 +4,8 @@
     python scripts/save_game_settings.py --restore   repo -> game, each replaced file kept beside it as .bak-<date>-restore
     python scripts/save_game_settings.py --check     only says what differs
 
+Also kept: DATA/rtx_comp/emissive_scales.txt (the runtime's Dark Souls menu > Emissive per texture) as assets/emissive_scales.txt.
+
 What is kept:
     DATA\\rtx_comp\\settings\\area_overrides.ini                     assets/area_overrides.ini
     DATA\\rtx_comp\\lights\\*.txt (map tables, custom lights, ...)   assets/lights/
@@ -74,6 +76,7 @@ def merge_lights(repo_text, game_text):
 def pairs():
     yield GAME / "settings" / "area_overrides.ini", REPO / "assets" / "area_overrides.ini", ";"
     yield GAME / "settings" / "rtx_comp" / "lights" / "light_overrides.txt", REPO / "assets" / "light_overrides.txt", "#"
+    yield GAME / "emissive_scales.txt", REPO / "assets" / "emissive_scales.txt", "#"
     names = {p.name for p in (GAME / "lights").glob("*.txt")} | {p.name for p in (REPO / "assets" / "lights").glob("*.txt")}
     for name in sorted(names):
         if name != "light_overrides.txt":   # the one in lights\ is from before the settings folder; nothing reads it

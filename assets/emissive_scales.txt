@@ -1,0 +1,6 @@
+# Emission scale per game texture (Alt+X > Developer Settings Menu > Dark Souls > Emissive per texture).
+# texture hash, scale (1 = as it was, 0 = no glow), the texture's name as a note
+387068B9E751F908 0.1000  # c2670 (New Londo ghost)
+5CBED5C1AC67B1F1 0.1000  # c2670 wp_a_0102 (ghost's blades)
+9F6F5641F1FFEE81 0.1000  # c2680 (New Londo banshee)
+FC284DBDAE171C3A 0.1000  # c2680 wp_a_0103 (banshee's blades)

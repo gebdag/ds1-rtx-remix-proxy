@@ -273,6 +273,8 @@ if not "!DEPLOY_TARGET!"=="" (
             if not exist "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights" mkdir "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights"
             copy /y "%ROOT%assets\light_overrides.txt" "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" >nul
         )
+        :: Emission scale per game texture (the runtime's Dark Souls menu > Emissive per texture), only when the game has none.
+        if not exist "!DEPLOY_TARGET!\rtx_comp\emissive_scales.txt" if exist "%ROOT%assets\emissive_scales.txt" copy /y "%ROOT%assets\emissive_scales.txt" "!DEPLOY_TARGET!\rtx_comp\emissive_scales.txt" >nul
         ver >nul
         :: The lookdev host's map suns from scripts\gen_map_suns.py, and the per-mesh tables of game/mesh_tables.hpp with
         :: the sky layers among them: generated from the game files by scripts\gen_*.py, never hand-edited, so always refreshed.
