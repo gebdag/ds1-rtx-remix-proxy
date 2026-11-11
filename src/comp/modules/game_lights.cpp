@@ -1918,8 +1918,8 @@ namespace comp
 		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", false));
 		// The fire light switches of the Lights tab live in their own modules: back to what the file says with the rest.
 		game::ffx_lights::set_follow_option("Lights.EffectSize", cfg.get_bool("Lights", "EffectSize", true) ? 1.0f : 0.0f);
-		game::ffx_lights::set_follow_option("Lights.EffectSizeLift", cfg.get_bool("Lights", "EffectSizeLift", false) ? 1.0f : 0.0f);
-		game::map_lights::set_flame_lift(cfg.get_bool("Lights", "FlameLift", false));
+		game::ffx_lights::set_follow_option("Lights.EffectSizeLift", cfg.get_bool("Lights", "EffectSizeLift", true) ? 1.0f : 0.0f);
+		game::map_lights::set_flame_lift(cfg.get_bool("Lights", "FlameLift", true));
 		game::ffx_lights::set_follow_option("Lights.EffectFlicker", cfg.get_float("Lights", "EffectFlicker", 0.15f));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
@@ -2725,17 +2725,17 @@ namespace comp
 		bool fire_rise = game::ffx_lights::size_lift_enabled();
 		if (form_checkbox("Raise fire lights to their flame", "##fire_rise", &fire_rise,
 			"A steady fire effect's light is drawn at the middle of everything the effect draws instead of at the effect's\n"
-			"origin (0.5 to 2.5 m up). It put the Kiln brazier's cutscene light 1.5 m up, above most of its fire: off by\n"
-			"default. Needs 'Fire light reach from the flame'. Saved as [Lights] EffectSizeLift.") |
-			revert_buttons("fire_rise", fire_rise, saved_bool("Lights", "EffectSizeLift", false), false))
+			"origin (0.5 to 2.5 m up). It puts the Kiln brazier's cutscene light 1.5 m up, above most of its fire.\n"
+			"Needs 'Fire light reach from the flame'. Saved as [Lights] EffectSizeLift.") |
+			revert_buttons("fire_rise", fire_rise, saved_bool("Lights", "EffectSizeLift", true), true))
 			game::ffx_lights::set_follow_option("Lights.EffectSizeLift", fire_rise ? 1.0f : 0.0f);
 		bool holder_rise = game::map_lights::flame_lift_enabled();
 		if (form_checkbox("Raise flame lights out of their holder", "##holder_rise", &holder_rise,
 			"A light at a placed flame whose dish, cup or torch head shuts it in is drawn above the rim (flame_lift.tsv:\n"
 			"wall torches 5 to 20 cm, the Kiln's flame dishes 25 cm), never past the middle of its fire. The game's lights\n"
-			"cast no shadows, so it never had to. Off by default: it lets the Kiln's dishes light the knights beside them\n"
-			"at full strength. Saved as [Lights] FlameLift.") |
-			revert_buttons("holder_rise", holder_rise, saved_bool("Lights", "FlameLift", false), false))
+			"cast no shadows, so it never had to. It lets the Kiln's dishes light the knights beside them at full\n"
+			"strength. Saved as [Lights] FlameLift.") |
+			revert_buttons("holder_rise", holder_rise, saved_bool("Lights", "FlameLift", true), true))
 			game::map_lights::set_flame_lift(holder_rise);
 		float flicker = game::ffx_lights::effect_flicker();
 		form_label("Flicker of lengthened fire lights",

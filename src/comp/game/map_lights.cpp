@@ -393,7 +393,7 @@ namespace comp::game::map_lights
 	bool flame_lift_enabled()
 	{
 		if (g_flame_lift_on < 0)
-			g_flame_lift_on = shared::common::config::get().get_int("Lights", "FlameLift", 0) != 0 ? 1 : 0;
+			g_flame_lift_on = shared::common::config::get().get_int("Lights", "FlameLift", 1) != 0 ? 1 : 0;
 		return g_flame_lift_on != 0;
 	}
 

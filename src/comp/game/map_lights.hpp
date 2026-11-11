@@ -101,9 +101,10 @@ namespace comp::game::map_lights
 	// the light stays in its fire. Wall torches rise 5 to 20 cm out of the torch's head, the Kiln's dishes 25 cm.
 	// The spot is matched within 10 cm.
 	// Only where the light is drawn (game_lights): what knows a light by its place keeps the game's place.
-	// [Lights] FlameLift=1 (live proxy.Lights.FlameLift) turns it on. OFF by default: every light is drawn where the game has it.
+	// [Lights] FlameLift (live proxy.Lights.FlameLift), on by default; 0 draws every light where the game has it.
 	// With it the Kiln's flame dishes, which stand on 2.6 m columns, light the knights beside them at the map light's full
-	// strength (3.0, undimmed to 2 m), and the user judged that wrong against the dark knight by the brazier (2026-11-11).
+	// strength (3.0, undimmed to 2 m). The user first judged that wrong from stills, then made it the default after flipping
+	// it in the game (2026-11-11).
 	float flame_lift(float x, float y, float z);
 	void set_flame_lift(bool on);
 	bool flame_lift_enabled();

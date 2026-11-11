@@ -60,7 +60,7 @@ namespace comp::game::ffx_lights
 		float g_size_min = 0.4f;
 		float g_size_max = 12.0f;
 		bool g_size_game = true;      // the game's own fire effect lights are extended too
-		bool g_size_lift = false;     // fire lights stand at their flame's height (sized_lift); off unless asked
+		bool g_size_lift = true;      // fire lights stand at their flame's height (sized_lift)
 		float g_flicker = 0.15f;          // share of a lengthened game light's own flicker that is kept (steady_flicker)
 		float g_flicker_seconds = 1.0f;   // the time its running mean is taken over
 		struct flicker_state
@@ -296,7 +296,7 @@ namespace comp::game::ffx_lights
 			g_size_min = std::clamp(cfg.get_float("Lights", "EffectSizeMin", 0.4f), 0.0f, 20.0f);
 			g_size_max = std::clamp(cfg.get_float("Lights", "EffectSizeMax", 12.0f), 0.5f, 100.0f);
 			g_size_game = cfg.get_int("Lights", "EffectSizeGame", 1) != 0;
-			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 0) != 0;
+			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 1) != 0;
 			g_size_learn = cfg.get_int("Lights", "EffectSizeLearn", 0) != 0;
 			if (const float v = cfg.get_float("Lights", "EffectFlicker", g_flicker); std::isfinite(v))
 				g_flicker = std::clamp(v, 0.0f, 1.0f);
