@@ -351,6 +351,24 @@ namespace {
 		return target;
 	}
 
+	// The game window as the device is made or reset: whether the game asked for fullscreen, its styles and where it sits
+	// on its monitor. Through the Remix bridge a fullscreen game stays a window covering the screen, so a frame style left
+	// on it shows as a line round the image.
+	void log_game_window(const D3DPRESENT_PARAMETERS* pp, const char* where)
+	{
+		const HWND window = pp->hDeviceWindow ? pp->hDeviceWindow : shared::globals::main_window;
+		if (!window)
+			return;
+		RECT rect {};
+		GetWindowRect(window, &rect);
+		MONITORINFO monitor { sizeof(MONITORINFO) };
+		GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor);
+		shared::common::log("Window", std::format("{}: {} requested, style 0x{:08X} exstyle 0x{:08X}, window ({}, {})-({}, {}), monitor ({}, {})-({}, {})",
+			where, pp->Windowed ? "windowed" : "fullscreen", static_cast<uint32_t>(GetWindowLongW(window, GWL_STYLE)),
+			static_cast<uint32_t>(GetWindowLongW(window, GWL_EXSTYLE)), rect.left, rect.top, rect.right, rect.bottom,
+			monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right, monitor.rcMonitor.bottom));
+	}
+
 	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
 	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
 	{
@@ -362,6 +380,7 @@ namespace {
 		res.follow_game(pp->BackBufferWidth, pp->BackBufferHeight);
 		shared::common::log("Resolution", std::format("{}: BackBuffer {}x{} -> {}x{}, render {}x{}", where, asked_width, asked_height,
 			pp->BackBufferWidth, pp->BackBufferHeight, res.render_width, res.render_height));
+		log_game_window(pp, where);
 		comp::game::aspect_ratio::on_game_resolution(pp->BackBufferWidth, pp->BackBufferHeight, std::string_view(where).starts_with("Create"));
 	}
 
