@@ -31,6 +31,7 @@ namespace comp::game::mesh_tables
 			std::string texture; // glass: the diffuse the mesh is drawn with
 			std::string derived; // glass: the glass pass texture (rtx_comp\glass\<derived>.dds)
 			float above_y = -std::numeric_limits<float>::infinity(); // sky: only while the camera is above this height
+			bool gap_skirt = false; // shell: a skirt hung over a trench, cut at [Meshes] GapSkirtAlphaRef ('<texture> gap')
 			bool hide = false;    // no-shadow: prims hide_first..hide_last of the draw are left out
 			UINT hide_first = 0;
 			UINT hide_last = 0;
@@ -86,6 +87,9 @@ namespace comp::game::mesh_tables
 				if (std::string word; k == kind::sky && in >> texture >> word && word == "above")
 					in >> above_y;
 				entry e{ source, k, static_cast<uint8_t>(cut), texture, derived, above_y };
+				// A shell skirt that bridges a trench: '<texture> gap'.
+				if (std::string word; k == kind::shell && in >> texture >> word && word == "gap")
+					e.gap_skirt = true;
 				// A ground card: '<texture> <vertex count> <height mm> ...'.
 				if (k == kind::ground)
 				{
@@ -215,9 +219,12 @@ namespace comp::game::mesh_tables
 		return shared::common::ffp_state::get().world_offset(x, y, z) && y > m.e->above_y;
 	}
 
-	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count, bool* gap_skirt)
 	{
-		return lookup(ib, type, start_index, prim_count).k == kind::shell;
+		const match m = lookup(ib, type, start_index, prim_count);
+		if (gap_skirt)
+			*gap_skirt = m.k == kind::shell && m.e->gap_skirt;
+		return m.k == kind::shell;
 	}
 
 	bool is_thin_wall_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

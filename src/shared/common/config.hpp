@@ -393,6 +393,9 @@ namespace shared::common
 			// Blended shells (rtx_comp\mesh_tables\shell_meshes.txt): 0 = decals like the other blended map
 			// draws (the old behaviour), 1 = plain blended geometry, 2 = alpha-tested cutouts.
 			int shell_mode = 2;
+			// A shell marked 'gap' (a skirt bridging a trench, New Londo) is cut at this alpha reference (0..255) instead of 64,
+			// so the faded part over the trench stays solid. Live: proxy.Meshes.GapSkirtAlphaRef.
+			int gap_skirt_alpha_ref = 8;
 			// Window glass (rtx_comp\mesh_tables\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.

@@ -25,7 +25,10 @@ namespace comp::game::mesh_tables
 	// rtx_comp\mesh_tables\shell_meshes.txt by the same generator. The rest of the game's straight-alpha
 	// map draws are edge-fade strips lying on their surface, which the proxy tags as decals. A shell
 	// tagged as a decal took the lighting of whatever lay behind it, or vanished in front of the sky.
-	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+	// gap_skirt (optional out): the entry is marked 'gap', a skirt whose faces hang over a trench (New Londo's walkway and rock
+	// skirts m1200B0A16 mesh4 / m1210B0A16 mesh6, scripts/gen_sky_meshes.py gap_skirts, fade from 1 at the top edge to 0 on the floor across a gap of 0.5 to 0.9 m). The game blends it over a trench floor
+	// it lights; in Remix that floor is unlit, so the faded part showed a dark seam. It is cut at [Meshes] GapSkirtAlphaRef.
+	bool is_shell_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count, bool* gap_skirt = nullptr);
 
 	// For a window glass mesh (rtx_comp\mesh_tables\glass_meshes.txt, scripts/gen_glass.py): the diffuse it is
 	// listed with, its alpha cut, and the texture its glass pass draws with. The texture paints the

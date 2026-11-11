@@ -919,8 +919,9 @@ namespace comp
 					const int shell_mode = shared::common::config::get().meshes.shell_mode;
 					const bool flask = !water_draw && game::texture_names::is_estus_flask(
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+					bool gap_skirt = false;
 					const bool shell = flask || (shell_mode != 0 &&
-						game::mesh_tables::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
+						game::mesh_tables::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount, &gap_skirt));
 					// Window glass is split into its came and its glass (game/glass.hpp): the base
 					// draw becomes the came, and neither pass is a decal.
 					DWORD glass_cut = 0;
@@ -946,7 +947,9 @@ namespace comp
 						dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 						dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 						dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
-						dev->SetRenderState(D3DRS_ALPHAREF, kShellCutoutAlphaRef);
+						// A skirt over a trench keeps its faded part (mesh_tables::is_shell_draw, gap_skirt).
+						dev->SetRenderState(D3DRS_ALPHAREF, gap_skirt && !flask ?
+							static_cast<DWORD>(shared::common::config::get().meshes.gap_skirt_alpha_ref) : kShellCutoutAlphaRef);
 						dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 						// The flask has no holes. And it must be fully opaque for its subsurface scattering: the sample rays
 						// are a ray query that commits no non-opaque hit, so they miss a cutout and its diffuse goes black.

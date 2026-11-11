@@ -21,6 +21,7 @@ Rules (per FLVER in map/mNN_NN_NN_NN):
 Also writes assets/mesh_tables/shell_meshes.txt, same format: the blended shells (see blended_shells), which
 the proxy draws as their own surfaces instead of decals. Outside SHELL_MAPS only solid shells count (see
 solid_shell): terrain pieces the game draws blended but paints opaque, fading only at their vertex edges.
+In GAP_SKIRT_MAPS the gap skirts (see gap_skirts) are listed too, their lines ending in ' gap'.
 
 Each listed mesh contributes one line per face set (every LOD the engine may draw):
   <FNV-1a 64 of the u16 index bytes, hex> <index count> <map>/<model>/mesh<i>/lod<j> <texture>
@@ -63,6 +64,22 @@ SOLID_TEXTURE_OPAQUE = 0.95   # texels at alpha >= 250 (the diffuse)
 SOLID_BODY = 0.3              # vertices with alpha >= 0.9
 # Plain map materials only: waterfalls, crystals and glass are blended by design.
 SOLID_MTD = re.compile(r'^(m\[|m_4stone|a12_ground)')
+# Gap skirts (gap_skirts), only in maps checked against captures: a plain blended map piece whose vertices lie on surfaces
+# but whose faces span a trench. New Londo's walkway and rock skirts (m1200B0A16 mesh4, m1210B0A16 mesh6) fade from
+# alpha 1 at a walkway's top edge to 0 on the floor beyond a trench 0.5-0.9 m deep. As decals they landed on the trench
+# floor, past the runtime's 0.5 m decal lift (geometry_resolver kDs1SkirtMaxLift), and left a dark gap
+# (frame_20261111_105331, frame_20261111_105412, frame_20261111_082245). Listed as shells marked 'gap', the proxy cuts
+# them at [Meshes] GapSkirtAlphaRef so the faded part over the trench stays solid.
+GAP_SKIRT_MAPS = {
+    'm16_00_00_00',  # New Londo Ruins
+}
+GAP_DEPTH = 0.5          # the runtime's decal lift: a decal further than this over its surface is not lit at its own place
+# ... for at least this share of the points inside its visible faces. New Londo: 62-63% for the two skirts (2532 points each),
+# then 26% and less. Two more reach 50% on too few points (m0100B0A16 mesh13: 2, GAP_MIN_POINTS) or lie off any surface
+# (m0200B0A16 mesh4, a cliff shell candidate).
+GAP_SHARE = 0.4
+GAP_POINTS = 6           # sample points per visible face
+GAP_MIN_POINTS = 100     # sample points with a surface below them, at least: a share of a few faces says little
 MIN_SKY_LAYER = 150.0
 MIN_BACKDROP = 1000.0
 
@@ -277,6 +294,53 @@ def blended_shells(map_id, flvers, in_sky):
     return shells
 
 
+def gap_skirts(map_id, flvers, in_sky, skip):
+    """(model, mesh index, mesh, diffuse, share over GAP_DEPTH) of the map's gap skirts (see GAP_SKIRT_MAPS): plain
+    straight-alpha map meshes (SOLID_MTD, the map's own textures) not already listed (skip), at least GAP_SHARE of whose
+    sample points inside faces with a visible vertex (alpha > 0.25) lie more than GAP_DEPTH straight above the first
+    opaque surface below them (within 1 m; points over nothing are not counted)."""
+    from gen_ground_cards import Ground
+    opaque, cands = [], []
+    for model, flver, names, sizes, layers in flvers:
+        for i, mesh in enumerate(flver.meshes):
+            mtd = os.path.basename(flver.materials[mesh.material_index].mtd).lower()
+            if '_alp' in mtd:
+                if ((map_id, model, i) not in in_sky and (model, i) not in skip and not ATMOSPHERIC_NAME.search(names[i])
+                        and SOLID_MTD.search(mtd) and names[i][:3] == map_id[:3]):
+                    cands.append((model, i, mesh, names[i]))
+            elif '_add' not in mtd and 'water' not in mtd:
+                opaque.append(mesh_triangles(mesh))
+    if not cands or not opaque:
+        return []
+    ground = Ground(np.concatenate(opaque))
+    rng = np.random.default_rng(0)
+    out = []
+    for model, i, mesh, name in cands:
+        p = np.asarray(positions(mesh), dtype=np.float64)[:, :3]
+        a = mesh_alpha(mesh)
+        fs = mesh.face_sets[0]
+        idx = np.asarray(fs.indices, dtype=np.int64)
+        if fs.triangle_strip:
+            if len(idx) < 3:
+                continue
+            t = np.stack([idx[:-2], idx[1:-1], idx[2:]], 1)
+            t = t[(t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])]
+        else:
+            t = idx[: len(idx) // 3 * 3].reshape(-1, 3)
+        t = t[((t >= 0) & (t < len(p))).all(1)]
+        if a is not None:
+            t = t[a[t].max(1) > 0.25]
+        if not len(t):
+            continue
+        w = rng.dirichlet((1, 1, 1), size=(len(t), GAP_POINTS))
+        q = (w[..., None] * p[t][:, None, :, :]).sum(2).reshape(-1, 3)
+        down = np.array([np.nan if (d := ground.below(v)) is None else d for v in q])
+        down = down[~np.isnan(down)]
+        if len(down) >= GAP_MIN_POINTS and (share := float((down > GAP_DEPTH).mean())) >= GAP_SHARE:
+            out.append((model, i, mesh, name, share, len(down)))
+    return out
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
@@ -356,10 +420,14 @@ def main():
                     add(map_id, model, i, mesh, names[i])
 
         # Blended shells: straight-alpha meshes that do not lie on an opaque surface of the map.
+        shelled = set()      # (model, mesh index) listed here
+        off_surface = set()  # (model, mesh index) of the meshes whose visible vertices mostly lie off any surface
         for model, i, mesh, name, on_surface, near_share in blended_shells(map_id, flvers, in_sky):
+            off_surface.add((model, i))
             if map_id in SHELL_MAPS:
                 print(f'shell {map_id}/{model}/mesh{i} {name}: {on_surface:.0%} on a surface')
                 add(map_id, model, i, mesh, name, shell_lines)
+                shelled.add((model, i))
                 continue
             mtd = next(os.path.basename(f.materials[f.meshes[i].material_index].mtd)
                        for m, f, *_ in flvers if m == model)
@@ -367,13 +435,24 @@ def main():
                 print(f'solid shell {map_id}/{model}/mesh{i} {name} ({mtd}): {on_surface:.0%} on a surface, '
                       f'{near_share:.0%} within {SOLID_NEAR:g} m')
                 add(map_id, model, i, mesh, name, solid)
+                shelled.add((model, i))
+
+        # Gap skirts: listed as shells marked 'gap' (checked for shared keys with the solid shells). A skirt's vertices lie on
+        # surfaces, so the meshes off them (shells, listed or not) are not candidates.
+        if map_id in GAP_SKIRT_MAPS:
+            for model, i, mesh, name, share, counted in gap_skirts(map_id, flvers, in_sky, shelled | off_surface):
+                print(f'gap skirt {map_id}/{model}/mesh{i} {name}: {share:.0%} of its {counted} face points over {GAP_DEPTH:g} m')
+                start = len(solid)
+                add(map_id, model, i, mesh, name, solid)
+                solid[start:] = [l + ' gap' for l in solid[start:]]
 
     for line in solid:
         key, count, source = line.split()[:3]
         owner = source.rsplit('/', 1)[0]
         others = keys.get((int(key, 16), int(count)), set()) - {owner}
         if others:
-            print(f'solid shell {source} dropped: its indices are also {", ".join(sorted(others))}')
+            what = 'gap skirt' if line.endswith(' gap') else 'solid shell'
+            print(f'{what} {source} dropped: its indices are also {", ".join(sorted(others))}')
         else:
             shell_lines.append(line)
 
@@ -387,7 +466,7 @@ def main():
     shells_out = os.path.join(os.path.dirname(os.path.abspath(args.out)), 'shell_meshes.txt')
     with open(shells_out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('# Dark Souls blended shells (alpha-faded meshes off any surface): '
-                '<index FNV-1a 64> <index count> <source> <diffuse>\n')
+                '<index FNV-1a 64> <index count> <source> <diffuse> [gap]\n')
         f.write('# Generated by scripts/gen_sky_meshes.py; do not edit by hand.\n')
         f.writelines(line + '\n' for line in shell_lines)
     print(f'{len(shell_lines)} blended shell face sets -> {shells_out}')

@@ -982,6 +982,7 @@ namespace comp::game::atmosphere
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
+		else if (key == "Meshes.GapSkirtAlphaRef") shared::common::config::get().meshes.gap_skirt_alpha_ref = std::clamp(std::atoi(value.c_str()), 0, 255);
 		else if (key == "Meshes.GroundCardHeightKept") shared::common::config::get().meshes.ground_card_height_kept = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 1.0f);
 		else if (key == "Meshes.GroundCardClearance") shared::common::config::get().meshes.ground_card_clearance = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 0.05f);
 		else if (key == "MenuScene.AmbientScale") g_menu_ambient_scale = static_cast<float>(std::atof(value.c_str()));
