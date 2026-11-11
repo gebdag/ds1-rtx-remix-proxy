@@ -351,6 +351,9 @@ namespace {
 	// switch at 4K (console.log 2026-11-11 21:38, the first CreateTexture after the Reset is the UI target again). The
 	// first render texture asked at such a size and format takes the entry back.
 	std::vector<remembered_viewport> s_ui_targets_before_reset;
+	// Only the first render textures the game makes after the Reset may take an entry back, as many as there are entries: the UI
+	// target is the first it makes again, and the scene targets after it have the same size and format. Then the list is dropped.
+	size_t s_ui_render_targets_left = 0;
 
 	IDirect3DSurface9* current_target(IDirect3DDevice9* dev)
 	{
@@ -382,11 +385,23 @@ namespace {
 	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
 	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
 	{
-		s_ui_targets_before_reset.clear();
-		if (std::string_view(where) == "Reset")
+		if (std::string_view(where) != "Reset")
+			s_ui_targets_before_reset.clear();
+		else
+		{
+			// One entry per size and format: an entry of a UI texture the game freed earlier stays in the map until its
+			// address is reused, and would otherwise let a second texture take UI scaling.
+			std::vector<remembered_viewport> ui;
 			for (const auto& [surface, v] : s_remembered_viewports)
-				if (v.created_as_ui)
-					s_ui_targets_before_reset.push_back(v);
+				if (v.created_as_ui && std::none_of(ui.begin(), ui.end(), [&](const remembered_viewport& u)
+					{ return u.made_width == v.made_width && u.made_height == v.made_height && u.asked_format == v.asked_format; }))
+					ui.push_back(v);
+			// None: a retry after a failed Reset, or a second Reset before the game made its textures again. The list
+			// from the first stays.
+			if (!ui.empty())
+				s_ui_targets_before_reset = std::move(ui);
+		}
+		s_ui_render_targets_left = s_ui_targets_before_reset.size();
 		s_remembered_viewports.clear();
 		if (!pp)
 			return;
@@ -1106,6 +1121,7 @@ namespace comp
 		const UINT asked_width = Width, asked_height = Height;
 		const D3DFORMAT asked_format = Format;
 		bool ui_target = false;
+		int reset_ui_entry = -1; // the s_ui_targets_before_reset entry this texture takes, once it is made
 		LONG ui_width = static_cast<LONG>(Width), ui_height = static_cast<LONG>(Height);
 		// Only render and depth textures: the game fills the others (the 1280x720 video frames) itself at the size it
 		// asked for, and writes past the end of a smaller one.
@@ -1126,7 +1142,7 @@ namespace comp
 				Width = res.present_width;
 				Height = res.present_height;
 			}
-			if (!ui_target && (Usage & D3DUSAGE_RENDERTARGET))
+			if (!ui_target && (Usage & D3DUSAGE_RENDERTARGET) && s_ui_render_targets_left > 0)
 			{
 				const auto it = std::find_if(s_ui_targets_before_reset.begin(), s_ui_targets_before_reset.end(), [&](const remembered_viewport& v)
 					{ return v.made_width == asked_width && v.made_height == asked_height && v.asked_format == asked_format; });
@@ -1135,9 +1151,7 @@ namespace comp
 					ui_target = Width != static_cast<UINT>(it->ui_width) || Height != static_cast<UINT>(it->ui_height);
 					ui_width = it->ui_width;
 					ui_height = it->ui_height;
-					shared::common::log("Resolution", std::format("CreateTexture {}x{}: the UI target again after the Reset, scissors scale from {}x{}",
-						asked_width, asked_height, ui_width, ui_height));
-					s_ui_targets_before_reset.erase(it);
+					reset_ui_entry = static_cast<int>(it - s_ui_targets_before_reset.begin());
 				}
 			}
 		}
@@ -1159,6 +1173,18 @@ namespace comp
 			crash_context::note("Tex2D %ux%u L%u f=%s p=%u t=%u hr=%08X", Width, Height, Levels, format_tag(Format).c_str(), Pool, sw.ms(), hr);
 		else if (ppTexture && *ppTexture)
 		{
+			// The first render textures after a Reset: the one that took a UI entry uses it up; past them the list is dropped.
+			if ((Usage & D3DUSAGE_RENDERTARGET) && s_ui_render_targets_left > 0)
+			{
+				if (reset_ui_entry >= 0)
+				{
+					shared::common::log("Resolution", std::format("CreateTexture {}x{}: the UI target again after the Reset, scissors scale from {}x{}",
+						asked_width, asked_height, ui_width, ui_height));
+					s_ui_targets_before_reset.erase(s_ui_targets_before_reset.begin() + reset_ui_entry);
+				}
+				if (--s_ui_render_targets_left == 0)
+					s_ui_targets_before_reset.clear();
+			}
 			// Its scissors scale from the size the game asked for; any other render texture at a freed one's address does not.
 			if (Usage & D3DUSAGE_RENDERTARGET)
 			{
