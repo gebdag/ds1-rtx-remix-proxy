@@ -103,6 +103,19 @@ namespace comp::game::ffx_lights
 	// game's value there, blending in from a fifth down.
 	void steady_flicker(int slot, int effect, float& r, float& g, float& b);
 	float effect_flicker();
+
+	// The bonfire's light. Every bonfire runs the light-only effect 90006 at its origin, and the game puts that effect's light
+	// node at a random point 0.30 m from the origin, chosen anew each time the effect starts: over six bonfires in captures of
+	// 2026-11-11 it stood 0.26 m above, 0.27 m below, 0.23 above, 0.18 below, 0.29 above and 0.24 below the origin, and 0.07 to
+	// 0.24 m to one side (frame_20261111_184844 to 185116, 142503). Its lights cast no shadows, so that never showed. Path
+	// traced, a light under the ash lights nothing (the bonfire looks unlit) and one to the side throws the sword's and the
+	// pile's shadows a different way at every bonfire. The fire itself is the same everywhere: its sprites' light sits on the
+	// axis, 0.15 to 0.28 m over the origin. So the light is put on the bonfire's axis at BonfireLightHeight (0.22 m) over
+	// the origin of the effect instance it belongs to. [Lights] BonfireLightCentre (1), BonfireLightHeight; both live.
+	// False when the light is no bonfire's, the rule is off, or its effect instance is not found (then it stays where it is).
+	bool bonfire_light_place(const point_lights::light& l, float out[3]);
+	bool bonfire_light_centred();
+	float bonfire_light_height();
 	// How far above its effect's origin such a light belongs: the height of the flame's light-weighted centre over the origin,
 	// learned with the spread (the same instance's). The game puts an effect's light at the origin, which for a brazier or a
 	// sconce is inside the bowl: its lights cast no shadows, so that never showed; path traced, the bowl shadows everything

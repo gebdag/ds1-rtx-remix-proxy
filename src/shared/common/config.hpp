@@ -297,7 +297,9 @@ namespace shared::common
 			bool use_game_radius = true;
 			float radius = 0.5f;         // emitter sphere radius
 			float intensity = 1.0f;      // radiance multiplier (inverse-square light)
-			float falloff_intensity = 1.0f; // with the game's falloff: 1 = the game's brightness
+			// With the game's falloff: a multiplier on colour^2.2 / pi (3.14 would be the game's own strength head-on). 0.7 since
+			// 2026-11-11, the user's call: at 1 the player and the ground round them read too bright.
+			float falloff_intensity = 0.7f;
 			// With the game's falloff: scales the game's dwindle begin and end together (1 = the
 			// game's reach). Range / UseGameRange apply to the inverse-square light only.
 			float falloff_range_scale = 1.0f;

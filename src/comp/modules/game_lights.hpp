@@ -313,6 +313,7 @@ namespace comp
 		struct { bool seen = false; int slot = -1; float peak = 0.0f; float pos[3] = {}; int budget = 300; } player_trace_;
 		live_light player_light_;
 		int player_slot_ = -1;            // KPointLightMan slot currently taken as the player light
+		unsigned player_handle_ = 0; // the held light's entity handle: the slot alone is reused by other lights
 		bool player_seen_ = false;        // found on the last harvest
 		game::point_lights::light player_src_ = {}; // its last harvested values, for the readout
 		float player_head_dist_ = 0.0f;   // distance of that light from the head point

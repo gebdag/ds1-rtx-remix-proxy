@@ -63,6 +63,10 @@ namespace comp::game::ffx_lights
 		bool g_size_lift = true;      // fire lights stand at their flame's height (sized_lift)
 		float g_flicker = 0.15f;          // share of a lengthened game light's own flicker that is kept (steady_flicker)
 		float g_flicker_seconds = 1.0f;   // the time its running mean is taken over
+		constexpr int kBonfireLightEffect = 90006;   // "Bonfire light (light-only effect)": at every bonfire
+		constexpr float kBonfireLightScatter = 0.6f; // the game's node is 0.30 m from the origin: twice that finds its instance
+		bool g_bonfire_centre = true;
+		float g_bonfire_height = 0.22f;
 		struct flicker_state
 		{
 			float mean = 0.0f;
@@ -303,6 +307,9 @@ namespace comp::game::ffx_lights
 			if (const float v = cfg.get_float("Lights", "EffectFlickerSeconds", g_flicker_seconds); std::isfinite(v))
 				g_flicker_seconds = std::clamp(v, 0.05f, 10.0f);
 			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
+			g_bonfire_centre = cfg.get_int("Lights", "BonfireLightCentre", 1) != 0;
+			if (const float v = cfg.get_float("Lights", "BonfireLightHeight", g_bonfire_height); std::isfinite(v))
+				g_bonfire_height = std::clamp(v, -0.5f, 1.5f);
 			load_sizes("ffx_sizes.tsv");
 			// What the game learned itself, only while it is asked to learn (and never in the lookdev host: a capture must look
 			// the same whatever was played before).
@@ -608,6 +615,47 @@ namespace comp::game::ffx_lights
 		return g_flicker;
 	}
 
+	bool bonfire_light_centred()
+	{
+		if (!g_loaded)
+			load();
+		return g_bonfire_centre;
+	}
+
+	float bonfire_light_height()
+	{
+		if (!g_loaded)
+			load();
+		return g_bonfire_height;
+	}
+
+	bool bonfire_light_place(const point_lights::light& l, float out[3])
+	{
+		if (!g_loaded)
+			load();
+		if (!g_bonfire_centre || (l.ffx_top_id ? l.ffx_top_id : l.ffx_id) != kBonfireLightEffect)
+			return false;
+		// The instance of the light's effect that it scatters round: the nearest top-level one.
+		float best_d2 = kBonfireLightScatter * kBonfireLightScatter;
+		bool found = false;
+		for (const auto& inst : ffx_instances::current())
+		{
+			if (inst.ffx_id != kBonfireLightEffect || ffx_instances::parent_of(inst.address) != 0)
+				continue;
+			float pos[3];
+			if (!ffx_instances::world_position(inst.address, pos))
+				continue;
+			const float dx = pos[0] - l.x, dy = pos[1] - l.y, dz = pos[2] - l.z;
+			if (const float d2 = dx * dx + dy * dy + dz * dz; d2 <= best_d2)
+			{
+				best_d2 = d2;
+				out[0] = pos[0]; out[1] = pos[1] + g_bonfire_height; out[2] = pos[2];
+				found = true;
+			}
+		}
+		return found;
+	}
+
 	void steady_flicker(int slot, int effect, float& r, float& g, float& b)
 	{
 		if (!g_loaded)
@@ -675,6 +723,8 @@ namespace comp::game::ffx_lights
 		else if (key == "Lights.EffectSizeShrink") { g_size_shrink = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.EffectFlicker") { if (std::isfinite(value)) g_flicker = std::clamp(value, 0.0f, 1.0f); }
 		else if (key == "Lights.EffectFlickerSeconds") { if (std::isfinite(value)) g_flicker_seconds = std::clamp(value, 0.05f, 10.0f); }
+		else if (key == "Lights.BonfireLightCentre") g_bonfire_centre = value != 0.0f;
+		else if (key == "Lights.BonfireLightHeight") { if (std::isfinite(value)) g_bonfire_height = std::clamp(value, -0.5f, 1.5f); }
 		else if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFallSeconds") g_follow_fall_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFullAlpha") g_follow_full_alpha = std::max(value, 0.001f);

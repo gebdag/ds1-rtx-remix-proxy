@@ -686,6 +686,17 @@ namespace comp
 		{
 			if (&l == player)
 				continue;
+			// A bonfire's light goes on the bonfire's axis, into its fire (ffx_lights::bonfire_light_place): the copy stands
+			// there for everything that follows, its key too, so an edit made to one bonfire's light stays with that bonfire.
+			if (float place[3]; game::ffx_lights::bonfire_light_place(l, place))
+			{
+				sized_game_lights_.push_back(l);
+				auto& placed = sized_game_lights_.back();
+				placed.x = place[0]; placed.y = place[1]; placed.z = place[2];
+				game::ffx_lights::note_lift(l.slot, 0.0f);
+				sources.push_back(&placed);
+				continue;
+			}
 			float lift = 0.0f;
 			const float reach = game::ffx_lights::sized_reach_at(l, &lift);
 			game::ffx_lights::note_lift(l.slot, lift);
@@ -1190,11 +1201,21 @@ namespace comp
 			return std::sqrt(dx * dx + dy * dy + dz * dz);
 		};
 
+		// The head light is a light entity of its own (a LerpBank one): never an effect's light node nor a map light. A slot
+		// number is only a place in the engine's list and is handed to another light after a load or a warp: holding the slot
+		// alone took the bonfire's light 1.7 m from the head for the player's (frame_20261111_185058, 185115: the head light in
+		// slot 0, the bonfire's in slot 1, the slot held from the map before), gave it the player light's offset, reach and
+		// strength, and left the real head light a plain character light. So a held slot must still hold the same entity.
+		auto can_be_player = [](const game::point_lights::light& l)
+		{
+			const kind k = classify(l);
+			return !l.ffx_id && !l.ffx_top_id && k != kind::fx_direct && k != kind::map_row && k != kind::bank_entity;
+		};
 		const game::point_lights::light* found = nullptr;
 		if (player_slot_ >= 0)
 		{
 			for (const auto& l : harvested)
-				if (l.slot == player_slot_ && head_dist(l) < kHoldRadius)
+				if (l.slot == player_slot_ && l.entity_handle == player_handle_ && can_be_player(l) && head_dist(l) < kHoldRadius)
 					found = &l;
 		}
 
@@ -1203,6 +1224,8 @@ namespace comp
 			float best = FLT_MAX;
 			for (const auto& l : harvested)
 			{
+				if (!can_be_player(l))
+					continue;
 				const float dx = l.x - p[0], dz = l.z - p[2];
 				const float up = l.y - p[1];
 				if (std::sqrt(dx * dx + dz * dz) > kAcquireHorizontal ||
@@ -1218,6 +1241,7 @@ namespace comp
 		}
 
 		player_slot_ = found ? found->slot : -1;
+		player_handle_ = found ? found->entity_handle : 0;
 		if (found)
 		{
 			player_seen_ = true;
@@ -1736,6 +1760,8 @@ namespace comp
 			{ "Lights", "EffectSizeLift", "Raise fire lights to their flame", flag(game::ffx_lights::size_lift_enabled()) },
 			{ "Lights", "FlameLift", "Raise flame lights out of their holder", flag(game::map_lights::flame_lift_enabled()) },
 			{ "Lights", "EffectFlicker", "Flicker of lengthened fire lights", num(game::ffx_lights::effect_flicker()) },
+			{ "Lights", "BonfireLightCentre", "Bonfire lights on the bonfire's axis", flag(game::ffx_lights::bonfire_light_centred()) },
+			{ "Lights", "BonfireLightHeight", "Bonfire light height", num(game::ffx_lights::bonfire_light_height()) },
 			{ "Lights", "ResolveEntityParams", "Read entity lights' parameters", flag(game::point_lights::resolve_entities()) },
 			{ "Lights", "SynthesizedLights", "Stand-in lights", flag(game::map_lights::enabled()) },
 			{ "Sun", "Enabled", "Sun on", flag(sun_enabled) },
@@ -1921,6 +1947,8 @@ namespace comp
 		game::ffx_lights::set_follow_option("Lights.EffectSizeLift", cfg.get_bool("Lights", "EffectSizeLift", true) ? 1.0f : 0.0f);
 		game::map_lights::set_flame_lift(cfg.get_bool("Lights", "FlameLift", true));
 		game::ffx_lights::set_follow_option("Lights.EffectFlicker", cfg.get_float("Lights", "EffectFlicker", 0.15f));
+		game::ffx_lights::set_follow_option("Lights.BonfireLightCentre", cfg.get_bool("Lights", "BonfireLightCentre", true) ? 1.0f : 0.0f);
+		game::ffx_lights::set_follow_option("Lights.BonfireLightHeight", cfg.get_float("Lights", "BonfireLightHeight", 0.22f));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
@@ -1939,7 +1967,7 @@ namespace comp
 		p.use_game_radius = cfg.get_bool("PlayerLight", "UseGameRadius", true);
 		p.radius = std::max(0.01f, cfg.get_float("PlayerLight", "Radius", 0.5f));
 		p.intensity = std::max(0.0f, cfg.get_float("PlayerLight", "Intensity", 1.0f));
-		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 1.0f));
+		p.falloff_intensity = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffIntensity", 0.7f));
 		p.falloff_range_scale = std::max(0.01f, cfg.get_float("PlayerLight", "FalloffRangeScale", 1.0f));
 		p.falloff_max_colour = std::max(0.0f, cfg.get_float("PlayerLight", "FalloffMaxColour", 0.0f));
 		p.falloff_gamma_add = cfg.get_bool("PlayerLight", "FalloffGammaAdd", true);
@@ -2746,6 +2774,20 @@ namespace comp
 		if (ImGui::SliderFloat("##fire_flicker", &flicker, 0.0f, 1.0f, "%.2f") |
 			revert_buttons("fire_flicker", flicker, saved_float("Lights", "EffectFlicker", 0.15f), 0.15f))
 			game::ffx_lights::set_follow_option("Lights.EffectFlicker", flicker);
+		bool bonfire_centre = game::ffx_lights::bonfire_light_centred();
+		if (form_checkbox("Bonfire lights on the bonfire's axis", "##bonfire_centre", &bonfire_centre,
+			"The game puts each bonfire's light at a random point 0.3 m from the bonfire's middle: above, below or beside it,\n"
+			"different at every bonfire and every load. Its lights cast no shadows, so it never showed. On: every bonfire's\n"
+			"light stands on the bonfire's axis at the height below. Saved as [Lights] BonfireLightCentre.") |
+			revert_buttons("bonfire_centre", bonfire_centre, saved_bool("Lights", "BonfireLightCentre", true), true))
+			game::ffx_lights::set_follow_option("Lights.BonfireLightCentre", bonfire_centre ? 1.0f : 0.0f);
+		float bonfire_height = game::ffx_lights::bonfire_light_height();
+		form_label("Bonfire light height",
+			"How high over the bonfire's middle (the top of the ash) its light stands, for every bonfire. The fire's own light\n"
+			"sits 0.15 to 0.28 m up. Saved as [Lights] BonfireLightHeight.");
+		if (ImGui::SliderFloat("##bonfire_height", &bonfire_height, -0.3f, 1.0f, "%.2f m") |
+			revert_buttons("bonfire_height", bonfire_height, saved_float("Lights", "BonfireLightHeight", 0.22f), 0.22f))
+			game::ffx_lights::set_follow_option("Lights.BonfireLightHeight", bonfire_height);
 		// The runtime's own view of every light it renders (rtx.ds1Lights.showView): not saved, off at every start.
 		static bool show_lights = false;
 		if (form_checkbox("Show lights in the world", "##show_lights", &show_lights,

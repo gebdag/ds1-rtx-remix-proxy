@@ -5,3 +5,6 @@
 #
 # Bed of Chaos: the arena has no light of its own, the game lights it by ambient alone. One warm light over the boss, not as bright as the game's ambient.
 552.0 -412.0 418.0 8 12 255 150 70 100 BedOfChaos_centre remix 90 0.00 3.000 1.00
+#
+# Demon Ruins: one warm light the user placed by hand in the game (2026-11-11).
+169.050 -323.260 36.680 8 12 255 150 70 100 Demon_Ruins_1 remix 12.900 0.00 3.000 1.00

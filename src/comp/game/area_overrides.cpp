@@ -298,7 +298,36 @@ namespace comp::game::area_overrides
 			in_box = a.has_box;
 			return true;
 		}
-		return false;
+		// No section of the panel's own: the file may still give this map a sun in a section written by hand (the Undead
+		// Asylum's, in [Undead Asylum]). That one is what the files hold, so it is no unsaved change: entering the Asylum listed
+		// "Sun of m18_01_00_00: the game's -> 0.150,0.150,0.150" every time. The last such area that is active now, as the
+		// values are applied in the file's order.
+		bool found = false;
+		for (const auto& a : g_areas)
+		{
+			if (a.map != map || std::find(g_active.begin(), g_active.end(), a.name) == g_active.end())
+				continue;
+			float c[3] = {}, d[3] = {};
+			bool have_colour = false, have_direction = false;
+			for (const auto& [key, value] : a.values)
+			{
+				if (key == "proxy.Sun.Colour")
+					have_colour = std::sscanf(value.c_str(), "%f , %f , %f", &c[0], &c[1], &c[2]) == 3;
+				else if (key == "proxy.Sun.Direction")
+					have_direction = std::sscanf(value.c_str(), "%f , %f , %f", &d[0], &d[1], &d[2]) == 3;
+			}
+			if (!have_colour || !have_direction)
+				continue;
+			const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+			for (int i = 0; i < 3; ++i)
+			{
+				colour[i] = c[i];
+				direction[i] = d[i] / std::max(length, 1e-6f);
+			}
+			in_box = a.has_box;
+			found = true;
+		}
+		return found;
 	}
 
 	namespace
