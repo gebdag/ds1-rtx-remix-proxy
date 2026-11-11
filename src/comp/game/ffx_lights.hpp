@@ -76,6 +76,11 @@ namespace comp::game::ffx_lights
 	// [Lights] EffectSizeLearn (off; live) lets the game add what it measures itself: the largest settled spread of any instance,
 	// kept in rtx_comp\ffx_sizes_learned.tsv. Lights then do change once, when their effect is first seen whole.
 	//
+	// A table light is only made longer, as the game's own are: the three effects of the first table whose flame says less than
+	// their table reach (90012 3.78 -> 1.98 m, 41803 1.5 -> 0.88 m, 41811 3.05 -> 2.57 m) gave no capture where shorter is nearer
+	// the game (the sitting character went from 43.7 to 42.8 of 255, the game's 53.7). [Lights] EffectSizeShrink=1 (live
+	// proxy.Lights.EffectSizeShrink) lets the flame shorten them too.
+	//
 	// The reach for a light of this colour that belongs to an instance of `effect` (the effect whose instance tree is measured),
 	// 0 when the rule does not apply (off, not warm, nothing known yet). `instance` (0: none at hand) adds its measure to what is known.
 	float sized_reach(unsigned instance, int effect, float r, float g, float b);
@@ -93,8 +98,10 @@ namespace comp::game::ffx_lights
 	float lift_of(int slot);
 	// The same for one of the game's own effect lights (a light node in an effect, point_lights::light with an ffx id): by the
 	// top-level instance of its effect nearest to it. Game lights are only ever extended by the caller: a bonfire's flame is a
-	// mesh, which the sprite measure does not see.
-	float sized_reach_at(const point_lights::light& l);
+	// mesh, which the sprite measure does not see. `lift` (optional): how far to raise the light so that it stands at the
+	// flame's centre, measured from where the light node is, not added blind: a node the effect already holds up in its
+	// flame is raised by what is missing, or not at all. 0 when the light's instance is not found.
+	float sized_reach_at(const point_lights::light& l, float* lift = nullptr);
 
 	// The particles drawn this frame: lights that follow their effect's sprites (Tomb of the Giants' lantern halos) take their level from them.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);

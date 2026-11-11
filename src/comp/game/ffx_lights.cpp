@@ -61,7 +61,8 @@ namespace comp::game::ffx_lights
 		float g_size_max = 12.0f;
 		bool g_size_game = true;      // the game's own fire effect lights are extended too
 		bool g_size_lift = true;      // fire lights stand at their flame's height (sized_lift)
-		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down)
+		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down); ini only
+		bool g_size_shrink = false;   // a table light may also become shorter than its table reach
 		constexpr float kSizeMinLift = 0.5f;
 		constexpr int kSizeMinSprites = 4;
 		constexpr float kSizeSmoothing = 0.08f; // per frame
@@ -286,6 +287,7 @@ namespace comp::game::ffx_lights
 			g_size_game = cfg.get_int("Lights", "EffectSizeGame", 1) != 0;
 			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 1) != 0;
 			g_size_learn = cfg.get_int("Lights", "EffectSizeLearn", 0) != 0;
+			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
 			load_sizes("ffx_sizes.tsv");
 			// What the game learned itself, only while it is asked to learn (and never in the lookdev host: a capture must look
 			// the same whatever was played before).
@@ -539,14 +541,16 @@ namespace comp::game::ffx_lights
 		return it != g_lifts.end() ? it->second : 0.0f;
 	}
 
-	float sized_reach_at(const point_lights::light& l)
+	float sized_reach_at(const point_lights::light& l, float* lift)
 	{
+		if (lift)
+			*lift = 0.0f;
 		const int effect = l.ffx_top_id ? l.ffx_top_id : l.ffx_id;
 		if (!g_size_enabled || !g_size_game || !effect || !l.has_params || !warm(l.r, l.g, l.b))
 			return 0.0f;
 		// The top-level instance of the light's effect that stands where the light is.
 		unsigned best = 0;
-		float best_d2 = 1.5f * 1.5f;
+		float best_d2 = 1.5f * 1.5f, best_y = 0.0f;
 		for (const auto& inst : ffx_instances::current())
 		{
 			if (inst.ffx_id != effect || ffx_instances::parent_of(inst.address) != 0)
@@ -559,9 +563,17 @@ namespace comp::game::ffx_lights
 			{
 				best_d2 = d2;
 				best = inst.address;
+				best_y = pos[1];
 			}
 		}
 		const float reach = sized_reach(best, effect, l.r, l.g, l.b);
+		// Up to the flame's centre from where the light node is: the centre stands sized_lift over the instance's origin.
+		if (lift && best && reach > 0.0f)
+			if (const float centre = sized_lift(effect, l.r, l.g, l.b); centre > 0.0f)
+			{
+				const float missing = best_y + centre - l.y;
+				*lift = missing >= kSizeMinLift ? std::min(missing, kSizeMaxLift) : 0.0f;
+			}
 		if (reach > l.dwindle_end && g_size_logged.insert(-effect).second)
 			shared::common::log("FfxLights", std::format("game light of effect {}: its flame spreads {:.2f} m, reach {:.1f} m (the game's {:.1f} m)",
 				effect, g_effect_spread[effect], reach, l.dwindle_end));
@@ -582,7 +594,7 @@ namespace comp::game::ffx_lights
 		else if (key == "Lights.EffectSizeMax") g_size_max = std::clamp(value, 0.5f, 100.0f);
 		else if (key == "Lights.EffectSizeGame") { g_size_game = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.EffectSizeLift") g_size_lift = value != 0.0f;
-		else if (key == "Lights.EffectSizeLearn") g_size_learn = value != 0.0f;
+		else if (key == "Lights.EffectSizeShrink") { g_size_shrink = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFallSeconds") g_follow_fall_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFullAlpha") g_follow_full_alpha = std::max(value, 0.001f);
@@ -779,8 +791,10 @@ namespace comp::game::ffx_lights
 			l.dwindle_end = c.e->dwindle_end;
 			float lifted = 0.0f;
 			// A fire's reach follows the flame its own effect draws (sized_reach). Not a spot that follows sprites (no instance).
-			if (const float sized = c.inst ? sized_reach(c.inst->address, c.ffx_id, c.e->r, c.e->g, c.e->b) : 0.0f; sized > 0.0f)
+			if (const float flame = c.inst ? sized_reach(c.inst->address, c.ffx_id, c.e->r, c.e->g, c.e->b) : 0.0f; flame > 0.0f)
 			{
+				// Only longer than the table's, unless [Lights] EffectSizeShrink.
+				const float sized = g_size_shrink ? flame : std::max(flame, c.e->dwindle_end);
 				if (g_size_logged.insert(c.ffx_id).second)
 					shared::common::log("FfxLights", std::format("effect {}: its flame spreads {:.2f} m, reach {:.1f} m (the table's {:.1f} m)",
 						c.ffx_id, g_effect_spread[c.ffx_id], sized, c.e->dwindle_end));

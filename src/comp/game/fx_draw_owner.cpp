@@ -92,6 +92,8 @@ namespace comp::game::fx_draw_owner
 		}
 		if (!create_hooks(std::make_index_sequence<kDrawCount>()))
 		{
+			for (const DWORD address : kDraws)
+				MH_RemoveHook(reinterpret_cast<void*>(address));
 			shared::common::log("FxDraw", "hooking the particle draws failed: effect lights keep their table sizes",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 			return;

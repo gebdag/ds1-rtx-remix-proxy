@@ -686,8 +686,8 @@ namespace comp
 		{
 			if (&l == player)
 				continue;
-			const float reach = game::ffx_lights::sized_reach_at(l);
-			const float lift = reach > 0.0f ? game::ffx_lights::sized_lift(l.ffx_top_id ? l.ffx_top_id : l.ffx_id, l.r, l.g, l.b) : 0.0f;
+			float lift = 0.0f;
+			const float reach = game::ffx_lights::sized_reach_at(l, &lift);
 			game::ffx_lights::note_lift(l.slot, lift);
 			if (reach > l.dwindle_end || lift != 0.0f)
 			{
