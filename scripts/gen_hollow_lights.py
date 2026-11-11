@@ -101,6 +101,7 @@ def main():
     ap.add_argument('--tunnel', type=float, default=0.8, help='light on the tunnel floor, strength / d^2')
     ap.add_argument('--max-lights', type=int, default=140)
     ap.add_argument('--deploy', action='store_true', help='also into the game\'s rtx_comp\\lights')
+    ap.add_argument('--overwrite-hand-edits', action='store_true', help='replace a file that was edited by hand since it was generated')
     args = ap.parse_args()
     sys.path.insert(0, args.bbformats)
     from bbformats.flver import read_flver
@@ -377,6 +378,8 @@ def main():
     keep = ''
     if os.path.exists(out):
         previous = open(out, encoding='utf-8').read()
+        if 'Hand-edited' in previous and not args.overwrite_hand_edits:
+            sys.exit(f'{out} was edited by hand; --overwrite-hand-edits replaces it')
         at = previous.find("# Ash Lake, the Everlasting Dragon's end")
         keep = previous[at:] if at >= 0 else ''
     with open(out, 'w', encoding='utf-8', newline='\n') as f:

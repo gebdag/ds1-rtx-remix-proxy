@@ -268,6 +268,11 @@ if not "!DEPLOY_TARGET!"=="" (
         if not exist "!DEPLOY_TARGET!\rtx_comp\settings\area_overrides.ini" if not exist "!DEPLOY_TARGET!\rtx_comp\area_overrides.ini" if exist "%ROOT%assets\area_overrides.ini" copy /y "%ROOT%assets\area_overrides.ini" "!DEPLOY_TARGET!\rtx_comp\settings\area_overrides.ini" >nul
         if exist "%ROOT%assets\lights" robocopy "%ROOT%assets\lights" "!DEPLOY_TARGET!\rtx_comp\lights" *.txt /XC /XN /XO >nul 2>&1
         if errorlevel 8 echo WARNING: could not deploy light tables
+        :: Per-light edits from the F4 menu (scripts\save_game_settings.py keeps the repo copy current), only when the game has none.
+        if not exist "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" if exist "%ROOT%assets\light_overrides.txt" (
+            if not exist "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights" mkdir "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights"
+            copy \y "%ROOT%assets\light_overrides.txt" "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" >nul
+        )
         ver >nul
         :: The lookdev host's map suns from scripts\gen_map_suns.py, and the per-mesh tables of game/mesh_tables.hpp with
         :: the sky layers among them: generated from the game files by scripts\gen_*.py, never hand-edited, so always refreshed.

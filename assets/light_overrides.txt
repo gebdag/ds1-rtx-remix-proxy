@@ -1,0 +1,6 @@
+# Per-light edits from F4 -> Lights. key disabled multiplier recolour r g b include_map move dx dy dz  name
+8338f81810c657ea 1 1.000 0 1.000 1.000 1.000 0 move 0.000 0.000 0.000  
+860b3f50b834181e 0 0.100 0 1.000 1.000 1.000 0 move 0.000 0.000 0.000  
+91414ef43bccaabc 1 1.000 0 1.000 1.000 1.000 0 move 0.000 0.000 0.000  
+bb8e3442ae22a9e4 1 1.000 0 1.000 1.000 1.000 0 move 0.000 0.000 0.000  
+be5c8cd6e8dfde92 1 1.000 0 1.000 1.000 1.000 0 move 0.000 0.000 0.000  

@@ -1,10 +1,5 @@
-# Custom lights for m12_01_00_00 (Oolacile). F4 > Lights > Custom lights edits and saves this file.
+# Hand-placed lights for m12_01_00_00 (F4 > Lights > Custom lights writes this file).
 # x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
 #   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
 # With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
-#
-# Clearing sun: the game bakes dappled light into this clearing's lightmaps. No geometry makes the pattern, and a closed
-# roof about 50 m up stops any light from further away (even at 100x), so this hangs under it. Aimed along the game's
-# shadow light c175, with the frame means matched to frame_20261102_175653, _175701 and _175713. It lights the clearing
-# evenly: the dapples are not reproduced.
-970.52 -279.52 562.19 8 12 255 240 215 600 Clearing_sun remix 10000.0 0.00 0.500 1.00 spot -0.056 -0.766 0.640 40.0 0.50
+968.720 -252.820 604.570  8.000 12.000  255 245 230  600  Clearing_sun  remix 293725.688 0.70 0.066 1.00  spot -0.0842 -1.0000 0.5100 89.0 0.50
