@@ -39,6 +39,7 @@ namespace comp::game::area_overrides
 		// player is in none of the areas that claim it.
 		struct light_claim { std::string prefix; std::string area; bool away; };
 		std::vector<light_claim> g_light_claims;
+		std::string g_light_claims_map;   // the map they were built for
 		std::map<std::string, std::string> g_applied;
 
 		std::string trim(const std::string& t)
@@ -157,6 +158,28 @@ namespace comp::game::area_overrides
 			auto& bridge = shared::common::remix_api::get().m_bridge;
 			if (!bridge.SetConfigVariable || bridge.SetConfigVariable(key.c_str(), value.c_str()) != REMIXAPI_ERROR_CODE_SUCCESS)
 				shared::common::log("AreaOverrides", std::format("Remix refused {} = {}", key, value), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+		}
+
+		// Which custom lights are away: a prefix claimed on this map, with the player in none of the areas claiming it.
+		void build_light_claims(const std::string& map, const std::vector<std::string>& active)
+		{
+			std::vector<light_claim> claims;
+			for (const auto& a : g_areas)
+			{
+				if (a.map != map)
+					continue;
+				const bool in = std::find(active.begin(), active.end(), a.name) != active.end();
+				for (const auto& prefix : a.light_prefixes)
+				{
+					const auto known = std::find_if(claims.begin(), claims.end(), [&](const light_claim& c) { return c.prefix == prefix; });
+					if (known == claims.end())
+						claims.push_back({ prefix, a.name, !in });
+					else if (in)
+						known->away = false;
+				}
+			}
+			g_light_claims = std::move(claims);
+			g_light_claims_map = map;
 		}
 
 		std::string join(const std::vector<std::string>& names)
@@ -280,6 +303,10 @@ namespace comp::game::area_overrides
 	{
 		const light_claim* claim_of(const std::string& light_name)
 		{
+			// A map just loaded, before frame_update has placed the player in it: its claimed lights are away until it has,
+			// rather than all made for a few frames and taken down again.
+			if (const auto map = map_lights::current_map_name(); map != g_light_claims_map)
+				build_light_claims(map, {});
 			// The longest prefix wins, so 'Hollow_top_' can have its own area inside 'Hollow_'.
 			const light_claim* best = nullptr;
 			for (const auto& c : g_light_claims)
@@ -336,23 +363,7 @@ namespace comp::game::area_overrides
 				wanted[key] = value;
 		}
 
-		// Which custom lights are away: a prefix claimed on this map, with the player in none of the areas claiming it.
-		std::vector<light_claim> claims;
-		for (const auto& a : g_areas)
-		{
-			if (a.map != map)
-				continue;
-			const bool in = std::find(active.begin(), active.end(), a.name) != active.end();
-			for (const auto& prefix : a.light_prefixes)
-			{
-				const auto known = std::find_if(claims.begin(), claims.end(), [&](const light_claim& c) { return c.prefix == prefix; });
-				if (known == claims.end())
-					claims.push_back({ prefix, a.name, !in });
-				else if (in)
-					known->away = false;
-			}
-		}
-		g_light_claims = std::move(claims);
+		build_light_claims(map, active);
 		if (active == g_active && wanted == g_applied)
 			return;
 		if (active != g_active)

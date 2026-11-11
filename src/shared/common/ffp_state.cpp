@@ -2549,7 +2549,8 @@ namespace shared::common
 			dev->GetRenderState(D3DRS_DESTBLEND, &own_fog_dest);
 		const bool own_fog = unlit && !points && !masked && config::get().sfx.own_fog && own_fog_fn_ && cur_decl_has_color_ &&
 			own_fog_dest == D3DBLEND_INVSRCALPHA && cur_ps_reads_exposure_ && cur_vs_exposure_ && cur_ps_sfx_colour_scale_ != 1.0f &&
-			own_fog_fn_(cur_texture_[0]);
+			// A shader that samples nothing (lines) leaves whatever an earlier draw bound on stage 0.
+			(cur_ps_sampler_mask_ & 1u) && own_fog_fn_(cur_texture_[0]);
 		auto own_fog_colour = [&](const float* pos, DWORD colour)
 		{
 			const float* vc = vs_const_;
@@ -2577,7 +2578,7 @@ namespace shared::common
 					vc[131 * 4 + c] * vc[130 * 4 + 3] * vc[135 * 4 + c] * share;
 				const float base = cur_ps_sfx_colour_scale_ * vertex * (1.0f - fog) + fog * pc[4 * 4 + c];
 				const float shown = (base * scattering + inscatter) * exposure;
-				out_colour |= static_cast<DWORD>(std::clamp(shown, 0.0f, 1.0f) * 255.0f + 0.5f) << shift;
+				out_colour |= static_cast<DWORD>((std::isfinite(shown) ? std::clamp(shown, 0.0f, 1.0f) : 0.0f) * 255.0f + 0.5f) << shift;
 			}
 			return out_colour;
 		};

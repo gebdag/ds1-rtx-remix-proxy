@@ -2872,6 +2872,19 @@ namespace comp
 	void game_lights::selected_imgui()
 	{
 		ImGui::Spacing();
+		// Custom lights picked in the list are worked on by index from then on: moving or switching one off changes or takes away its row.
+		if (!list_custom_indices_.empty() && game::custom_lights::path() != custom_selection_path_)
+			list_custom_indices_.clear();
+		if (list_custom_indices_.size() > 1)
+		{
+			mirror_custom_to_list(list_custom_indices_);
+			ImGui::SeparatorText(std::format("{} custom lights selected", list_custom_indices_.size()).c_str());
+			ImGui::PushID("custom_rows");
+			// A copy: Delete and Duplicate end this selection from inside.
+			custom_multi_imgui(std::vector<int>(list_custom_indices_));
+			ImGui::PopID();
+			return;
+		}
 		if (selection_.size() > 1)
 		{
 			std::vector<const light_row*> rows;
@@ -2882,12 +2895,12 @@ namespace comp
 			// Custom lights only: every setting of theirs, not just the switch, brightness, colour and move other lights have.
 			if (!pinned && rows.size() > 1 && std::all_of(rows.begin(), rows.end(), [](const light_row* r) { return r->kind == kind::custom; }))
 			{
-				std::vector<int> indices;
 				for (const auto* r : rows)
-					indices.push_back(r->slot - game::custom_lights::kFirstSlot);
-				ImGui::SeparatorText(std::format("{} custom lights selected", indices.size()).c_str());
+					list_custom_indices_.push_back(r->slot - game::custom_lights::kFirstSlot);
+				custom_selection_path_ = game::custom_lights::path();
+				ImGui::SeparatorText(std::format("{} custom lights selected", list_custom_indices_.size()).c_str());
 				ImGui::PushID("custom_rows");
-				custom_multi_imgui(indices);
+				custom_multi_imgui(std::vector<int>(list_custom_indices_));
 				ImGui::PopID();
 				return;
 			}
@@ -3017,6 +3030,9 @@ namespace comp
 		}
 		while (!custom_selection_.empty() && *custom_selection_.rbegin() >= static_cast<int>(lights.size()))
 			custom_selection_.erase(std::prev(custom_selection_.end()));
+		// The rows of the selected lights change as they move: kept in step, so flashing still finds them.
+		if (custom_selection_.size() > 1 && list_custom_indices_.empty())
+			mirror_custom_to_list(custom_selection_);
 		if (path.empty())
 		{
 			ImGui::TextDisabled("No map loaded.");
@@ -3156,6 +3172,33 @@ namespace comp
 		custom_selected_ = index;
 		custom_selection_.clear();
 		custom_anchor_ = index;
+		list_custom_indices_.clear();
+		// A selection made from outside the section (a row's Duplicate) belongs to this map's file too.
+		if (index >= 0)
+			custom_selection_path_ = game::custom_lights::path();
+	}
+
+	template <typename Indices> void game_lights::mirror_custom_to_list(const Indices& indices)
+	{
+		std::unordered_set<uint64_t> rows;
+		uint64_t current = 0;
+		for (const auto& r : rows_)
+		{
+			if (r.kind != kind::custom)
+				continue;
+			const int index = r.slot - game::custom_lights::kFirstSlot;
+			if (std::find(indices.begin(), indices.end(), index) == indices.end())
+				continue;
+			rows.insert(r.ident());
+			if (index == custom_selected_ || !current)
+				current = r.ident();
+		}
+		if (!rows.empty())
+		{
+			selection_ = std::move(rows);
+			selected_ = current;
+			selection_anchor_ = current;
+		}
 	}
 
 	void game_lights::custom_click(int index, int count)
@@ -3168,7 +3211,9 @@ namespace comp
 			// From the anchor to this row; Ctrl keeps what was selected.
 			if (!io.KeyCtrl)
 				custom_selection_.clear();
-			const int anchor = custom_anchor_ >= 0 && custom_anchor_ < count ? custom_anchor_ : index;
+			if (custom_anchor_ < 0 || custom_anchor_ >= count)
+				custom_anchor_ = index;
+			const int anchor = custom_anchor_;
 			for (int i = std::min(anchor, index); i <= std::max(anchor, index); ++i)
 				custom_selection_.insert(i);
 			custom_selected_ = index;
@@ -3195,22 +3240,9 @@ namespace comp
 			custom_selected_ = index;
 			custom_anchor_ = index;
 		}
-		// The same lights in the list above, so flashing finds them. Lights switched off or away have no row there.
-		std::unordered_set<uint64_t> rows;
-		uint64_t current = 0;
-		for (const auto& r : rows_)
-			if (r.kind == kind::custom && custom_selection_.count(r.slot - game::custom_lights::kFirstSlot))
-			{
-				rows.insert(r.ident());
-				if (r.slot - game::custom_lights::kFirstSlot == custom_selected_ || !current)
-					current = r.ident();
-			}
-		if (!rows.empty())
-		{
-			selection_ = std::move(rows);
-			selected_ = current;
-			selection_anchor_ = current;
-		}
+		// The same lights in the list above, so flashing finds them.
+		list_custom_indices_.clear();
+		mirror_custom_to_list(custom_selection_);
 	}
 
 	void game_lights::custom_multi_imgui(const std::vector<int>& picked)
@@ -3294,7 +3326,12 @@ namespace comp
 				to_all(&light::intensity);
 			label("Full strength out to", differ(&light::dwindle_begin), "Dwindle begin.");
 			if (ImGui::DragFloat("##cm_begin", &v.dwindle_begin, 0.05f, 0.0f, v.dwindle_end, "%.2f m"))
-				to_all(&light::dwindle_begin);
+			{
+				// Each light's own end bounds it: the first light's may be further out.
+				for (const int i : indices)
+					lights[i].dwindle_begin = std::min(v.dwindle_begin, lights[i].dwindle_end);
+				changed = true;
+			}
 			label("Fades to zero at", differ(&light::dwindle_end), "Dwindle end.");
 			if (ImGui::DragFloat("##cm_end", &v.dwindle_end, 0.05f, 0.05f, 200.0f, "%.2f m"))
 				to_all(&light::dwindle_end);
@@ -3349,6 +3386,8 @@ namespace comp
 				light copy = lights[i];
 				copy.name += "_copy";
 				copy.file_index = -1;
+				// A step up: the list tells lights apart by position, and a copy on the same spot would be the same row as its original.
+				copy.pos[1] += 0.06f;
 				lights.push_back(std::move(copy));
 			}
 			select_custom(first_new);
@@ -3359,7 +3398,7 @@ namespace comp
 			game::custom_lights::mark_dirty();
 			return;
 		}
-		tip("A copy of each at the same spot, selected in their place, to move or change on their own.");
+		tip("A copy of each 6 cm above it, selected in their place, to move or change on their own.");
 		ImGui::SameLine();
 		if (ImGui::Button("Revert these"))
 		{
@@ -3409,7 +3448,7 @@ namespace comp
 			game::custom_lights::mark_dirty();
 		};
 		bool duplicate = ImGui::Button("Duplicate");
-		tip("A new light with everything this one has, at the same spot, to move or change on its own.");
+		tip("A new light with everything this one has, 6 cm above it, to move or change on its own.");
 		ImGui::SameLine();
 		if (ImGui::Button("Copy"))
 		{
@@ -3434,7 +3473,12 @@ namespace comp
 		tip("Gives this light the copied settings; it keeps its name and position.");
 		ImGui::EndDisabled();
 		if (duplicate)
-			append(lights[index], lights[index].name + "_copy");
+		{
+			// A step up, so the list (which tells lights apart by position) has a row for each.
+			auto copy = lights[index];
+			copy.pos[1] += 0.06f;
+			append(std::move(copy), lights[index].name + "_copy");
+		}
 		else if (paste_new && have_cam)
 		{
 			auto pasted = custom_clipboard_;
@@ -3802,6 +3846,7 @@ namespace comp
 			is_selected, ImGuiSelectableFlags_SpanAllColumns))
 		{
 			const auto& io = ImGui::GetIO();
+			list_custom_indices_.clear();
 			if (selection_.empty())
 				selection_.insert(selected_);
 			if (io.KeyShift)

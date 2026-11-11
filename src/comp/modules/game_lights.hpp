@@ -168,6 +168,10 @@ namespace comp
 		// Every custom light selected under 'Custom lights for this map' (Shift / Ctrl), by index; empty: just custom_selected_.
 		std::set<int> custom_selection_;
 		int custom_anchor_ = -1;               // where a Shift range starts
+		// The custom lights the light list's editor works on, by index: a row is told by its light's position, which the editor changes.
+		std::vector<int> list_custom_indices_;
+		// Selects the list rows of these custom lights (those that have one: lights switched off or away have none).
+		template <typename Indices> void mirror_custom_to_list(const Indices& indices);
 		std::string custom_selection_path_;    // the file the indices belong to
 		// Selects one custom light (-1: none) and drops any multi-selection.
 		void select_custom(int index);
