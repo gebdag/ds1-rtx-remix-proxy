@@ -220,6 +220,12 @@ namespace comp::game::ffx_lights
 		}
 	}
 
+	float level_of(unsigned address)
+	{
+		const auto it = g_fades.find(address);
+		return it != g_fades.end() ? it->second.level : -1.0f;
+	}
+
 	bool set_follow_option(const std::string& key, float value)
 	{
 		if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
@@ -275,6 +281,25 @@ namespace comp::game::ffx_lights
 				spot->e = c.e;
 				spot->top_id = ffx_instances::top_effect_id(inst.address);
 				spot->instance_seen = frame;
+				continue;
+			}
+			// In the lookdev host the instance is a capture's, frozen: its level is the one the game had for it at that moment
+			// (full when the capture has none), not one that runs on with the host's clock.
+			if (const auto* snap = ffx_instances::captured(inst.address))
+			{
+				c.level = snap->level >= 0.0f ? snap->level : 1.0f;
+				if (c.level < kFadeOff)
+					continue;
+				if (c.e->persistent && std::any_of(covers.begin(), covers.end(), [&](const point_lights::light* l)
+					{
+						const float dx = l->x - c.pos[0], dy = l->y - c.pos[1], dz = l->z - c.pos[2];
+						return dx * dx + dy * dy + dz * dz <= kCoverRadius * kCoverRadius;
+					}))
+					continue;
+				const float dx = c.pos[0] - cam[0], dy = c.pos[1] - cam[1], dz = c.pos[2] - cam[2];
+				c.distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+				if (c.distance - c.e->dwindle_end <= kReach)
+					candidates.push_back(c);
 				continue;
 			}
 			// How bright it is now: it ends with what it shows, not with the instance.
@@ -395,6 +420,15 @@ namespace comp::game::ffx_lights
 			g_out.push_back(l);
 		}
 		std::erase_if(g_slots, [&](const auto& t) { return t.second.seen != frame; });
+		// The lookdev host: what came of the capture's instances, when it changes (another capture, or a setting).
+		if (static size_t logged = ~size_t(0); shared::globals::lookdev_host && g_out.size() != logged)
+		{
+			logged = g_out.size();
+			std::string ids;
+			for (size_t i = 0; i < g_out.size() && i < 12; ++i)
+				ids += std::format("{}{} ({:.2f}, {:.2f}, {:.2f}) to {:.1f} m", i ? "; " : "", g_out[i].ffx_id, g_out[i].r, g_out[i].g, g_out[i].b, g_out[i].dwindle_end);
+			shared::common::log("FfxLights", std::format("{} effect lights from the capture's instances{}{}", g_out.size(), g_out.empty() ? "" : ": ", ids));
+		}
 		return g_out;
 	}
 }

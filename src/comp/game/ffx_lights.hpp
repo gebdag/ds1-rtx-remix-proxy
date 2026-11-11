@@ -41,6 +41,9 @@ namespace comp::game::ffx_lights
 	// effect with one of them within 3 m is the flame that light stands for, and gets none.
 	const std::vector<point_lights::light>& collect(const std::vector<const point_lights::light*>& covers, float colour_scale);
 
+	// The light level (0..1) an instance has now, below 0 when it has none: what a capture records with it (ffx_instances::snapshot).
+	float level_of(unsigned address);
+
 	// The particles drawn this frame: lights that follow their effect's sprites (Tomb of the Giants' lantern halos) take their level from them.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);
 

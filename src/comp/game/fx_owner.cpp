@@ -77,6 +77,9 @@ namespace comp::game::fx_owner
 		{
 			g_owners.clear();
 			g_walk_hosts = 0;
+			// The lookdev host's instances are a capture's: their addresses are the game's, not memory to read here.
+			if (shared::globals::lookdev_host)
+				return;
 			const auto& instances = ffx_instances::current();
 			g_walk_instances = static_cast<int>(instances.size());
 			const DWORD host_offset = read_dword(kHostOffsetGlobal);

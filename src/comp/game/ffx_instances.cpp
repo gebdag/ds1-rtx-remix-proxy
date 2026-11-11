@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <unordered_map>
 
 namespace comp::game::ffx_instances
 {
@@ -54,6 +56,19 @@ namespace comp::game::ffx_instances
 		std::vector<instance> g_instances;
 		UINT g_walk_frame = 0;
 		bool g_walked = false;
+		// The lookdev host: a capture's instances (set_snapshot), by address.
+		std::vector<snapshot> g_snapshot;
+		std::unordered_map<unsigned, size_t> g_snapshot_index;
+
+		void read_matrix(DWORD address, float* out)
+		{
+			__try {
+				std::memcpy(out, reinterpret_cast<const void*>(address + 0x30), sizeof(float) * 12);
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER) {
+				std::memset(out, 0, sizeof(float) * 12);
+			}
+		}
 
 		DWORD read_dword(DWORD addr)
 		{
@@ -118,8 +133,65 @@ namespace comp::game::ffx_instances
 		}
 	}
 
+	std::vector<snapshot> take_snapshot(bool (*with_children)(int ffx_id))
+	{
+		std::vector<snapshot> out;
+		const auto& live = current();
+		out.reserve(live.size());
+		for (const auto& inst : live)
+		{
+			snapshot s {};
+			s.address = inst.address;
+			s.user = inst.user;
+			s.ffx_id = inst.ffx_id;
+			s.top_id = top_effect_id(inst.address);
+			if (world_position(inst.address, s.position))
+				s.flags |= kSnapshotPosition;
+			s.age = age(inst.address);
+			if (with_children && with_children(inst.ffx_id))
+			{
+				s.children = static_cast<int>(child_state(inst.address, &s.working, false));
+				s.children_brief = static_cast<int>(child_state(inst.address, &s.working_brief, true));
+			}
+			read_matrix(inst.address, s.matrix);
+			s.level = -1.0f;
+			out.push_back(s);
+		}
+		return out;
+	}
+
+	void set_snapshot(const void* items, unsigned count, unsigned element_size)
+	{
+		g_snapshot.clear();
+		g_snapshot_index.clear();
+		g_instances.clear();
+		if (!items || !element_size || element_size > sizeof(snapshot))
+			return;
+		// A capture from an older build holds shorter records: its missing fields stay zero, the level unknown.
+		g_snapshot.assign(count, snapshot {});
+		for (unsigned i = 0; i < count; ++i)
+		{
+			if (element_size < sizeof(snapshot))
+				g_snapshot[i].level = -1.0f;
+			std::memcpy(&g_snapshot[i], static_cast<const unsigned char*>(items) + static_cast<size_t>(i) * element_size, element_size);
+			g_snapshot_index[g_snapshot[i].address] = i;
+			g_instances.push_back({ g_snapshot[i].address, g_snapshot[i].user, g_snapshot[i].ffx_id });
+		}
+	}
+
+	const snapshot* captured(unsigned address)
+	{
+		if (!shared::globals::lookdev_host)
+			return nullptr;
+		const auto it = g_snapshot_index.find(address);
+		return it != g_snapshot_index.end() ? &g_snapshot[it->second] : nullptr;
+	}
+
 	const std::vector<instance>& current()
 	{
+		// The host has no game memory: the capture's instances.
+		if (shared::globals::lookdev_host)
+			return g_instances;
 		const UINT frame = shared::common::ffp_state::get().frame_count();
 		if (!g_walked || frame != g_walk_frame)
 		{
@@ -132,6 +204,11 @@ namespace comp::game::ffx_instances
 
 	int top_effect_id(unsigned address)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			const snapshot* s = captured(address);
+			return s ? s->top_id : 0;
+		}
 		DWORD top = address;
 		for (int i = 0; i < kMaxParents; ++i)
 		{
@@ -145,6 +222,14 @@ namespace comp::game::ffx_instances
 
 	bool world_position(unsigned address, float* out)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			const snapshot* s = captured(address);
+			if (!s || !(s->flags & kSnapshotPosition))
+				return false;
+			std::memcpy(out, s->position, sizeof(s->position));
+			return true;
+		}
 		if (!(read_dword(address + kInstanceState) & kStateValid))
 			return false;
 		__try {
@@ -159,12 +244,26 @@ namespace comp::game::ffx_instances
 
 	float age(unsigned address)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			const snapshot* s = captured(address);
+			return s ? s->age : 0.0f;
+		}
 		const DWORD bits = read_dword(address + kInstanceAge);
 		return *reinterpret_cast<const float*>(&bits);
 	}
 
 	children child_state(unsigned address, int* working, bool brief)
 	{
+		if (shared::globals::lookdev_host)
+		{
+			const snapshot* s = captured(address);
+			if (!s)
+				return children::none;
+			if (working)
+				*working = brief ? s->working_brief : s->working;
+			return static_cast<children>(brief ? s->children_brief : s->children);
+		}
 		DWORD stack[kMaxTreeNodes];
 		int depth = 0;
 		if (const DWORD child = read_dword(address + kInstanceChild))

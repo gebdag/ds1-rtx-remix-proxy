@@ -229,7 +229,7 @@ namespace lookdev::replay
 		bool reapply_gpu_targets = true;
 		bool first_pass = true;
 
-		// Game-state records (REC_GAME_FRAME, REC_GAME_LIGHTS, REC_TEXTURE_NAME),
+		// Game-state records (REC_GAME_FRAME, REC_GAME_LIGHTS, REC_TEXTURE_NAME, REC_GAME_FFX),
 		// for the host to hand to the proxy. Ignored when unset (the viewer).
 		std::function<void(const record&)> on_game_state;
 
@@ -1200,6 +1200,7 @@ namespace lookdev::replay
 				case REC_GAME_FRAME:
 				case REC_GAME_LIGHTS:
 				case REC_TEXTURE_NAME:
+				case REC_GAME_FFX:
 					if (on_game_state)
 						on_game_state(rec);
 					break;

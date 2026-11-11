@@ -10,6 +10,8 @@
 #include "../game/camera.hpp"
 #include "../game/map_lights.hpp"
 #include "../game/point_lights.hpp"
+#include "../game/ffx_instances.hpp"
+#include "../game/ffx_lights.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/vanilla_view.hpp"
 
@@ -2464,6 +2466,14 @@ namespace comp
 			const auto& lights = game::point_lights::harvest();
 			const lookdev::game_lights gl { static_cast<uint32_t>(lights.size()), sizeof(game::point_lights::light) };
 			c.w.rec(REC_GAME_LIGHTS, gl, lights.data(), lights.size() * sizeof(game::point_lights::light));
+
+			// The live effect instances, for the host's effect lights (game::ffx_lights): which effect, where, how old, whether its
+			// emitters still run, and the level its light had. The child state only for effects that have a light row.
+			auto effects = game::ffx_instances::take_snapshot([](int ffx_id) { return game::ffx_lights::find(ffx_id) != nullptr; });
+			for (auto& e : effects)
+				e.level = game::ffx_lights::level_of(e.address);
+			const lookdev::game_ffx gf { static_cast<uint32_t>(effects.size()), sizeof(game::ffx_instances::snapshot) };
+			c.w.rec(REC_GAME_FFX, gf, effects.data(), effects.size() * sizeof(game::ffx_instances::snapshot));
 			c.game_state_written = true;
 		}
 

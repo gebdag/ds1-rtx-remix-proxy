@@ -131,6 +131,7 @@ namespace lookdev
 		REC_GAME_FRAME = 130,      // game_frame
 		REC_GAME_LIGHTS,           // game_lights + count * element_size (proxy's point_lights::light)
 		REC_TEXTURE_NAME,          // id_only + name (no terminator): the TPF name of a texture
+		REC_GAME_FFX,              // game_ffx + count * element_size (proxy's ffx_instances::snapshot): the live effect instances
 
 		REC_STREAM_BEGIN = 140,    // file_header: first record of a live stream session
 	};
@@ -293,6 +294,12 @@ namespace lookdev
 	};
 
 	struct game_lights
+	{
+		uint32_t count;
+		uint32_t element_size;
+	};
+
+	struct game_ffx
 	{
 		uint32_t count;
 		uint32_t element_size;

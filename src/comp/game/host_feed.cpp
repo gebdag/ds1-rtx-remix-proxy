@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "host_feed.hpp"
 #include "texture_names.hpp"
+#include "ffx_instances.hpp"
 
 #include "shared/lookdev/capture_format.hpp"
 
@@ -38,6 +39,25 @@ extern "C" void __cdecl lookdev_host_feed(uint32_t type, const void* payload, ui
 		std::memcpy(s.player, f.player, sizeof(s.player));
 		s.heading = f.heading;
 		s.map_id = f.map_id;
+		// The first game-state record of a frame: a capture without effect instances (before 2026-11-11) leaves none behind
+		// from the capture shown before it. REC_GAME_FFX, when there is one, follows.
+		ffx_instances::set_snapshot(nullptr, 0, 0);
+	}
+	else if (type == lookdev::REC_GAME_FFX && size >= sizeof(lookdev::game_ffx))
+	{
+		lookdev::game_ffx h;
+		std::memcpy(&h, payload, sizeof(h));
+		if (h.element_size && sizeof(h) + size_t(h.count) * h.element_size <= size)
+		{
+			ffx_instances::set_snapshot(static_cast<const uint8_t*>(payload) + sizeof(h), h.count, h.element_size);
+			// Once per capture shown (the record comes with every replayed frame).
+			static uint32_t logged_count = ~0u;
+			if (h.count != logged_count)
+			{
+				logged_count = h.count;
+				shared::common::log("HostFeed", std::format("the capture holds {} live effect instances", h.count));
+			}
+		}
 	}
 	else if (type == lookdev::REC_GAME_LIGHTS && size >= sizeof(lookdev::game_lights))
 	{
