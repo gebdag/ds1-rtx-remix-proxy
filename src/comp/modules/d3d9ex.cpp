@@ -1450,6 +1450,8 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::SetViewport(CONST D3DVIEWPORT9* pViewport)
 	{
 		TRACE_IF_ACTIVE(trace_SetViewport, pViewport);
+		if (shared::globals::imgui_is_rendering) // the F4 menu's own viewport, in target pixels (see SetScissorRect)
+			return m_pIDirect3DDevice9->SetViewport(pViewport);
 		UINT target_width, target_height;
 		if (pViewport && !pViewport->X && !pViewport->Y &&
 			remembered_size(m_pIDirect3DDevice9, pViewport->Width, pViewport->Height, target_width, target_height))
@@ -1637,6 +1639,11 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::SetScissorRect(CONST RECT* pRect)
 	{
 		TRACE_IF_ACTIVE(trace_SetScissorRect, pRect);
+		// The F4 menu (ImGui) draws into the game's UI target at the end of the frame, in that target's own pixels. Scaled
+		// as the game's 1280x720 UI rects, a popup's or tooltip's content clip moved 3x away at 4K and they showed empty
+		// (since the UI target stays registered across the fullscreen Reset, 305455c).
+		if (shared::globals::imgui_is_rendering)
+			return m_pIDirect3DDevice9->SetScissorRect(pRect);
 		UINT target_width, target_height;
 		if (pRect && !pRect->left && !pRect->top && pRect->right > 0 && pRect->bottom > 0 &&
 			remembered_size(m_pIDirect3DDevice9, static_cast<UINT>(pRect->right), static_cast<UINT>(pRect->bottom), target_width, target_height))
