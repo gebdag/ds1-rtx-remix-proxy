@@ -356,6 +356,9 @@ namespace shared::common
 			// Remix finds a mod's material by the texture's content, and a character part with the same plain white diffuse (the
 			// ghost armour's arms) gave its additive ghost material to the gate's quad, which then covered nothing.
 			bool own_white = true;
+			// Sprites that take the game's own fog and scattering for them in the proxy (set_own_fog_test: the wading droplets, s00027),
+			// and none of the look's haze, which only knows the surfaces' sets. Off: as every other sprite.
+			bool own_fog = true;
 			// Express what each particle shader computes as stage state Remix reads:
 			// colour and alpha = texture * vertex colour. Off leaves whatever stage
 			// state the last converted draw left (alpha often texture-only).

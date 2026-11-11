@@ -128,6 +128,10 @@ namespace comp
 				const auto name = game::texture_names::name_of(texture);
 				return name == "s00917" || name == "s00915";
 			});
+			// The droplets a body throws up wading through water (s00027, plain white with the shape in its alpha). The game dims
+			// them by their own fog and scattering constants (Ash Lake's dragon end keeps about a sixth); as they were, they came
+			// out near white and bloomed. One effect on purpose: every other sprite is as it was.
+			ffp.set_own_fog_test([](IDirect3DBaseTexture9* texture) { return game::texture_names::name_of(texture) == "s00027"; });
 			ffp.set_inject_view_pos(cam_s.inject_view_pos);
 			ffp.set_offset_world(cam_s.offset_world);
 		}

@@ -2540,6 +2540,47 @@ namespace shared::common
 			(cur_ps_reads_exposure_ ? ratio(ps_const_[135 * 4 + 0], ps_const_[135 * 4 + 1]) : 1.0f) *
 			(cur_vs_exposure_ ? ratio(vs_const_[159 * 4 + 2], vs_const_[159 * 4 + 3]) : 1.0f);
 		const bool game_colour = unlit && colour_scale != 1.0f;
+		// A sprite that takes its own fog and scattering here (set_own_fog_test), as FRPG_Sfx_SimpleSpriteType2 and its pixel shader
+		// compute them: colour = (lerp(0.5 tex vcol, fog colour c4, fog) x scattering + inscatter) x exposure, where
+		// scattering = lerp(1, extinction x c130, c159.y x c135.w). The texture is plain white, so all of it fits the vertex colour.
+		// The look's haze is then kept off the sprite (the unhazed marker below): it knows the surfaces' sets, not this one.
+		DWORD own_fog_dest = 0;
+		if (unlit && !points)
+			dev->GetRenderState(D3DRS_DESTBLEND, &own_fog_dest);
+		const bool own_fog = unlit && !points && !masked && config::get().sfx.own_fog && own_fog_fn_ && cur_decl_has_color_ &&
+			own_fog_dest == D3DBLEND_INVSRCALPHA && cur_ps_reads_exposure_ && cur_vs_exposure_ && cur_ps_sfx_colour_scale_ != 1.0f &&
+			own_fog_fn_(cur_texture_[0]);
+		auto own_fog_colour = [&](const float* pos, DWORD colour)
+		{
+			const float* vc = vs_const_;
+			const float* pc = ps_const_;
+			const float w = sprite_w_row_[0] * pos[0] + sprite_w_row_[1] * pos[1] + sprite_w_row_[2] * pos[2] + sprite_w_row_[3];
+			const float fog = std::clamp((w - vc[2 * 4]) * vc[2 * 4 + 1] * vc[159 * 4 + 1], 0.0f, 1.0f) * pc[4 * 4 + 3];
+			const float to_eye[3] = { vc[158 * 4] - pos[0], vc[158 * 4 + 1] - pos[1], vc[158 * 4 + 2] - pos[2] };
+			const float dist = std::sqrt(to_eye[0] * to_eye[0] + to_eye[1] * to_eye[1] + to_eye[2] * to_eye[2]);
+			const float cosine = dist > 0.0f
+				? (to_eye[0] * vc[136 * 4] + to_eye[1] * vc[136 * 4 + 1] + to_eye[2] * vc[136 * 4 + 2]) / dist : 0.0f;
+			const float share = vc[159 * 4 + 1] * vc[135 * 4 + 3];
+			const float phase1 = 1.0f + cosine * cosine;
+			const float lobe = vc[132 * 4 + 1] - vc[132 * 4 + 2] * cosine;
+			const float phase2 = lobe > 0.0f ? vc[132 * 4] / (lobe * std::sqrt(lobe)) : 0.0f;
+			const float exposure = ratio(pc[135 * 4], pc[135 * 4 + 1]) * ratio(vc[159 * 4 + 2], vc[159 * 4 + 3]);
+			DWORD out_colour = colour & 0xFF000000u;
+			for (int c = 0; c < 3; c++)
+			{
+				const int shift = 16 - 8 * c;
+				const float vertex = static_cast<float>((colour >> shift) & 0xFF) / 255.0f;
+				// The shader's exp is 2^x, with the extinction scaled by its literal 2.08136892.
+				const float extinction = std::exp2(-dist * vc[129 * 4 + c] * vc[136 * 4 + 3] * 2.08136892f);
+				const float scattering = (extinction * vc[130 * 4 + c] - 1.0f) * share + 1.0f;
+				const float inscatter = (vc[133 * 4 + c] * phase1 + vc[134 * 4 + c] * phase2) * (1.0f - extinction) *
+					vc[131 * 4 + c] * vc[130 * 4 + 3] * vc[135 * 4 + c] * share;
+				const float base = cur_ps_sfx_colour_scale_ * vertex * (1.0f - fog) + fog * pc[4 * 4 + c];
+				const float shown = (base * scattering + inscatter) * exposure;
+				out_colour |= static_cast<DWORD>(std::clamp(shown, 0.0f, 1.0f) * 255.0f + 0.5f) << shift;
+			}
+			return out_colour;
+		};
 		auto vertex_colour = [&](DWORD colour)
 		{
 			// D3DCOLOR is ARGB: alpha in 24-31, red 16-23, green 8-15, blue 0-7.
@@ -2609,7 +2650,9 @@ namespace shared::common
 				auto channel = [&](int shift, float m) { return static_cast<DWORD>(((c >> shift) & 0xFF) * m + 0.5f) << shift; };
 				out[v].color = channel(24, mask[3]) | channel(16, mask[0]) | channel(8, mask[1]) | channel(0, mask[2]);
 			}
-			if (game_colour)
+			if (own_fog)
+				out[v].color = own_fog_colour(pos, out[v].color);
+			else if (game_colour)
 				out[v].color = vertex_colour(out[v].color);
 			if (uv_float)
 			{
@@ -2781,7 +2824,7 @@ namespace shared::common
 		dev->GetRenderState(D3DRS_DESTBLEND, &sprite_dest);
 		const bool unfogged = !masked && sprite_dest == D3DBLEND_INVSRCALPHA && (vs_const_[159 * 4 + 1] == 0.0f || (vs_const_[135 * 4 + 3] == 0.0f && ps_const_[4 * 4 + 3] == 0.0f));
 		if (unlit)
-			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged ? kUnhazedUnlitMarker : kUnlitMarker);
+			dev->SetTextureStageState(0, D3DTSS_CONSTANT, unfogged || own_fog ? kUnhazedUnlitMarker : kUnlitMarker);
 		if (batch_marker)
 			dev->SetTextureStageState(4, D3DTSS_CONSTANT, batch_marker);
 		if (effect_marker)

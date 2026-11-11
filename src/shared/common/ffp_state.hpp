@@ -230,6 +230,9 @@ namespace shared::common
 		void set_mote_texture_test(sprite_texture_fn fn) { mote_texture_fn_ = fn; }
 		// Whether a sprite texture is one of the game's plain white ones (s00917, s00915): drawn with the proxy's own white texture (draw_sprite_up).
 		void set_white_texture_test(sprite_texture_fn fn) { white_texture_fn_ = fn; }
+		// Whether a sprite texture is one whose sprites take the game's own fog and scattering in full (draw_sprite_up, [Sfx] OwnFog).
+		// Only for plain white textures: the fog colour goes into the vertex colour, which the texture multiplies.
+		void set_own_fog_test(sprite_texture_fn fn) { own_fog_fn_ = fn; }
 		// Cube textures the device created, by address: the game reaches its probes through handles of its own.
 		void note_cube(IDirect3DBaseTexture9* cube)
 		{
@@ -896,6 +899,7 @@ namespace shared::common
 		sprite_batch_fn sprite_batch_fn_ = nullptr;
 		sprite_texture_fn mote_texture_fn_ = nullptr;
 		sprite_texture_fn white_texture_fn_ = nullptr;
+		sprite_texture_fn own_fog_fn_ = nullptr;
 		mutable std::shared_mutex known_cubes_mutex_;
 
 		// Stream source tracking
