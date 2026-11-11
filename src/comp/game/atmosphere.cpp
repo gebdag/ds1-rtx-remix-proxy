@@ -176,7 +176,12 @@ namespace comp::game::atmosphere
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		int g_seath_glow = 2;            // proxy.Character.SeathGlow, live: 0 off, 1 additive, 2 cutout
-		int g_white_passage = 1;         // proxy.FFP.WhitePassage, live (tag_white_passage)
+		int g_white_passage = 1;         // [FFP] WhitePassage, live proxy.FFP.WhitePassage (tag_white_passage)
+		// [FFP] WhitePassageLight, live: the light the box throws from inside, against the game's c100. 0.06: the stairs beside the
+		// player read 75 of 255 (game 72) and the player 18 (game 19) in frame_20261111_112454; without it 72 and 11, the player a
+		// silhouette with a hard shadow. At 0.1 they read 81 and 26, at 0.25 124 and 73.
+		float g_white_passage_light = 0.06f;
+		bool g_white_passage_loaded = false;
 		// proxy.Character.GhostSelfLit, live, off: New Londo's ghosts take their look from their replacement material in the mod
 		// (z_pbr ghosts.usda: Remix's own additive blend with emission from the albedo), not from a proxy tag.
 		bool g_ghost_self_lit = false;
@@ -692,20 +697,30 @@ namespace comp::game::atmosphere
 
 	void tag_white_passage(IDirect3DDevice9* dev, const float* ps_const)
 	{
+		if (!g_white_passage_loaded)
+		{
+			g_white_passage_loaded = true;
+			const auto& cfg = shared::common::config::get();
+			g_white_passage = std::clamp(cfg.get_int("FFP", "WhitePassage", g_white_passage), 0, 3);
+			g_white_passage_light = std::clamp(cfg.get_float("FFP", "WhitePassageLight", g_white_passage_light), 0.0f, 2.0f);
+		}
 		if (!dev || !ps_const || !g_white_passage)
 			return;
-		// Only where the game's own tint (c105) would darken it and still leave it white: c100 times the tint at 1 or more. That is
-		// the far view. From inside the passage the tint is 10: the look's haze makes it white there already.
+		// The far view: where the game's own tint (c105) would darken it and still leave it white, c100 times the tint at 1 or
+		// more. From inside the passage the tint is 10.
 		const float tint = std::max({ ps_const[105 * 4], ps_const[105 * 4 + 1], ps_const[105 * 4 + 2] });
 		const float level = std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] });
-		if (tint >= 1.0f || level * tint < 1.0f)
+		const bool far_view = tint < 1.0f && level * tint >= 1.0f;
+		if (g_white_passage != 1 && !far_view)
 			return;
-		if (g_white_passage == 1)
+		if (g_white_passage == 1 || g_white_passage == 3)
 		{
-			// Its own light, c100 times its texture, as a blended unlit layer's.
+			// Its own light, c100 times its texture, as a blended unlit layer's: the white box is where the walkway's light comes from.
+			// From inside, the look's haze makes the box white already (tint 10) and all the tag adds is the light it throws on the
+			// stairs and the player: that part is scaled by WhitePassageLight. In the far view it needs its full c100 to stay white.
 			DWORD tag = kSelfLitMarker;
 			for (int c = 0; c < 3; c++)
-				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(ps_const[100 * 4 + c], 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(ps_const[100 * 4 + c] * (far_view ? 1.0f : g_white_passage_light), 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
 			if (tag != g_self_lit_tag_set)
 			{
 				dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
@@ -1006,7 +1021,8 @@ namespace comp::game::atmosphere
 		else if (key == "Sfx.OwnWhite") shared::common::config::get().sfx.own_white = b;
 		else if (key == "Sfx.OwnFog") shared::common::config::get().sfx.own_fog = b;
 		else if (key == "Character.GhostSelfLit") g_ghost_self_lit = b;
-		else if (key == "FFP.WhitePassage") g_white_passage = std::clamp(std::atoi(value.c_str()), 0, 2);
+		else if (key == "FFP.WhitePassage") { g_white_passage_loaded = true; g_white_passage = std::clamp(std::atoi(value.c_str()), 0, 3); }
+		else if (key == "FFP.WhitePassageLight") { g_white_passage_loaded = true; g_white_passage_light = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 2.0f); }
 		else if (key == "Character.SeathGlow") g_seath_glow = std::clamp(std::atoi(value.c_str()), 0, 2);
 		else if (key == "Character.SeathAlphaRef") g_seath_alpha_ref = static_cast<DWORD>(std::clamp(std::atoi(value.c_str()), 0, 255));
 		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
@@ -1015,6 +1031,7 @@ namespace comp::game::atmosphere
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
+		else if (key == "Lights.EffectDrawDump") { static std::string last; if (value != last) { last = value; ffx_lights::dump_drawn(); } }
 		else if (key == "Fur.ShellGeometry") comp::skinning::s_shell_fur = b;
 		else if (key == "Meshes.GapSkirtAlphaRef") shared::common::config::get().meshes.gap_skirt_alpha_ref = std::clamp(std::atoi(value.c_str()), 0, 255);
 		else if (key == "Meshes.GroundCardHeightKept") shared::common::config::get().meshes.ground_card_height_kept = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 1.0f);

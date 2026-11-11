@@ -74,11 +74,13 @@ namespace comp::game::atmosphere
 	// The Kiln's white passage (m0100B0A18, A18_WhitePassage[Dn]): an opaque unlit tube round the walkway the game draws at c100 7,
 	// seven times its texture. Remix lit it as a plain surface, about 1; the look's haze then took it by its region's tint (c105
 	// 0.2 seen from the Kiln, where 7 x 0.2 stays white in the game): the white doorway of the ending went grey
-	// (frame_20261111_112859). Only in the far view: where the game's tint would darken it and still leave it white (c105 under 1,
-	// c100 x c105 at 1 or more). From inside the passage the tint is 10 and the haze makes it white already; nothing changes there.
-	// proxy.FFP.WhitePassage, live: 0 as it was; 1 (default) the draw is tagged self-lit with its c100, so it is its texture seven
-	// times over again and stays white under the tint; 2 the look's haze leaves it alone instead (no light of its own: it then
-	// shows as bright as our own light on it happens to be, dim once the eye is used to a bright view).
+	// (frame_20261111_112859). It is also where the walkway's light comes from in the game's picture: the white box round the
+	// stairs. [FFP] WhitePassage, live proxy.FFP.WhitePassage: 0 as it was; 1 (default) the draw is tagged self-lit in every
+	// view: with its c100 in the far view, where it must stay white under the tint, and with WhitePassageLight of it from inside,
+	// where the haze makes it white already and the tag only adds the light it throws on the stairs and whoever stands on them;
+	// 3 the same in the far view only (the game's tint under 1 and c100 x c105 at 1 or more; from inside the tint is 10 and the
+	// haze makes it white already); 2 in the far view the look's haze leaves it alone instead (no light of its own: dim once
+	// the eye is used to a bright view). [FFP] WhitePassageLight (0.06), live: the light it throws from inside, against c100.
 	// After tag_haze_set and tag_self_lit, for the opaque unlit m18_ao draw at c100 2 or more.
 	void tag_white_passage(IDirect3DDevice9* dev, const float* ps_const);
 
