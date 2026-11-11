@@ -132,6 +132,7 @@ namespace lookdev
 		REC_GAME_LIGHTS,           // game_lights + count * element_size (proxy's point_lights::light)
 		REC_TEXTURE_NAME,          // id_only + name (no terminator): the TPF name of a texture
 		REC_GAME_FFX,              // game_ffx + count * element_size (proxy's ffx_instances::snapshot): the live effect instances
+		REC_GAME_FX_OWNER,         // id_only: the effect instance that draws the UP draws that follow (0: none), from fx_draw_owner
 
 		REC_STREAM_BEGIN = 140,    // file_header: first record of a live stream session
 	};

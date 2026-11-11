@@ -44,6 +44,58 @@ namespace comp::game::ffx_lights
 	// The light level (0..1) an instance has now, below 0 when it has none: what a capture records with it (ffx_instances::snapshot).
 	float level_of(unsigned address);
 
+	// What an effect instance drew in the last complete frame, itself and every effect under it: the additive sprites the game's
+	// particle draws issued for them (fx_draw_owner), summed. The link between an effect's light and its own sprites.
+	struct drawn_light
+	{
+		float r = 0.0f, g = 0.0f, b = 0.0f; // sum of sprite colour x area (m2), per channel
+		float area = 0.0f;                  // m2 of sprites
+		int sprites = 0;
+		float extent = 0.0f;                // metres across the box that holds their centres
+		float spread = 0.0f;                // metres: twice the light-weighted RMS distance of the sprites from their own centre
+		float centre[3] = {};               // that centre
+	};
+	drawn_light drawn_by(unsigned instance);
+	// Writes rtx_comp\ffx_drawn.tsv: every top-level effect and every effect with a light row that drew something, what it drew,
+	// its table light, and the game's own effect lights of the frame (live proxy.Lights.EffectDrawDump).
+	void dump_drawn();
+
+	// Fire effect lights sized by their own flame. The game gives an effect's light one fixed reach whatever the effect draws
+	// (its own light nodes: 1.2 m for the Kiln cutscene's brazier fire, 4.8 m for a bonfire), and the table's rows were fitted from
+	// a single particle. So a fire light's reach is the spread of the flame its effect draws (drawn_light::spread, smoothed) times
+	// [Lights] EffectSizeReach, 2.68: a wall torch's flame spreads 1.41 m and its light reaches 3.78 m (frame_20261111_142503,
+	// 143022). Kiln embers then reach 5.6-7 m (table 5), the brazier fire 7.2 m, the fire round the character 4 m, the small flames
+	// on a hand 0.5-0.8 m. Only warm lights (r >= g >= b, r >= 1.6 b): other effects keep what they have. Colour and strength stay.
+	// Live: proxy.Lights.EffectSize (0 off), EffectSizeReach, EffectSizeMin, EffectSizeMax, EffectSizeGame.
+	//
+	// The spread is one value per effect, not taken from each instance as it is drawn: the game draws only part of an effect's
+	// emitters depending on the view (the same wall torch effect measured 1.41 m in the Burg and 0.70 m across the Kiln's hall),
+	// and a light must not change its reach as the camera turns to its flame. It comes from rtx_comp\ffx_sizes.tsv, shipped:
+	// the largest measure of each effect over the captures that show it (scripts/gen_ffx_sizes.py), fire lights only. An effect
+	// that is not in it keeps what it has, so nothing changes during play and nothing is written.
+	// [Lights] EffectSizeLearn (off; live) lets the game add what it measures itself: the largest settled spread of any instance,
+	// kept in rtx_comp\ffx_sizes_learned.tsv. Lights then do change once, when their effect is first seen whole.
+	//
+	// The reach for a light of this colour that belongs to an instance of `effect` (the effect whose instance tree is measured),
+	// 0 when the rule does not apply (off, not warm, nothing known yet). `instance` (0: none at hand) adds its measure to what is known.
+	float sized_reach(unsigned instance, int effect, float r, float g, float b);
+	// How far above its effect's origin such a light belongs: the height of the flame's light-weighted centre over the origin,
+	// learned with the spread (the same instance's). The game puts an effect's light at the origin, which for a brazier or a
+	// sconce is inside the bowl: its lights cast no shadows, so that never showed; path traced, the bowl shadows everything
+	// but the sky above it (frame_20261111_142320: reach 1.2 to 9 m changed nothing on the bowl or the knight beside it).
+	// 0 when unknown or the rule is off, or under half a metre (a wall torch's 0.2 m gains nothing, and a moved light no longer
+	// matches the edits saved for its place); never down, at most 2.5 m up. The callers use it for steady flames only: persistent
+	// table effects and the game's own effect lights. Live: proxy.Lights.EffectSizeLift (0 keeps lights at the origin).
+	float sized_lift(int effect, float r, float g, float b);
+	// How far the light in this slot was raised (0: not). What is saved per light goes by its place (game_lights' own keys):
+	// that must stay the place the game has it at, or a new size table would orphan the edits made to a lifted light.
+	void note_lift(int slot, float lift);
+	float lift_of(int slot);
+	// The same for one of the game's own effect lights (a light node in an effect, point_lights::light with an ffx id): by the
+	// top-level instance of its effect nearest to it. Game lights are only ever extended by the caller: a bonfire's flame is a
+	// mesh, which the sprite measure does not see.
+	float sized_reach_at(const point_lights::light& l);
+
 	// The particles drawn this frame: lights that follow their effect's sprites (Tomb of the Giants' lantern halos) take their level from them.
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count);
 

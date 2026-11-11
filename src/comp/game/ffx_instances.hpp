@@ -36,6 +36,9 @@ namespace comp::game::ffx_instances
 	// How many instances the last walk visited.
 	int last_walk_count();
 
+	// The instance an instance is a child of, 0 at the top level (or unknown).
+	unsigned parent_of(unsigned address);
+
 	// One live instance as a capture holds it (lookdev REC_GAME_FFX), so that the lookdev host, which has no game memory,
 	// can run the effect lights as the game did at that moment. Plain data; fields are only ever appended.
 	struct snapshot
@@ -53,6 +56,7 @@ namespace comp::game::ffx_instances
 		int working_brief;
 		float matrix[12];        // its world matrix, row-major 3x4 (rotation and scale; the translation is position)
 		float level;             // the light level the proxy had for it (ffx_lights::level_of), below 0 when it had none
+		unsigned parent;         // the instance it is a child of, 0 at the top level
 	};
 	constexpr unsigned kSnapshotPosition = 1;
 

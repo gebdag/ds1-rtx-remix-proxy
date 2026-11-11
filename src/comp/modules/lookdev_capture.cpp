@@ -12,6 +12,7 @@
 #include "../game/point_lights.hpp"
 #include "../game/ffx_instances.hpp"
 #include "../game/ffx_lights.hpp"
+#include "../game/fx_draw_owner.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/vanilla_view.hpp"
 
@@ -2435,6 +2436,19 @@ namespace comp
 			return s_color_fill_og(dev, surface, r, color);
 		}
 
+		// The effect instance whose particles a UP draw belongs to (game::fx_draw_owner), written before the draw when it
+		// differs from the last one written this frame. The host puts it back before it replays the draw.
+		unsigned s_fx_owner_written = 0;
+		void write_fx_owner()
+		{
+			const unsigned owner = game::fx_draw_owner::current();
+			if (owner != s_fx_owner_written)
+			{
+				s_cap->w.rec(REC_GAME_FX_OWNER, id_only { owner });
+				s_fx_owner_written = owner;
+			}
+		}
+
 		// What the proxy's modules read from game memory, for the lookdev host
 		// (game::host_feed). Written at the frame's first BeginScene: in game the
 		// proxy updates its lights there, after the engine has culled the frame.
@@ -2474,6 +2488,8 @@ namespace comp
 				e.level = game::ffx_lights::level_of(e.address);
 			const lookdev::game_ffx gf { static_cast<uint32_t>(effects.size()), sizeof(game::ffx_instances::snapshot) };
 			c.w.rec(REC_GAME_FFX, gf, effects.data(), effects.size() * sizeof(game::ffx_instances::snapshot));
+			// The host starts each frame with no owner (host_feed, REC_GAME_FRAME).
+			s_fx_owner_written = 0;
 			c.game_state_written = true;
 		}
 
@@ -2558,6 +2574,7 @@ namespace comp
 				internal_scope in;
 				snapshot_state(dev, false);
 				const UINT bytes = primitive_vertex_count(type, count) * stride;
+				write_fx_owner();
 				s_cap->w.rec(REC_DRAW_UP, draw_up { static_cast<uint32_t>(type), count, stride, bytes }, vertices, bytes);
 				s_cap->stats.draws++;
 				// D3D9 unbinds stream 0 after a UP draw, in the game and in the replay alike
@@ -2580,6 +2597,7 @@ namespace comp
 				const UINT index_bytes = primitive_vertex_count(type, count) * (index_format == D3DFMT_INDEX32 ? 4u : 2u);
 				const UINT vertex_bytes = (min_index + num_vertices) * stride;
 				auto& c = *s_cap;
+				write_fx_owner();
 				const draw_indexed_up d { static_cast<uint32_t>(type), min_index, num_vertices, count,
 					static_cast<uint32_t>(index_format), stride, index_bytes, vertex_bytes };
 				c.w.begin(REC_DRAW_INDEXED_UP, sizeof(d) + index_bytes + vertex_bytes);

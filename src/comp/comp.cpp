@@ -21,6 +21,7 @@
 #include "game/map_lights.hpp"
 #include "game/swamp.hpp"
 #include "game/hud_scale.hpp"
+#include "game/fx_draw_owner.hpp"
 #include "game/area_overrides.hpp"
 #include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
@@ -228,6 +229,7 @@ namespace comp
 
 		game::d3dx_texture_watch::install();
 		game::hud_scale::install();
+		game::fx_draw_owner::install();
 
 		MH_EnableHook(MH_ALL_HOOKS);
 	}

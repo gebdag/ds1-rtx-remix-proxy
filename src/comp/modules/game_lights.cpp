@@ -518,8 +518,9 @@ namespace comp
 				row.key = saved_key(string_hash64(va("ffx_group:%d", group_effect)));
 			}
 			row.group_key = row.key;
+			// By the place the game has it at: a fire light raised to its flame (ffx_lights::sized_lift) keeps its key.
 			row.own_key = saved_key(string_hash64(va("ffx_own:%d:%ld:%ld:%ld", group_effect,
-				std::lround(l.x * 2.0f), std::lround(l.y * 2.0f), std::lround(l.z * 2.0f))));
+				std::lround(l.x * 2.0f), std::lround((l.y - game::ffx_lights::lift_of(l.slot)) * 2.0f), std::lround(l.z * 2.0f))));
 			if (decoupled_.count(row.own_key))
 			{
 				row.key = row.own_key;
@@ -677,8 +678,27 @@ namespace comp
 
 		std::vector<const game::point_lights::light*> sources;
 		sources.reserve(harvested.size() + synthetic.size() + 32);
+		// The game's own fire effect lights reach as far as their flame says, when that is further (ffx_lights::sized_reach_at).
+		// Copies, kept for this sync: the vector is reserved up front, so the pointers taken stay good.
+		sized_game_lights_.clear();
+		sized_game_lights_.reserve(harvested.size());
 		for (const auto& l : harvested)
-			if (&l != player) sources.push_back(&l);
+		{
+			if (&l == player)
+				continue;
+			const float reach = game::ffx_lights::sized_reach_at(l);
+			const float lift = reach > 0.0f ? game::ffx_lights::sized_lift(l.ffx_top_id ? l.ffx_top_id : l.ffx_id, l.r, l.g, l.b) : 0.0f;
+			game::ffx_lights::note_lift(l.slot, lift);
+			if (reach > l.dwindle_end || lift != 0.0f)
+			{
+				sized_game_lights_.push_back(l);
+				sized_game_lights_.back().dwindle_end = std::max(reach, l.dwindle_end);
+				sized_game_lights_.back().y += lift;
+				sources.push_back(&sized_game_lights_.back());
+			}
+			else
+				sources.push_back(&l);
+		}
 		for (const auto& l : synthetic) sources.push_back(&l);
 		// The particle stand-ins these lights already stand for are dropped inside effect_lights, before
 		// its light cap (they took slots there and pushed visible stand-ins out and back in), and with

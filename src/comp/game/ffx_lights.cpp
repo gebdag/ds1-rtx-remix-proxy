@@ -1,6 +1,9 @@
 #include "std_include.hpp"
 #include "ffx_lights.hpp"
 #include "ffx_instances.hpp"
+#include "fx_draw_owner.hpp"
+#include "point_lights.hpp"
+#include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "camera.hpp"
 
@@ -37,6 +40,102 @@ namespace comp::game::ffx_lights
 
 		std::unordered_map<int, entry> g_table;
 		bool g_loaded = false;
+
+		// What each emitter instance drew: this frame so far, and the last complete frame (swapped in collect).
+		struct drawn_sum
+		{
+			double r = 0.0, g = 0.0, b = 0.0, area = 0.0;
+			int sprites = 0;
+			float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+			// By each sprite's light (its brightest channel x its area): weight, weighted place and weighted square of the place.
+			double w = 0.0, wx[3] = {}, wxx[3] = {};
+		};
+		std::unordered_map<unsigned, drawn_sum> g_drawn_now, g_drawn_last;
+		bool g_drawn_logged = false;
+		UINT g_drawn_frame = ~0u;
+
+		// The size rule (ffx_lights.hpp sized_reach). An instance's flame spread, smoothed: particles come and go every frame.
+		bool g_size_enabled = true;
+		float g_size_reach = 2.68f;   // metres of reach per metre of flame spread: the wall torch's 3.78 / 1.41
+		float g_size_min = 0.4f;
+		float g_size_max = 12.0f;
+		bool g_size_game = true;      // the game's own fire effect lights are extended too
+		bool g_size_lift = true;      // fire lights stand at their flame's height (sized_lift)
+		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down)
+		constexpr float kSizeMinLift = 0.5f;
+		constexpr int kSizeMinSprites = 4;
+		constexpr float kSizeSmoothing = 0.08f; // per frame
+		constexpr UINT kSizeForget = 600;
+		// An instance's measure counts for its effect once it has been measured in this many frames (its first frames can be a burst).
+		constexpr int kSizeSettled = 8;
+		constexpr float kSizeMaxLift = 2.5f;
+		struct flame_size
+		{
+			float spread = 0.0f;
+			UINT measured = ~0u; // the frame it was last updated in
+			UINT seen = 0;
+			int frames = 0;      // frames it was measured in
+			float lift = 0.0f;   // the flame centre's height over the instance's origin, smoothed
+			int ffx_id = 0;      // the effect the measure is of: an address is reused by other effects
+			float age = 0.0f;    // the instance's age when last measured: a younger one at the address is a new instance
+		};
+		std::unordered_map<unsigned, flame_size> g_sizes;
+		// The spread known per effect: the largest settled measure, from the shipped table, earlier sessions and this one.
+		std::unordered_map<int, float> g_effect_spread;
+		std::unordered_map<int, float> g_effect_lift;   // with the spread: the lift of the instance that gave it
+		bool g_effect_spread_dirty = false;
+		UINT g_effect_spread_saved = 0;
+		constexpr UINT kSizeSaveFrames = 3600; // at most this often, and only when something grew
+
+		void load_sizes(const char* file)
+		{
+			std::ifstream in(shared::globals::root_path + "\\rtx_comp\\" + file);
+			std::string line;
+			while (std::getline(in, line))
+			{
+				if (line.empty() || line[0] == '#')
+					continue;
+				std::istringstream row(line);
+				int id = 0;
+				float spread = 0.0f, lift = 0.0f;
+				if (row >> id >> spread && id > 0 && spread > 0.0f && spread < 100.0f && spread > g_effect_spread[id])
+				{
+					g_effect_spread[id] = spread;
+					g_effect_lift[id] = row >> lift && std::isfinite(lift) ? std::clamp(lift, -10.0f, 10.0f) : 0.0f;
+				}
+			}
+		}
+
+		void save_sizes()
+		{
+			std::ofstream out(shared::globals::root_path + "\\rtx_comp\\ffx_sizes_learned.tsv");
+			if (!out)
+				return;
+			out << "# FFX id <TAB> flame spread in metres <TAB> the flame centre's height over the effect's origin, metres: the largest settled measure of what the effect's instances drew. Written by the game (ffx_lights).\n";
+			std::vector<std::pair<int, float>> rows(g_effect_spread.begin(), g_effect_spread.end());
+			std::sort(rows.begin(), rows.end());
+			for (const auto& [id, spread] : rows)
+				out << id << '\t' << std::format("{:.3f}\t{:.3f}", spread, g_effect_lift[id]) << '\n';
+		}
+		std::unordered_set<int> g_size_logged;
+		std::unordered_map<int, float> g_lifts; // by light slot: how far sized_lift raised it
+
+		// The frame that just ended becomes the one to read. From whatever touches the sums first in a frame: the sprite
+		// observer, collect, or a size query; so the sums never span more than one frame, whether or not collect runs.
+		void roll_drawn()
+		{
+			const UINT frame = shared::common::ffp_state::get().frame_count();
+			if (frame == g_drawn_frame)
+				return;
+			g_drawn_frame = frame;
+			g_drawn_last.swap(g_drawn_now);
+			g_drawn_now.clear();
+		}
+
+		bool warm(float r, float g, float b)
+		{
+			return r > 0.0f && r >= g && g >= b && r >= 1.6f * b;
+		}
 
 		// A live instance's slot, kept while the same instance runs the same effect.
 		struct tracked
@@ -179,6 +278,20 @@ namespace comp::game::ffx_lights
 				g_table[id] = std::move(e);
 			}
 			shared::common::log("FfxLights", std::format("{} effect lights from rtx_comp\\ffx_lights.tsv, {} rows refused", g_table.size(), refused));
+			const auto& cfg = shared::common::config::get();
+			g_size_enabled = cfg.get_int("Lights", "EffectSize", 1) != 0;
+			g_size_reach = std::clamp(cfg.get_float("Lights", "EffectSizeReach", 2.68f), 0.1f, 20.0f);
+			g_size_min = std::clamp(cfg.get_float("Lights", "EffectSizeMin", 0.4f), 0.0f, 20.0f);
+			g_size_max = std::clamp(cfg.get_float("Lights", "EffectSizeMax", 12.0f), 0.5f, 100.0f);
+			g_size_game = cfg.get_int("Lights", "EffectSizeGame", 1) != 0;
+			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 1) != 0;
+			g_size_learn = cfg.get_int("Lights", "EffectSizeLearn", 0) != 0;
+			load_sizes("ffx_sizes.tsv");
+			// What the game learned itself, only while it is asked to learn (and never in the lookdev host: a capture must look
+			// the same whatever was played before).
+			if (g_size_learn && !shared::globals::lookdev_host)
+				load_sizes("ffx_sizes_learned.tsv");
+			shared::common::log("FfxLights", std::format("{} effects with a known flame size", g_effect_spread.size()));
 		}
 
 		int free_slot()
@@ -206,6 +319,33 @@ namespace comp::game::ffx_lights
 
 	void observe_sprites(const shared::common::ffp_state::sprite_point* points, UINT count)
 	{
+		// The effect instance whose particle draw issued these sprites (fx_draw_owner): what it draws adds up per frame.
+		if (const unsigned owner = fx_draw_owner::current(); owner && points)
+		{
+			roll_drawn();
+			auto& d = g_drawn_now[owner];
+			for (UINT v = 0; v < count; ++v)
+			{
+				const auto& p = points[v];
+				if (!p.additive || !std::isfinite(p.area) || !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+					continue;
+				d.r += static_cast<double>(p.r) * p.area;
+				d.g += static_cast<double>(p.g) * p.area;
+				d.b += static_cast<double>(p.b) * p.area;
+				d.area += p.area;
+				d.sprites++;
+				const float at[3] = { p.x, p.y, p.z };
+				const double weight = static_cast<double>(std::max({ p.r, p.g, p.b })) * p.area;
+				d.w += weight;
+				for (int k = 0; k < 3; k++)
+				{
+					d.lo[k] = std::min(d.lo[k], at[k]);
+					d.hi[k] = std::max(d.hi[k], at[k]);
+					d.wx[k] += weight * at[k];
+					d.wxx[k] += weight * at[k] * at[k];
+				}
+			}
+		}
 		if (g_followers.empty() || !points)
 			return;
 		for (UINT v = 0; v < count; ++v)
@@ -220,6 +360,214 @@ namespace comp::game::ffx_lights
 		}
 	}
 
+	drawn_light drawn_by(unsigned instance)
+	{
+		drawn_sum total;
+		for (const auto& [owner, d] : g_drawn_last)
+		{
+			// The instance itself or one above the emitter.
+			unsigned at = owner;
+			bool under = false;
+			for (int depth = 0; at && depth < 32; ++depth)
+			{
+				if (at == instance)
+				{
+					under = true;
+					break;
+				}
+				at = ffx_instances::parent_of(at);
+			}
+			if (!under || !d.sprites)
+				continue;
+			total.r += d.r; total.g += d.g; total.b += d.b; total.area += d.area;
+			total.sprites += d.sprites;
+			total.w += d.w;
+			for (int k = 0; k < 3; k++)
+			{
+				total.lo[k] = std::min(total.lo[k], d.lo[k]);
+				total.hi[k] = std::max(total.hi[k], d.hi[k]);
+				total.wx[k] += d.wx[k];
+				total.wxx[k] += d.wxx[k];
+			}
+		}
+		drawn_light out;
+		out.r = static_cast<float>(total.r); out.g = static_cast<float>(total.g); out.b = static_cast<float>(total.b);
+		out.area = static_cast<float>(total.area);
+		out.sprites = total.sprites;
+		if (total.w > 0.0)
+		{
+			double variance = 0.0;
+			for (int k = 0; k < 3; k++)
+			{
+				const double mean = total.wx[k] / total.w;
+				out.centre[k] = static_cast<float>(mean);
+				variance += std::max(total.wxx[k] / total.w - mean * mean, 0.0);
+			}
+			out.spread = 2.0f * static_cast<float>(std::sqrt(variance));
+		}
+		if (total.sprites)
+			out.extent = std::sqrt((total.hi[0] - total.lo[0]) * (total.hi[0] - total.lo[0]) + (total.hi[1] - total.lo[1]) * (total.hi[1] - total.lo[1]) +
+				(total.hi[2] - total.lo[2]) * (total.hi[2] - total.lo[2]));
+		return out;
+	}
+
+	void dump_drawn()
+	{
+		if (!g_loaded)
+			load();
+		const auto path = shared::globals::root_path + "\\rtx_comp\\ffx_drawn.tsv";
+		std::ofstream out(path);
+		if (!out)
+			return;
+		out << "kind\tffx id\ttop id\tx\tup\tdepth\tage\tdrawn r\tdrawn g\tdrawn b\tarea m2\tsprites\textent m\tspread m\tlift m\tlight r\tlight g\tlight b\treach m\tpersistent\n";
+		// Owners that are not live instances (a cluster kind whose first word is something else) are counted, not listed.
+		std::unordered_set<unsigned> live;
+		for (const auto& inst : ffx_instances::current())
+			live.insert(inst.address);
+		int stray = 0, stray_sprites = 0;
+		for (const auto& [owner, d] : g_drawn_last)
+			if (!live.contains(owner))
+			{
+				stray++;
+				stray_sprites += d.sprites;
+			}
+		int rows = 0;
+		for (const auto& inst : ffx_instances::current())
+		{
+			const auto it = g_table.find(inst.ffx_id);
+			const bool top = ffx_instances::parent_of(inst.address) == 0;
+			if (!top && it == g_table.end())
+				continue;
+			const drawn_light d = drawn_by(inst.address);
+			if (!d.sprites)
+				continue;
+			float pos[3] = {};
+			ffx_instances::world_position(inst.address, pos);
+			out << std::format("{}\t{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{}\t{:.2f}\t{:.2f}\t{:.2f}",
+				it != g_table.end() ? "table" : "top", inst.ffx_id, ffx_instances::top_effect_id(inst.address), pos[0], pos[1], pos[2],
+				ffx_instances::age(inst.address), d.r, d.g, d.b, d.area, d.sprites, d.extent, d.spread, d.centre[1] - pos[1]);
+			if (it != g_table.end())
+				out << std::format("\t{:.3f}\t{:.3f}\t{:.3f}\t{:.2f}\t{}", it->second.r, it->second.g, it->second.b, it->second.dwindle_end, it->second.persistent ? 1 : 0);
+			out << "\n";
+			rows++;
+		}
+		// The game's own effect lights (a point-light node in the effect): what the developers gave an effect that draws this much.
+		int game_lights = 0;
+		for (const auto& l : point_lights::harvest())
+		{
+			if (!l.ffx_id && !l.ffx_top_id)
+				continue;
+			out << std::format("game light\t{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t\t\t\t\t\t\t\t\t\t{:.3f}\t{:.3f}\t{:.3f}\t{:.2f}\t\n",
+				l.ffx_id, l.ffx_top_id, l.x, l.y, l.z, l.r, l.g, l.b, l.dwindle_end);
+			game_lights++;
+		}
+		shared::common::log("FfxLights", std::format("ffx_drawn.tsv: {} effects that drew sprites, {} game effect lights; {} emitters with sprites, {} of them not live instances ({} sprites)",
+			rows, game_lights, g_drawn_last.size(), stray, stray_sprites));
+	}
+
+	namespace
+	{
+		// The smoothed spread of what an instance of `effect` (and the effects under it) draws; 0 before it has settled.
+		float spread_of(unsigned instance, int effect)
+		{
+			roll_drawn();
+			const UINT frame = shared::common::ffp_state::get().frame_count();
+			auto& s = g_sizes[instance];
+			// Another effect at the address, or the same one started again: what was measured there is not this instance's.
+			const float age = ffx_instances::age(instance);
+			if (s.ffx_id != effect || (std::isfinite(age) && age + 0.1f < s.age))
+				s = flame_size {};
+			s.ffx_id = effect;
+			if (std::isfinite(age))
+				s.age = age;
+			s.seen = frame;
+			if (s.measured != frame)
+			{
+				s.measured = frame;
+				const drawn_light d = drawn_by(instance);
+				// With nothing drawn this frame (out of view, between bursts) the last size stays.
+				if (d.sprites >= kSizeMinSprites && d.spread > 0.0f)
+				{
+					float origin[3] = {};
+					const float lift = ffx_instances::world_position(instance, origin) ? d.centre[1] - origin[1] : 0.0f;
+					s.lift = s.spread > 0.0f ? s.lift + (lift - s.lift) * kSizeSmoothing : lift;
+					s.spread = s.spread > 0.0f ? s.spread + (d.spread - s.spread) * kSizeSmoothing : d.spread;
+					s.frames++;
+				}
+			}
+			return s.frames >= kSizeSettled ? s.spread : 0.0f;
+		}
+	}
+
+	float sized_reach(unsigned instance, int effect, float r, float g, float b)
+	{
+		if (!g_size_enabled || !effect || !warm(r, g, b))
+			return 0.0f;
+		const auto it = g_effect_spread.find(effect);
+		float known = it != g_effect_spread.end() ? it->second : 0.0f;
+		// With learning on, what this instance draws adds to what is known of its effect: the fullest view of the flame counts.
+		if (const float measured = g_size_learn && instance ? spread_of(instance, effect) : 0.0f; measured > known * 1.02f)
+		{
+			known = measured;
+			g_effect_spread[effect] = measured;
+			g_effect_lift[effect] = g_sizes[instance].lift;
+			g_effect_spread_dirty = true;
+		}
+		return known > 0.0f ? std::clamp(known * g_size_reach, std::min(g_size_min, g_size_max), g_size_max) : 0.0f;
+	}
+
+	float sized_lift(int effect, float r, float g, float b)
+	{
+		if (!g_size_enabled || !g_size_lift || !effect || !warm(r, g, b))
+			return 0.0f;
+		// Up only, half a metre or more, and not past a tall fire's middle: a measure taken through a bad frame must not send a light off.
+		const auto it = g_effect_lift.find(effect);
+		return it != g_effect_lift.end() && it->second >= kSizeMinLift ? std::min(it->second, kSizeMaxLift) : 0.0f;
+	}
+
+	void note_lift(int slot, float lift)
+	{
+		if (lift != 0.0f)
+			g_lifts[slot] = lift;
+		else if (!g_lifts.empty())
+			g_lifts.erase(slot);
+	}
+
+	float lift_of(int slot)
+	{
+		const auto it = g_lifts.find(slot);
+		return it != g_lifts.end() ? it->second : 0.0f;
+	}
+
+	float sized_reach_at(const point_lights::light& l)
+	{
+		const int effect = l.ffx_top_id ? l.ffx_top_id : l.ffx_id;
+		if (!g_size_enabled || !g_size_game || !effect || !l.has_params || !warm(l.r, l.g, l.b))
+			return 0.0f;
+		// The top-level instance of the light's effect that stands where the light is.
+		unsigned best = 0;
+		float best_d2 = 1.5f * 1.5f;
+		for (const auto& inst : ffx_instances::current())
+		{
+			if (inst.ffx_id != effect || ffx_instances::parent_of(inst.address) != 0)
+				continue;
+			float pos[3];
+			if (!ffx_instances::world_position(inst.address, pos))
+				continue;
+			const float dx = pos[0] - l.x, dy = pos[1] - l.y, dz = pos[2] - l.z;
+			if (const float d2 = dx * dx + dy * dy + dz * dz; d2 <= best_d2)
+			{
+				best_d2 = d2;
+				best = inst.address;
+			}
+		}
+		const float reach = sized_reach(best, effect, l.r, l.g, l.b);
+		if (reach > l.dwindle_end && g_size_logged.insert(-effect).second)
+			shared::common::log("FfxLights", std::format("game light of effect {}: its flame spreads {:.2f} m, reach {:.1f} m (the game's {:.1f} m)",
+				effect, g_effect_spread[effect], reach, l.dwindle_end));
+		return reach;
+	}
+
 	float level_of(unsigned address)
 	{
 		const auto it = g_fades.find(address);
@@ -228,7 +576,14 @@ namespace comp::game::ffx_lights
 
 	bool set_follow_option(const std::string& key, float value)
 	{
-		if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
+		if (key == "Lights.EffectSize") { g_size_enabled = value != 0.0f; g_size_logged.clear(); }
+		else if (key == "Lights.EffectSizeReach") { g_size_reach = std::clamp(value, 0.1f, 20.0f); g_size_logged.clear(); }
+		else if (key == "Lights.EffectSizeMin") g_size_min = std::clamp(value, 0.0f, 20.0f);
+		else if (key == "Lights.EffectSizeMax") g_size_max = std::clamp(value, 0.5f, 100.0f);
+		else if (key == "Lights.EffectSizeGame") { g_size_game = value != 0.0f; g_size_logged.clear(); }
+		else if (key == "Lights.EffectSizeLift") g_size_lift = value != 0.0f;
+		else if (key == "Lights.EffectSizeLearn") g_size_learn = value != 0.0f;
+		else if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFallSeconds") g_follow_fall_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFullAlpha") g_follow_full_alpha = std::max(value, 0.001f);
 		else return false;
@@ -245,6 +600,15 @@ namespace comp::game::ffx_lights
 			return g_out;
 
 		const UINT frame = shared::common::ffp_state::get().frame_count();
+		roll_drawn();
+		if (!g_drawn_logged && !g_drawn_last.empty())
+		{
+			g_drawn_logged = true;
+			int sprites = 0;
+			for (const auto& [owner, d] : g_drawn_last)
+				sprites += d.sprites;
+			shared::common::log("FfxLights", std::format("sprites carry their effect: {} emitters drew {} additive sprites in a frame", g_drawn_last.size(), sprites));
+		}
 		const auto time_now = std::chrono::steady_clock::now();
 		const float now = std::chrono::duration<float>(time_now - g_origin).count();
 		const float follow_dt = std::clamp(std::chrono::duration<float>(time_now - g_follow_time).count(), 0.0f, 0.5f);
@@ -413,6 +777,23 @@ namespace comp::game::ffx_lights
 			l.r = c.e->r * c.level * colour_scale; l.g = c.e->g * c.level * colour_scale; l.b = c.e->b * c.level * colour_scale;
 			l.dwindle_begin = c.e->dwindle_begin;
 			l.dwindle_end = c.e->dwindle_end;
+			float lifted = 0.0f;
+			// A fire's reach follows the flame its own effect draws (sized_reach). Not a spot that follows sprites (no instance).
+			if (const float sized = c.inst ? sized_reach(c.inst->address, c.ffx_id, c.e->r, c.e->g, c.e->b) : 0.0f; sized > 0.0f)
+			{
+				if (g_size_logged.insert(c.ffx_id).second)
+					shared::common::log("FfxLights", std::format("effect {}: its flame spreads {:.2f} m, reach {:.1f} m (the table's {:.1f} m)",
+						c.ffx_id, g_effect_spread[c.ffx_id], sized, c.e->dwindle_end));
+				l.dwindle_end = sized;
+				l.dwindle_begin = std::min(l.dwindle_begin, sized);
+				// ... and it stands at its flame's height, not inside what the flame burns in (sized_lift). A steady flame only: a
+				// brief effect moves as it plays, and its centre is no place for a light (the bonfire's sit effect 90012, a strong
+				// light, lifted half a metre onto the character's back and burned it red, frame_20261111_143022).
+				if (c.e->persistent)
+					lifted = sized_lift(c.ffx_id, c.e->r, c.e->g, c.e->b);
+				l.y += lifted;
+			}
+			note_lift(l.slot, lifted);
 			l.has_params = true;
 			l.source = point_lights::param_source::ffx_table;
 			l.ffx_id = c.ffx_id;
@@ -420,6 +801,14 @@ namespace comp::game::ffx_lights
 			g_out.push_back(l);
 		}
 		std::erase_if(g_slots, [&](const auto& t) { return t.second.seen != frame; });
+		std::erase_if(g_sizes, [&](const auto& t) { return frame - t.second.seen > kSizeForget; });
+		// What the game learned goes to disk now and then (never from the lookdev host, whose frames are a capture's).
+		if (g_size_learn && g_effect_spread_dirty && !shared::globals::lookdev_host && frame - g_effect_spread_saved >= kSizeSaveFrames)
+		{
+			g_effect_spread_saved = frame;
+			g_effect_spread_dirty = false;
+			save_sizes();
+		}
 		// The lookdev host: what came of the capture's instances, when it changes (another capture, or a setting).
 		if (static size_t logged = ~size_t(0); shared::globals::lookdev_host && g_out.size() != logged)
 		{

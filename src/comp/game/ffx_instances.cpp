@@ -155,6 +155,7 @@ namespace comp::game::ffx_instances
 			}
 			read_matrix(inst.address, s.matrix);
 			s.level = -1.0f;
+			s.parent = read_dword(inst.address + kInstanceParent);
 			out.push_back(s);
 		}
 		return out;
@@ -288,4 +289,14 @@ namespace comp::game::ffx_instances
 	}
 
 	int last_walk_count() { return static_cast<int>(g_instances.size()); }
+
+	unsigned parent_of(unsigned address)
+	{
+		if (shared::globals::lookdev_host)
+		{
+			const snapshot* s = captured(address);
+			return s ? s->parent : 0;
+		}
+		return read_dword(address + kInstanceParent);
+	}
 }

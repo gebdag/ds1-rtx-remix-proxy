@@ -1201,6 +1201,7 @@ namespace lookdev::replay
 				case REC_GAME_LIGHTS:
 				case REC_TEXTURE_NAME:
 				case REC_GAME_FFX:
+				case REC_GAME_FX_OWNER:
 					if (on_game_state)
 						on_game_state(rec);
 					break;

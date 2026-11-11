@@ -349,6 +349,8 @@ namespace comp
 		std::unordered_set<uint64_t> decoupled_;   // own_key of the lights edited apart from their group, saved
 		// The guessed effect lights (light_kind::effect) start off.
 		bool kind_enabled_[static_cast<int>(light_kind::count)] = { true, true, true, true, true, true, true, false, true, true, true, true };
+		// This sync's copies of the game's fire effect lights whose reach the flame size extends (ffx_lights::sized_reach_at).
+		std::vector<game::point_lights::light> sized_game_lights_;
 		// Kinds lit with the game's falloff (rtx.ds1Lights.falloffTable) instead of inverse square:
 		// every kind the game gives a falloff (it shades all its point lights flat to dwindle begin,
 		// then linearly to zero at dwindle end). Only the sun, and unresolved slots with no

@@ -2,6 +2,7 @@
 #include "host_feed.hpp"
 #include "texture_names.hpp"
 #include "ffx_instances.hpp"
+#include "fx_draw_owner.hpp"
 
 #include "shared/lookdev/capture_format.hpp"
 
@@ -42,6 +43,13 @@ extern "C" void __cdecl lookdev_host_feed(uint32_t type, const void* payload, ui
 		// The first game-state record of a frame: a capture without effect instances (before 2026-11-11) leaves none behind
 		// from the capture shown before it. REC_GAME_FFX, when there is one, follows.
 		ffx_instances::set_snapshot(nullptr, 0, 0);
+		fx_draw_owner::set_host_owner(0);
+	}
+	else if (type == lookdev::REC_GAME_FX_OWNER && size >= sizeof(lookdev::id_only))
+	{
+		lookdev::id_only owner;
+		std::memcpy(&owner, payload, sizeof(owner));
+		fx_draw_owner::set_host_owner(static_cast<unsigned>(owner.id));
 	}
 	else if (type == lookdev::REC_GAME_FFX && size >= sizeof(lookdev::game_ffx))
 	{
