@@ -273,14 +273,36 @@ namespace comp::game::area_overrides
 		return std::any_of(g_areas.begin(), g_areas.end(), [&](const area& a) { return a.name.rfind(wanted, 0) == 0; });
 	}
 
-	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box)
+	std::string hand_written_sun(const std::string& map)
 	{
+		std::string names;
+		if (map.empty())
+			return names;
+		const auto panel = sun_section(map);
+		for (const auto& a : g_areas)
+		{
+			if (a.map != map || a.name.rfind(panel, 0) == 0)
+				continue;
+			if (std::any_of(a.values.begin(), a.values.end(), [](const auto& kv) { return kv.first == "proxy.Sun.Colour" || kv.first == "proxy.Sun.Direction"; }))
+				names += (names.empty() ? "[" : ", [") + a.name + "]";
+		}
+		return names;
+	}
+
+	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box, std::string* by_hand)
+	{
+		if (by_hand)
+			by_hand->clear();
 		if (map.empty())
 			return false;
 		const auto wanted = sun_section(map);
 		for (const auto& a : g_areas)
 		{
 			if (a.name.rfind(wanted, 0) != 0)
+				continue;
+			// A sun saved for a box is this map's saved sun only while the player is in that box. Counted everywhere, a Save made
+			// anywhere else on the map (with the game's sun showing, as it should there) took it for switched off and deleted it.
+			if (a.has_box && std::find(g_active.begin(), g_active.end(), a.name) == g_active.end())
 				continue;
 			bool have_colour = false, have_direction = false;
 			for (const auto& [key, value] : a.values)
@@ -298,36 +320,40 @@ namespace comp::game::area_overrides
 			in_box = a.has_box;
 			return true;
 		}
-		// No section of the panel's own: the file may still give this map a sun in a section written by hand (the Undead
-		// Asylum's, in [Undead Asylum]). That one is what the files hold, so it is no unsaved change: entering the Asylum listed
-		// "Sun of m18_01_00_00: the game's -> 0.150,0.150,0.150" every time. The last such area that is active now, as the
-		// values are applied in the file's order.
-		bool found = false;
+		// No section of the panel's own: the file may still give this map a sun in sections written by hand (the Undead
+		// Asylum's, in [Undead Asylum]). That is what the files hold, so it is no unsaved change: entering the Asylum listed
+		// "Sun of m18_01_00_00: the game's -> 0.150,0.150,0.150" every time. Colour and direction each as the active areas set
+		// them, in the file's order (the order they are applied in), so one may come from one section and one from another.
+		float c[3] = {}, d[3] = {};
+		bool have_colour = false, have_direction = false;
+		std::string names;
 		for (const auto& a : g_areas)
 		{
 			if (a.map != map || std::find(g_active.begin(), g_active.end(), a.name) == g_active.end())
 				continue;
-			float c[3] = {}, d[3] = {};
-			bool have_colour = false, have_direction = false;
+			bool used = false;
 			for (const auto& [key, value] : a.values)
 			{
-				if (key == "proxy.Sun.Colour")
-					have_colour = std::sscanf(value.c_str(), "%f , %f , %f", &c[0], &c[1], &c[2]) == 3;
-				else if (key == "proxy.Sun.Direction")
-					have_direction = std::sscanf(value.c_str(), "%f , %f , %f", &d[0], &d[1], &d[2]) == 3;
+				if (key == "proxy.Sun.Colour" && std::sscanf(value.c_str(), "%f , %f , %f", &c[0], &c[1], &c[2]) == 3)
+					have_colour = used = true;
+				else if (key == "proxy.Sun.Direction" && std::sscanf(value.c_str(), "%f , %f , %f", &d[0], &d[1], &d[2]) == 3)
+					have_direction = used = true;
 			}
-			if (!have_colour || !have_direction)
-				continue;
-			const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-			for (int i = 0; i < 3; ++i)
-			{
-				colour[i] = c[i];
-				direction[i] = d[i] / std::max(length, 1e-6f);
-			}
-			in_box = a.has_box;
-			found = true;
+			if (used && names.find("[" + a.name + "]") == std::string::npos)
+				names += (names.empty() ? "[" : ", [") + a.name + "]";
 		}
-		return found;
+		if (!have_colour || !have_direction)
+			return false;
+		const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+		for (int i = 0; i < 3; ++i)
+		{
+			colour[i] = c[i];
+			direction[i] = d[i] / std::max(length, 1e-6f);
+		}
+		in_box = false;
+		if (by_hand)
+			*by_hand = names;
+		return true;
 	}
 
 	namespace

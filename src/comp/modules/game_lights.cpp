@@ -688,12 +688,14 @@ namespace comp
 				continue;
 			// A bonfire's light goes on the bonfire's axis, into its fire (ffx_lights::bonfire_light_place): the copy stands
 			// there for everything that follows, its key too, so an edit made to one bonfire's light stays with that bonfire.
-			if (float place[3]; game::ffx_lights::bonfire_light_place(l, place))
+			if (float place[3], origin_y = 0.0f; game::ffx_lights::bonfire_light_place(l, place, &origin_y))
 			{
 				sized_game_lights_.push_back(l);
 				auto& placed = sized_game_lights_.back();
 				placed.x = place[0]; placed.y = place[1]; placed.z = place[2];
-				game::ffx_lights::note_lift(l.slot, 0.0f);
+				// Its key is its bonfire's origin, the same at every load and whatever the height slider says (game_lights' own key
+				// takes the lift off the place).
+				game::ffx_lights::note_lift(l.slot, placed.y - origin_y);
 				sources.push_back(&placed);
 				continue;
 			}
@@ -1333,7 +1335,7 @@ namespace comp
 		{
 			// The game's falloff, as for the character lights: radiance colour^2.2 / pi, flat to the
 			// game's dwindle begin and linear to zero at its end, both times FalloffRangeScale,
-			// with its own intensity, FalloffIntensity (1 = the game's brightness). Begin and end
+			// with its own intensity, FalloffIntensity (0.7 by default; 3.14 would be the game's own strength head-on). Begin and end
 			// come from the same light: the area's player light ranges from 0..2.5 to 6..25, and a
 			// fixed end under the game's begin cut the light off in a hard ring (begin 6 against
 			// an end of 4.2 left 4 cm of falloff). Range and Intensity are the inverse-square
@@ -1762,6 +1764,7 @@ namespace comp
 			{ "Lights", "EffectFlicker", "Flicker of lengthened fire lights", num(game::ffx_lights::effect_flicker()) },
 			{ "Lights", "BonfireLightCentre", "Bonfire lights on the bonfire's axis", flag(game::ffx_lights::bonfire_light_centred()) },
 			{ "Lights", "BonfireLightHeight", "Bonfire light height", num(game::ffx_lights::bonfire_light_height()) },
+			{ "Lights", "BonfireLightHeightLarge", "Kiln bonfire light height", num(game::ffx_lights::bonfire_light_height_large()) },
 			{ "Lights", "ResolveEntityParams", "Read entity lights' parameters", flag(game::point_lights::resolve_entities()) },
 			{ "Lights", "SynthesizedLights", "Stand-in lights", flag(game::map_lights::enabled()) },
 			{ "Sun", "Enabled", "Sun on", flag(sun_enabled) },
@@ -1881,14 +1884,19 @@ namespace comp
 			const auto map_name = game::map_lights::current_map_name();
 			float saved_colour[3] = {}, saved_direction[3] = {};
 			bool saved_box = false;
-			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box);
+			std::string by_hand;
+			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box, &by_hand);
 			const bool own = sun_colour_set && sun_direction_set;
 			const bool differs = own != have_saved ||
 				(own && (!close3(sun_colour, saved_colour) || !close3(sun_direction, saved_direction) || saved_box != (g_sun_scope_area != 0)));
 			if (!map_name.empty() && differs && !save_skip_.count("sun:" + map_name))
 			{
+				// A sun written by hand in area_overrides.ini is not the panel's to take away: Save leaves it (the list says so).
 				if (!own)
-					ok &= game::area_overrides::remove_sun(map_name);
+				{
+					if (by_hand.empty())
+						ok &= game::area_overrides::remove_sun(map_name);
+				}
 				else
 				{
 					float x = 0.0f, depth = 0.0f, up = 0.0f;
@@ -1949,6 +1957,7 @@ namespace comp
 		game::ffx_lights::set_follow_option("Lights.EffectFlicker", cfg.get_float("Lights", "EffectFlicker", 0.15f));
 		game::ffx_lights::set_follow_option("Lights.BonfireLightCentre", cfg.get_bool("Lights", "BonfireLightCentre", true) ? 1.0f : 0.0f);
 		game::ffx_lights::set_follow_option("Lights.BonfireLightHeight", cfg.get_float("Lights", "BonfireLightHeight", 0.22f));
+		game::ffx_lights::set_follow_option("Lights.BonfireLightHeightLarge", cfg.get_float("Lights", "BonfireLightHeightLarge", 0.7f));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
@@ -2368,7 +2377,8 @@ namespace comp
 			const auto map_name = game::map_lights::current_map_name();
 			float saved_colour[3] = {}, saved_direction[3] = {};
 			bool saved_box = false;
-			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box);
+			std::string by_hand;
+			const bool have_saved = game::area_overrides::saved_sun(map_name, saved_colour, saved_direction, saved_box, &by_hand);
 			const bool own = sun_colour_set && sun_direction_set;
 			const bool differs = own != have_saved ||
 				(own && (!near_equal3(sun_colour, saved_colour) || !near_equal3(sun_direction, saved_direction) || saved_box != (g_sun_scope_area != 0)));
@@ -2398,8 +2408,9 @@ namespace comp
 						sun_colour_set = sun_direction_set = false;
 				});
 				items.push_back({ "sun:" + map_name, std::format("Sun of {}", map_name),
-					std::format("{} -> {}", text(have_saved, saved_colour, saved_direction, saved_box),
-						text(own, sun_colour, sun_direction, g_sun_scope_area != 0)),
+					std::format("{} -> {}{}", text(have_saved, saved_colour, saved_direction, saved_box),
+						text(own, sun_colour, sun_direction, g_sun_scope_area != 0),
+						!own && !by_hand.empty() ? std::format("  (set by hand in {} of area_overrides.ini: Save cannot take it away)", by_hand) : ""),
 					static_cast<int>(reverts.size()) - 1 });
 			}
 			if (game::custom_lights::dirty())
@@ -2601,6 +2612,9 @@ namespace comp
 			}
 			if (saved)
 				ImGui::TextDisabled("This map has a saved sun of its own. Save at the top writes changes to it.");
+			else if (const auto by_hand = game::area_overrides::hand_written_sun(map_name); !by_hand.empty())
+				ImGui::TextDisabled("%s", std::format("This map's sun is set by hand in {} of area_overrides.ini. Save at the top writes a change\n"
+					"as a section of its own, which wins over it; switching the sun off takes editing that file.", by_hand).c_str());
 			else if (own)
 				ImGui::TextDisabled("Not saved yet: Save at the top writes it.");
 		}
@@ -2788,6 +2802,13 @@ namespace comp
 		if (ImGui::SliderFloat("##bonfire_height", &bonfire_height, -0.3f, 1.0f, "%.2f m") |
 			revert_buttons("bonfire_height", bonfire_height, saved_float("Lights", "BonfireLightHeight", 0.22f), 0.22f))
 			game::ffx_lights::set_follow_option("Lights.BonfireLightHeight", bonfire_height);
+		float bonfire_height_large = game::ffx_lights::bonfire_light_height_large();
+		form_label("Kiln bonfire light height",
+			"The same for the Kiln of the First Flame's bonfire, where the fire is linked: its fire burns in a deep bowl, half of its\n"
+			"light under 0.71 m, and at the height above its light stays inside the bowl. Saved as [Lights] BonfireLightHeightLarge.");
+		if (ImGui::SliderFloat("##bonfire_height_large", &bonfire_height_large, -0.3f, 1.5f, "%.2f m") |
+			revert_buttons("bonfire_height_large", bonfire_height_large, saved_float("Lights", "BonfireLightHeightLarge", 0.7f), 0.7f))
+			game::ffx_lights::set_follow_option("Lights.BonfireLightHeightLarge", bonfire_height_large);
 		// The runtime's own view of every light it renders (rtx.ds1Lights.showView): not saved, off at every start.
 		static bool show_lights = false;
 		if (form_checkbox("Show lights in the world", "##show_lights", &show_lights,
@@ -3895,7 +3916,7 @@ namespace comp
 			form_label("Emitter size", "Radius of the sphere the light shines from. Saved as [PlayerLight] Radius.");
 			ImGui::SliderFloat("##pl_radius", &c.radius, 0.01f, 2.0f, "%.2f m");
 			revert_buttons("pl_radius", c.radius, std::max(0.01f, saved_float("PlayerLight", "Radius", def.radius)), def.radius);
-			form_label("Brightness", "1 = the game's brightness. Saved as [PlayerLight] FalloffIntensity,\n"
+			form_label("Brightness", "0.7 by default; 3.14 would be the game's own strength head-on. Saved as [PlayerLight] FalloffIntensity,\n"
 				"apart from the inverse-square brightness.");
 			ImGui::SliderFloat("##pl_fint", &c.falloff_intensity, 0.0f, 10.0f, "x %.2f", ImGuiSliderFlags_Logarithmic);
 			revert_buttons("pl_fint", c.falloff_intensity, std::max(0.0f, saved_float("PlayerLight", "FalloffIntensity", def.falloff_intensity)), def.falloff_intensity);

@@ -112,10 +112,16 @@ namespace comp::game::ffx_lights
 	// pile's shadows a different way at every bonfire. The fire itself is the same everywhere: its sprites' light sits on the
 	// axis, 0.15 to 0.28 m over the origin. So the light is put on the bonfire's axis at BonfireLightHeight (0.22 m) over
 	// the origin of the effect instance it belongs to. [Lights] BonfireLightCentre (1), BonfireLightHeight; both live.
+	// The Kiln of the First Flame's bonfire, where the fire is linked, burns the largest flame (90004, seen in 25 captures and
+	// at no other bonfire): its fire is drawn by the cutscene's effects in a deep bowl. At 0.22 m its light stays inside the
+	// bowl (every level ray is blocked to +0.2 m, the bowl wall 0.56 m off; free from +0.4 m); half of its fire's light is
+	// under +0.71 m. So it has a height of its own, BonfireLightHeightLarge (0.7 m), also live.
 	// False when the light is no bonfire's, the rule is off, or its effect instance is not found (then it stays where it is).
-	bool bonfire_light_place(const point_lights::light& l, float out[3]);
+	// origin_y (optional): the height of the bonfire's origin, which is what the light is keyed by.
+	bool bonfire_light_place(const point_lights::light& l, float out[3], float* origin_y = nullptr);
 	bool bonfire_light_centred();
 	float bonfire_light_height();
+	float bonfire_light_height_large();
 	// How far above its effect's origin such a light belongs: the height of the flame's light-weighted centre over the origin,
 	// learned with the spread (the same instance's). The game puts an effect's light at the origin, which for a brazier or a
 	// sconce is inside the bowl: its lights cast no shadows, so that never showed; path traced, the bowl shadows everything

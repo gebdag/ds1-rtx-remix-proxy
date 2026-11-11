@@ -22,6 +22,12 @@ namespace comp::game::area_overrides
 	bool remove_sun(const std::string& map);
 	// Whether this map has a section from the panel.
 	bool has_saved_sun(const std::string& map);
-	// The panel's saved sun for this map: its colour, direction and whether it is for a box. False when none is saved.
-	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box);
+	// The saved sun for this map: its colour, direction and whether it is for a box. False when none is saved. The panel's own
+	// section first; failing that, what the file's hand-written sections of this map set where the player is now (a colour and a
+	// direction may come from two of them: dark Anor Londo's colour, the Ornstein and Smough box's direction). by_hand (optional):
+	// the names of those sections, empty for the panel's own. A hand-written sun reports no box: the panel's area scope is not
+	// what made it.
+	bool saved_sun(const std::string& map, float colour[3], float direction[3], bool& in_box, std::string* by_hand = nullptr);
+	// The names of this map's hand-written sections that set a sun colour or direction, active or not (empty: none).
+	std::string hand_written_sun(const std::string& map);
 }
