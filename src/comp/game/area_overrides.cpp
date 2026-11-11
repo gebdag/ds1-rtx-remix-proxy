@@ -10,6 +10,7 @@
 #include "shared/common/remix_api.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <format>
 #include <map>
@@ -26,6 +27,26 @@ namespace comp::game::area_overrides
 			bool has_box = false;
 			float box_min[3] = {};
 			float box_max[3] = {};
+			// `yaw = <degrees>`: the box turned about the vertical through its centre, for rooms that do not run along the map's
+			// axes (Duke's Archives' library halls are diamonds). A point is inside when, turned back by yaw about that centre
+			// (x' = dx cos + dz sin, z' = -dx sin + dz cos), it lies in the box.
+			float yaw_deg = 0.0f;
+
+			bool contains(const float* position) const
+			{
+				if (!has_box)
+					return true;
+				float c[3], h[3];
+				for (int i = 0; i < 3; i++)
+				{
+					c[i] = 0.5f * (box_min[i] + box_max[i]);
+					h[i] = 0.5f * (box_max[i] - box_min[i]);
+				}
+				const float dx = position[0] - c[0], dy = position[1] - c[1], dz = position[2] - c[2];
+				const float r = yaw_deg * 0.017453292f, cs = std::cos(r), sn = std::sin(r);
+				const float x = dx * cs + dz * sn, z = -dx * sn + dz * cs;
+				return std::abs(x) <= h[0] && std::abs(dy) <= h[1] && std::abs(z) <= h[2];
+			}
 			int when = 0; // 0 always, 1 only in the map's dark version, 2 only in its light one (atmosphere::ambient_is_cold), -1 never (a bad value)
 			std::vector<std::string> light_prefixes; // `lights = <prefix>`: custom lights that exist only in this area
 			std::vector<std::pair<std::string, std::string>> values;
@@ -97,6 +118,11 @@ namespace comp::game::area_overrides
 					else
 						shared::common::log("AreaOverrides", std::format("line {}: a box is six numbers: x y z x y z", number), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 				}
+				else if (key == "yaw")
+				{
+					if (sscanf_s(value.c_str(), "%f", &a.yaw_deg) != 1)
+						shared::common::log("AreaOverrides", std::format("line {}: yaw is one number, in degrees", number), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+				}
 				else if (key == "lights")
 				{
 					if (!value.empty())
@@ -112,7 +138,7 @@ namespace comp::game::area_overrides
 				else if (key.rfind("rtx.", 0) == 0 || (key.rfind("proxy.", 0) == 0 && key.find('.', 6) != std::string::npos))
 					a.values.emplace_back(key, value);
 				else
-					shared::common::log("AreaOverrides", std::format("line {}: {} is neither map, box, when, lights, rtx.<option> nor proxy.<Section>.<Key>", number, key), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+					shared::common::log("AreaOverrides", std::format("line {}: {} is neither map, box, yaw, when, lights, rtx.<option> nor proxy.<Section>.<Key>", number, key), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 			}
 			shared::common::log("AreaOverrides", std::format("{}: {} area(s)", file_path(), g_areas.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
 		}
@@ -153,10 +179,7 @@ namespace comp::game::area_overrides
 			{
 				if (a.map != map || a.when < 0 || (a.when && (a.when == 1) != atmosphere::ambient_is_cold()))
 					continue;
-				bool inside = !a.has_box || have_position;
-				for (int i = 0; i < 3 && inside && a.has_box; i++)
-					inside = position[i] >= a.box_min[i] && position[i] <= a.box_max[i];
-				if (inside)
+				if ((!a.has_box || have_position) && a.contains(position))
 					names.push_back(a.name);
 			}
 			return names;
@@ -409,10 +432,7 @@ namespace comp::game::area_overrides
 				// No player position (a menu, a load): the place is not known, so a box does not match.
 				if (!have_position)
 					continue;
-				bool inside = true;
-				for (int i = 0; i < 3; i++)
-					inside = inside && position[i] >= a.box_min[i] && position[i] <= a.box_max[i];
-				if (!inside)
+				if (!a.contains(position))
 					continue;
 			}
 			active.push_back(a.name);

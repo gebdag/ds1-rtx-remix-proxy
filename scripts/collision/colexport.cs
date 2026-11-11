@@ -51,3 +51,14 @@ foreach (var f in bnd.Files)
     File.WriteAllText(Path.Combine(outDir, name + ".obj"), sb.ToString());
     Console.WriteLine($"{name}: {parts} parts, {verts} vertices, {tris} triangles");
 }
+
+// Navmeshes (n*.nvm beside the map pieces): walkable floor triangles, one OBJ each.
+foreach (var nvmPath in Directory.GetFiles(mapDir, "n*.nvm"))
+{
+    var nvm = NVM.Read(new Memory<byte>(File.ReadAllBytes(nvmPath)));
+    var sb2 = new StringBuilder();
+    foreach (var v in nvm.Vertices) sb2.AppendLine($"v {v.X} {v.Y} {v.Z}");
+    foreach (var t in nvm.Triangles) sb2.AppendLine($"f {t.VertexIndex1 + 1} {t.VertexIndex2 + 1} {t.VertexIndex3 + 1}");
+    File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(nvmPath) + ".obj"), sb2.ToString());
+}
+Console.WriteLine("navmeshes: " + Directory.GetFiles(mapDir, "n*.nvm").Length);
