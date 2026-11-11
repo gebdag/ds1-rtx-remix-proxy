@@ -26,7 +26,8 @@ namespace comp::game::vanilla_view
 				return false;
 			auto& api = shared::common::remix_api::get();
 			return api.m_bridge.SetConfigVariable &&
-				api.m_bridge.SetConfigVariable("rtx.enableRaytracing", on ? "True" : "False") == REMIXAPI_ERROR_CODE_SUCCESS;
+				// On: the value is taken off the runtime's Remix API layer, so the config's own applies (an empty value).
+				api.m_bridge.SetConfigVariable("rtx.enableRaytracing", on ? "" : "False") == REMIXAPI_ERROR_CODE_SUCCESS;
 		}
 	}
 

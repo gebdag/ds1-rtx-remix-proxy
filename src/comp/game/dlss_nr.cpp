@@ -65,7 +65,8 @@ namespace comp::game::dlss_nr
 		auto& api = shared::common::remix_api::get();
 		const bool enable = !g_enabled;
 		if (!api.m_bridge.SetConfigVariable ||
-			api.m_bridge.SetConfigVariable(kOption, enable ? "True" : "False") != REMIXAPI_ERROR_CODE_SUCCESS)
+			// Back to the config's own value: taken off the runtime's Remix API layer (an empty value), not pinned there.
+			api.m_bridge.SetConfigVariable(kOption, enable == starting_state() ? "" : enable ? "True" : "False") != REMIXAPI_ERROR_CODE_SUCCESS)
 		{
 			shared::common::log("DlssNr", std::format("Remix refused {}", kOption), shared::common::LOG_TYPE::LOG_TYPE_WARN);
 			return;

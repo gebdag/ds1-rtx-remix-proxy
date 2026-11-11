@@ -135,24 +135,6 @@ namespace comp::game::area_overrides
 			parse_file();
 		}
 
-		// What the option was before any area touched it: user.conf, then rtx.conf (user.conf wins in Remix too).
-		// Empty when neither sets it: Remix then takes the value off and falls back to its default.
-		std::string rtx_baseline(const std::string& key)
-		{
-			for (const char* name : { "\\user.conf", "\\rtx.conf" })
-			{
-				std::ifstream in(shared::globals::root_path + name);
-				std::string line;
-				while (std::getline(in, line))
-				{
-					const auto eq = line.find('=');
-					if (eq != std::string::npos && trim(line.substr(0, eq)) == key)
-						return trim(line.substr(eq + 1));
-				}
-			}
-			return {};
-		}
-
 		void set_rtx(const std::string& key, const std::string& value)
 		{
 			auto& bridge = shared::common::remix_api::get().m_bridge;
@@ -394,8 +376,9 @@ namespace comp::game::area_overrides
 		for (const auto& [key, value] : g_applied)
 			if (!wanted.contains(key))
 			{
+				// Empty: the runtime takes the value off its Remix API layer, and the config files' value applies again.
 				if (key.rfind("rtx.", 0) == 0)
-					set_rtx(key, rtx_baseline(key));
+					set_rtx(key, "");
 				else
 					proxy_changed = true;
 				shared::common::log("AreaOverrides", std::format("{} back from {}", key, value), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
