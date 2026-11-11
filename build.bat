@@ -271,7 +271,7 @@ if not "!DEPLOY_TARGET!"=="" (
         :: Per-light edits from the F4 menu (scripts\save_game_settings.py keeps the repo copy current), only when the game has none.
         if not exist "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" if exist "%ROOT%assets\light_overrides.txt" (
             if not exist "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights" mkdir "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights"
-            copy \y "%ROOT%assets\light_overrides.txt" "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" >nul
+            copy /y "%ROOT%assets\light_overrides.txt" "!DEPLOY_TARGET!\rtx_comp\settings\rtx_comp\lights\light_overrides.txt" >nul
         )
         ver >nul
         :: The lookdev host's map suns from scripts\gen_map_suns.py, and the per-mesh tables of game/mesh_tables.hpp with
