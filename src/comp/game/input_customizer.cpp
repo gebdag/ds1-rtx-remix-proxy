@@ -33,8 +33,6 @@ namespace comp::game::input_customizer
 	static constexpr UINT CLIP_PUMP_INTERVAL_MS = 16;
 
 	static HMODULE mod_ = nullptr;
-
-	HMODULE module() { return mod_; }
 	static bool pump_started_ = false;
 	static bool pump_live_ = false;
 

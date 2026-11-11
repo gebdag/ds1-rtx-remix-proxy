@@ -226,6 +226,8 @@ namespace comp
 		// one frame at a time ([Lookdev] MainGameCapture). Never in the host, which replays them.
 		if (cfg.lookdev.enabled || (cfg.lookdev.main_game_capture && !shared::globals::lookdev_host))
 			shared::common::loader::module_loader::register_module(std::make_unique<lookdev_capture>());
+		else if (!shared::globals::lookdev_host)
+			lookdev_capture::install_input_hold();
 
 		game::d3dx_texture_watch::install();
 		game::hud_scale::install();

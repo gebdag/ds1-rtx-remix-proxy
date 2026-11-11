@@ -62,5 +62,9 @@ namespace comp
 		// alive (lookdev renders on the real device, which a fullscreen focus loss
 		// makes lost). The stream resumes as a new session after the next Present.
 		static void on_reset();
+
+		// The F4 menu's hold on the game's keyboard (the input-freeze hooks) without this module: the normal game with
+		// [Lookdev] MainGameCapture off.
+		static void install_input_hold();
 	};
 }
