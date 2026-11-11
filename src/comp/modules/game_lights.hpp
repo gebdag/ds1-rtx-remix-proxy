@@ -152,6 +152,12 @@ namespace comp
 		// World positions of the lights the game has bound to lightmapped draws (observe_lightmapped_draw).
 		std::vector<std::array<float, 3>> lightmap_bound_;
 		bool bound_to_lightmap(float x, float y, float z) const;
+		// The same for one light, kept for the map once matched, by its engine slot and entity handle: a map light that sways (the
+		// intro shaft's torch bank lights move a few cm a frame) matched the positions seen only now and then, so its strength
+		// jumped by pi from frame to frame until enough of its positions were seen (F6 dump lights_20261111_224543).
+		bool bound_to_lightmap(const game::point_lights::light& l);
+		std::unordered_set<uint64_t> lightmap_bound_lights_;
+		unsigned lightmap_bound_lights_map_ = 0;
 		// Lights the game bound to map draws and to character draws on the current map (observe_draw_lights).
 		std::vector<std::array<float, 3>> map_bound_, character_bound_;
 		unsigned bound_map_id_ = 0;

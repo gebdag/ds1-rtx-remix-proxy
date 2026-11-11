@@ -484,6 +484,24 @@ namespace comp
 			{ return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) + (p[2] - z) * (p[2] - z) < kSame * kSame; });
 	}
 
+	bool game_lights::bound_to_lightmap(const game::point_lights::light& l)
+	{
+		if (const unsigned map = game::map_lights::current_map_id(); map != lightmap_bound_lights_map_)
+		{
+			lightmap_bound_lights_.clear();
+			lightmap_bound_lights_map_ = map;
+		}
+		// Engine lights only (an entity handle): the proxy's own lights stand still and have no lasting identity.
+		const uint64_t id = (static_cast<uint64_t>(static_cast<uint32_t>(l.slot)) << 32) | l.entity_handle;
+		if (l.entity_handle && lightmap_bound_lights_.count(id))
+			return true;
+		if (!bound_to_lightmap(l.x, l.y, l.z))
+			return false;
+		if (l.entity_handle)
+			lightmap_bound_lights_.insert(id);
+		return true;
+	}
+
 	void game_lights::dump_rows() const
 	{
 		FILE* f = nullptr;
@@ -881,7 +899,7 @@ namespace comp
 				// lit Painted World's close-up ground 1.4x the game's (frame_20261030_093046).
 				const bool exact = row.kind == kind::fx_direct || row.kind == kind::effect || row.kind == kind::ffx_table ||
 					row.kind == kind::custom || row.kind == kind::mesh ||
-					(is_static(row.kind) && bound_to_lightmap(src.x, src.y, src.z));
+					(is_static(row.kind) && bound_to_lightmap(src));
 				const float scale = intensity_scale * mult / (exact ? 1.0f : 3.14159265f);
 				radiance = {
 					std::pow(std::max(colour[0], 0.0f), 2.2f) * scale,
