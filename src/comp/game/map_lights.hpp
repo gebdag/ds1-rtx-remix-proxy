@@ -106,6 +106,7 @@ namespace comp::game::map_lights
 	// strength (3.0, undimmed to 2 m), and the user judged that wrong against the dark knight by the brazier (2026-11-11).
 	float flame_lift(float x, float y, float z);
 	void set_flame_lift(bool on);
+	bool flame_lift_enabled();
 
 	// Path last read for the map table, and why it produced nothing if it did.
 	const std::string& source_path();

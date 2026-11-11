@@ -390,11 +390,16 @@ namespace comp::game::map_lights
 		g_flame_lift_on = on ? 1 : 0;
 	}
 
-	float flame_lift(float x, float y, float z)
+	bool flame_lift_enabled()
 	{
 		if (g_flame_lift_on < 0)
 			g_flame_lift_on = shared::common::config::get().get_int("Lights", "FlameLift", 0) != 0 ? 1 : 0;
-		if (!g_flame_lift_on)
+		return g_flame_lift_on != 0;
+	}
+
+	float flame_lift(float x, float y, float z)
+	{
+		if (!flame_lift_enabled())
 			return 0.0f;
 		constexpr float kSame = 0.1f;
 		static std::string s_map;

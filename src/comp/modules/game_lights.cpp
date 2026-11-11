@@ -1728,6 +1728,9 @@ namespace comp
 			{ "Lights", "RadiusScale", "Point light reach", num(radius_scale) },
 			{ "Lights", "GameFalloff", "The game's falloff", flag(game_falloff_) },
 			{ "Lights", "SkipCharacterOnly", "Character-only lights start off", flag(skip_characters_only_) },
+			{ "Lights", "EffectSize", "Fire light reach from the flame", flag(game::ffx_lights::size_rule_enabled()) },
+			{ "Lights", "EffectSizeLift", "Raise fire lights to their flame", flag(game::ffx_lights::size_lift_enabled()) },
+			{ "Lights", "FlameLift", "Raise flame lights out of their holder", flag(game::map_lights::flame_lift_enabled()) },
 			{ "Lights", "ResolveEntityParams", "Read entity lights' parameters", flag(game::point_lights::resolve_entities()) },
 			{ "Lights", "SynthesizedLights", "Stand-in lights", flag(game::map_lights::enabled()) },
 			{ "Sun", "Enabled", "Sun on", flag(sun_enabled) },
@@ -1908,6 +1911,10 @@ namespace comp
 		skip_characters_only_ = cfg.get_bool("Lights", "SkipCharacterOnly", true);
 		game::point_lights::set_resolve_entities(cfg.get_bool("Lights", "ResolveEntityParams", true));
 		game::map_lights::set_enabled(cfg.get_bool("Lights", "SynthesizedLights", false));
+		// The fire light switches of the Lights tab live in their own modules: back to what the file says with the rest.
+		game::ffx_lights::set_follow_option("Lights.EffectSize", cfg.get_bool("Lights", "EffectSize", true) ? 1.0f : 0.0f);
+		game::ffx_lights::set_follow_option("Lights.EffectSizeLift", cfg.get_bool("Lights", "EffectSizeLift", false) ? 1.0f : 0.0f);
+		game::map_lights::set_flame_lift(cfg.get_bool("Lights", "FlameLift", false));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
@@ -2698,6 +2705,42 @@ namespace comp
 			"Off: only map lights (and the stand-ins) get a colour and reach. Saved as [Lights] ResolveEntityParams.") |
 			revert_buttons("resolve", resolve, saved_bool("Lights", "ResolveEntityParams", true), true))
 			game::point_lights::set_resolve_entities(resolve);
+
+		// Where fire lights stand and how far they reach: switches to flip while looking at a fire.
+		ImGui::Spacing();
+		ImGui::TextDisabled("Fire lights (test switches; they apply at once)");
+		bool fire_reach = game::ffx_lights::size_rule_enabled();
+		if (form_checkbox("Fire light reach from the flame", "##fire_reach", &fire_reach,
+			"A fire effect's light reaches as far as its flame is wide (its measured spread x 2.68), for the effects in\n"
+			"ffx_sizes.tsv; lights are only made longer. Off: every effect light keeps the reach the game or the effect\n"
+			"table gives it. Saved as [Lights] EffectSize.") |
+			revert_buttons("fire_reach", fire_reach, saved_bool("Lights", "EffectSize", true), true))
+			game::ffx_lights::set_follow_option("Lights.EffectSize", fire_reach ? 1.0f : 0.0f);
+		bool fire_rise = game::ffx_lights::size_lift_enabled();
+		if (form_checkbox("Raise fire lights to their flame", "##fire_rise", &fire_rise,
+			"A steady fire effect's light is drawn at the middle of everything the effect draws instead of at the effect's\n"
+			"origin (0.5 to 2.5 m up). It put the Kiln brazier's cutscene light 1.5 m up, above most of its fire: off by\n"
+			"default. Needs 'Fire light reach from the flame'. Saved as [Lights] EffectSizeLift.") |
+			revert_buttons("fire_rise", fire_rise, saved_bool("Lights", "EffectSizeLift", false), false))
+			game::ffx_lights::set_follow_option("Lights.EffectSizeLift", fire_rise ? 1.0f : 0.0f);
+		bool holder_rise = game::map_lights::flame_lift_enabled();
+		if (form_checkbox("Raise flame lights out of their holder", "##holder_rise", &holder_rise,
+			"A light at a placed flame whose dish, cup or torch head shuts it in is drawn above the rim (flame_lift.tsv:\n"
+			"wall torches 5 to 20 cm, the Kiln's flame dishes 25 cm), never past the middle of its fire. The game's lights\n"
+			"cast no shadows, so it never had to. Off by default: it lets the Kiln's dishes light the knights beside them\n"
+			"at full strength. Saved as [Lights] FlameLift.") |
+			revert_buttons("holder_rise", holder_rise, saved_bool("Lights", "FlameLift", false), false))
+			game::map_lights::set_flame_lift(holder_rise);
+		// The runtime's own view of every light it renders (rtx.ds1Lights.showView): not saved, off at every start.
+		static bool show_lights = false;
+		if (form_checkbox("Show lights in the world", "##show_lights", &show_lights,
+			"Marks every light Remix renders where it stands, with its name (the same switch as Remix's developer menu,\n"
+			"Lights > Show Lights in the World). To see whether a light is in its flame. Not saved."))
+		{
+			const auto& bridge = shared::common::remix_api::get().m_bridge;
+			if (bridge.SetConfigVariable)
+				bridge.SetConfigVariable("rtx.ds1Lights.showView", show_lights ? "True" : "False");
+		}
 	}
 
 	void game_lights::scales_imgui()

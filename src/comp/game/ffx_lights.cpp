@@ -586,8 +586,25 @@ namespace comp::game::ffx_lights
 		return it != g_fades.end() ? it->second.level : -1.0f;
 	}
 
+	bool size_rule_enabled()
+	{
+		// The ini is read with the table: before that the switches are not the user's yet, and a later load would undo a change.
+		if (!g_loaded)
+			load();
+		return g_size_enabled;
+	}
+
+	bool size_lift_enabled()
+	{
+		if (!g_loaded)
+			load();
+		return g_size_lift;
+	}
+
 	bool set_follow_option(const std::string& key, float value)
 	{
+		if (!g_loaded)
+			load();
 		if (key == "Lights.EffectSize") { g_size_enabled = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.EffectSizeReach") { g_size_reach = std::clamp(value, 0.1f, 20.0f); g_size_logged.clear(); }
 		else if (key == "Lights.EffectSizeMin") g_size_min = std::clamp(value, 0.0f, 20.0f);

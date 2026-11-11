@@ -84,6 +84,10 @@ namespace comp::game::ffx_lights
 	// The reach for a light of this colour that belongs to an instance of `effect` (the effect whose instance tree is measured),
 	// 0 when the rule does not apply (off, not warm, nothing known yet). `instance` (0: none at hand) adds its measure to what is known.
 	float sized_reach(unsigned instance, int effect, float r, float g, float b);
+	// The rule's two switches as they stand, for F4 > Lights: reach from the flame ([Lights] EffectSize) and raised to the flame's
+	// centre ([Lights] EffectSizeLift). Set through set_follow_option("Lights.EffectSize" / "Lights.EffectSizeLift", 0 or 1).
+	bool size_rule_enabled();
+	bool size_lift_enabled();
 	// How far above its effect's origin such a light belongs: the height of the flame's light-weighted centre over the origin,
 	// learned with the spread (the same instance's). The game puts an effect's light at the origin, which for a brazier or a
 	// sconce is inside the bowl: its lights cast no shadows, so that never showed; path traced, the bowl shadows everything
