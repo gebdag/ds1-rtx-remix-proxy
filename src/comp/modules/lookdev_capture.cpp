@@ -2767,6 +2767,7 @@ namespace comp
 		{
 			while (!shared::globals::d3d_device_real)
 				Sleep(50);
+			hook_input_freeze_once(); // the lookdev's freeze, and the F4 menu's keyboard hold in the game, whatever becomes of Present
 			auto** vt = *reinterpret_cast<void***>(shared::globals::d3d_device_real);
 			if (MH_CreateHook(vt[VT_PRESENT], reinterpret_cast<void*>(&present_hk), reinterpret_cast<void**>(&s_present_og)) != MH_OK
 				|| MH_EnableHook(vt[VT_PRESENT]) != MH_OK)
@@ -2774,7 +2775,6 @@ namespace comp
 				log("Could not hook Present; captures disabled", shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 				return 1;
 			}
-			hook_input_freeze_once(); // the lookdev's freeze, and the F4 menu's keyboard hold in the game
 			const auto& cfg = shared::common::config::get().lookdev;
 			log(std::format("Ready. Capture key 0x{:X}, or create {}\\capture.request; freeze-input key 0x{:X}",
 				cfg.capture_key, output_dir(), cfg.freeze_input_key));
