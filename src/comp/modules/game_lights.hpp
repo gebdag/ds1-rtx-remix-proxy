@@ -3,6 +3,7 @@
 
 #include "shared/common/config.hpp"
 #include <array>
+#include <set>
 #include "../game/point_lights.hpp"
 #include "../game/custom_lights.hpp"
 
@@ -164,6 +165,16 @@ namespace comp
 		// Save / reload of the current map's custom lights file.
 		void custom_lights_file_buttons();
 		int custom_selected_ = -1;
+		// Every custom light selected under 'Custom lights for this map' (Shift / Ctrl), by index; empty: just custom_selected_.
+		std::set<int> custom_selection_;
+		int custom_anchor_ = -1;               // where a Shift range starts
+		std::string custom_selection_path_;    // the file the indices belong to
+		// Selects one custom light (-1: none) and drops any multi-selection.
+		void select_custom(int index);
+		// A click on a custom light's row: plain, Ctrl (toggle) or Shift (range from the anchor).
+		void custom_click(int index, int count);
+		// Several custom lights at once: a change goes to all of them, and only the setting changed.
+		void custom_multi_imgui(const std::vector<int>& picked);
 		bool open_custom_ = false;   // open the Custom lights section on the next frame (a custom row's editor)
 		static inline game_lights* p_this = nullptr;
 

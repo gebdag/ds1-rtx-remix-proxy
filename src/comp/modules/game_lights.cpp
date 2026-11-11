@@ -2152,7 +2152,7 @@ namespace comp
 		// Screenshots of every section (proxy.Menu.Tab=Lights+) also show the map's first custom light selected.
 		if (open_all && !game::custom_lights::edit().empty())
 		{
-			custom_selected_ = 0;
+			select_custom(0);
 			for (const auto& r : rows_)
 				if (r.kind == kind::custom && r.slot == game::custom_lights::kFirstSlot)
 				{
@@ -2335,7 +2335,7 @@ namespace comp
 			}
 			if (game::custom_lights::dirty())
 			{
-				reverts.push_back([this]() { game::custom_lights::reload(); custom_selected_ = -1; });
+				reverts.push_back([this]() { game::custom_lights::reload(); select_custom(-1); });
 				items.push_back({ "custom:" + map_name, std::format("Custom lights of {}", map_name), "changed",
 					static_cast<int>(reverts.size()) - 1 });
 			}
@@ -2430,7 +2430,7 @@ namespace comp
 		l.intensity = (lit ? peak : 1.0f) * (o ? o->multiplier : 1.0f);
 		lights.push_back(l);
 		game::custom_lights::mark_dirty();
-		custom_selected_ = static_cast<int>(lights.size()) - 1;
+		select_custom(static_cast<int>(lights.size()) - 1);
 		open_custom_ = true;
 	}
 
@@ -2878,7 +2878,20 @@ namespace comp
 			for (const auto& r : rows_)
 				if (selection_.count(r.ident()))
 					rows.push_back(&r);
-			multi_imgui(rows, static_cast<int>(selection_.count(KEY_SUN) + selection_.count(KEY_PLAYER)));
+			const int pinned = static_cast<int>(selection_.count(KEY_SUN) + selection_.count(KEY_PLAYER));
+			// Custom lights only: every setting of theirs, not just the switch, brightness, colour and move other lights have.
+			if (!pinned && rows.size() > 1 && std::all_of(rows.begin(), rows.end(), [](const light_row* r) { return r->kind == kind::custom; }))
+			{
+				std::vector<int> indices;
+				for (const auto* r : rows)
+					indices.push_back(r->slot - game::custom_lights::kFirstSlot);
+				ImGui::SeparatorText(std::format("{} custom lights selected", indices.size()).c_str());
+				ImGui::PushID("custom_rows");
+				custom_multi_imgui(indices);
+				ImGui::PopID();
+				return;
+			}
+			multi_imgui(rows, pinned);
 			return;
 		}
 		if (selected_ == KEY_SUN)
@@ -2996,13 +3009,22 @@ namespace comp
 	{
 		auto& lights = game::custom_lights::edit();
 		const std::string& path = game::custom_lights::path();
+		// Indices belong to one map's file, and only as long as it has that many lights.
+		if (path != custom_selection_path_)
+		{
+			custom_selection_path_ = path;
+			select_custom(-1);
+		}
+		while (!custom_selection_.empty() && *custom_selection_.rbegin() >= static_cast<int>(lights.size()))
+			custom_selection_.erase(std::prev(custom_selection_.end()));
 		if (path.empty())
 		{
 			ImGui::TextDisabled("No map loaded.");
 			return;
 		}
 		ImGui::TextWrapped("Lights you place yourself. They are saved to this map's own file and load only while this map is "
-			"the current one, so a light never shows up in another map.");
+			"the current one, so a light never shows up in another map. Ctrl+click and Shift+click select several, to change, "
+			"move, copy or delete them together.");
 		ImGui::TextDisabled("%s: %s", path.c_str(), game::custom_lights::status().c_str());
 		if (game::custom_lights::dirty())
 		{
@@ -3026,7 +3048,7 @@ namespace comp
 				for (int c = 0; c < 3; c++)
 					l.dir[c] = forward[c];
 			lights.push_back(l);
-			custom_selected_ = static_cast<int>(lights.size()) - 1;
+			select_custom(static_cast<int>(lights.size()) - 1);
 			game::custom_lights::mark_dirty();
 		};
 		if (ImGui::Button("Add at the camera") && have_cam)
@@ -3063,21 +3085,38 @@ namespace comp
 				auto& l = lights[i];
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				if (ImGui::Selectable(std::format("{}##custom{}", l.name, i).c_str(), custom_selected_ == i,
+				const bool picked = custom_selection_.empty() ? custom_selected_ == i : custom_selection_.count(i) != 0;
+				if (ImGui::Selectable(std::format("{}##custom{}", l.name, i).c_str(), picked,
 					ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
-					custom_selected_ = i;
+					custom_click(i, static_cast<int>(lights.size()));
 				ImGui::TableNextColumn();
 				changed |= ImGui::Checkbox(std::format("##custom_on{}", i).c_str(), &l.enabled);
 				ImGui::TableNextColumn();
 				ImGui::TextUnformatted(l.spot ? (l.game_falloff ? "spotlight, game falloff" : "spotlight")
 					: (l.game_falloff ? "point, game falloff" : "point"));
+				// A light that belongs to an area of the map (area_overrides.ini, lights = <name prefix>).
+				if (const char* area = game::area_overrides::custom_light_area(l.name))
+				{
+					ImGui::SameLine();
+					const bool away = game::area_overrides::custom_light_away(l.name);
+					ImGui::TextColored(away ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), away ? "- away, only in %s" : "- only in %s", area);
+					tip("rtx_comp\\settings\\area_overrides.ini gives lights with this name's start to that area (lights = ...):\n"
+						"they are there only while the player is in it.");
+				}
 				ImGui::TableNextColumn();
 				ImGui::Text("%.1f, %.1f, %.1f", l.pos[0], l.pos[1], l.pos[2]);
 			}
 			ImGui::EndTable();
 		}
 
-		if (custom_selected_ >= 0 && custom_selected_ < static_cast<int>(lights.size()))
+		if (custom_selection_.size() > 1)
+		{
+			ImGui::SeparatorText(std::format("{} custom lights selected", custom_selection_.size()).c_str());
+			ImGui::PushID("custom_section_multi");
+			custom_multi_imgui(std::vector<int>(custom_selection_.begin(), custom_selection_.end()));
+			ImGui::PopID();
+		}
+		else if (custom_selected_ >= 0 && custom_selected_ < static_cast<int>(lights.size()))
 		{
 			auto& l = lights[custom_selected_];
 			ImGui::SeparatorText(l.name.c_str());
@@ -3098,7 +3137,7 @@ namespace comp
 			if (ImGui::Button("Delete this light"))
 			{
 				lights.erase(lights.begin() + custom_selected_);
-				custom_selected_ = -1;
+				select_custom(-1);
 				changed = true;
 			}
 			if (custom_selected_ >= 0)
@@ -3108,6 +3147,246 @@ namespace comp
 				ImGui::PopID();
 			}
 		}
+		if (changed)
+			game::custom_lights::mark_dirty();
+	}
+
+	void game_lights::select_custom(int index)
+	{
+		custom_selected_ = index;
+		custom_selection_.clear();
+		custom_anchor_ = index;
+	}
+
+	void game_lights::custom_click(int index, int count)
+	{
+		const auto& io = ImGui::GetIO();
+		if (custom_selection_.empty() && custom_selected_ >= 0)
+			custom_selection_.insert(custom_selected_);
+		if (io.KeyShift)
+		{
+			// From the anchor to this row; Ctrl keeps what was selected.
+			if (!io.KeyCtrl)
+				custom_selection_.clear();
+			const int anchor = custom_anchor_ >= 0 && custom_anchor_ < count ? custom_anchor_ : index;
+			for (int i = std::min(anchor, index); i <= std::max(anchor, index); ++i)
+				custom_selection_.insert(i);
+			custom_selected_ = index;
+		}
+		else if (io.KeyCtrl)
+		{
+			if (custom_selection_.count(index) && custom_selection_.size() > 1)
+			{
+				custom_selection_.erase(index);
+				if (custom_selected_ == index)
+					custom_selected_ = *custom_selection_.begin();
+			}
+			else
+			{
+				custom_selection_.insert(index);
+				custom_selected_ = index;
+			}
+			custom_anchor_ = index;
+		}
+		else
+		{
+			custom_selection_.clear();
+			custom_selection_.insert(index);
+			custom_selected_ = index;
+			custom_anchor_ = index;
+		}
+		// The same lights in the list above, so flashing finds them. Lights switched off or away have no row there.
+		std::unordered_set<uint64_t> rows;
+		uint64_t current = 0;
+		for (const auto& r : rows_)
+			if (r.kind == kind::custom && custom_selection_.count(r.slot - game::custom_lights::kFirstSlot))
+			{
+				rows.insert(r.ident());
+				if (r.slot - game::custom_lights::kFirstSlot == custom_selected_ || !current)
+					current = r.ident();
+			}
+		if (!rows.empty())
+		{
+			selection_ = std::move(rows);
+			selected_ = current;
+			selection_anchor_ = current;
+		}
+	}
+
+	void game_lights::custom_multi_imgui(const std::vector<int>& picked)
+	{
+		using light = game::custom_lights::light;
+		auto& lights = game::custom_lights::edit();
+		std::vector<int> indices;
+		for (const int i : picked)
+			if (i >= 0 && i < static_cast<int>(lights.size()))
+				indices.push_back(i);
+		if (indices.size() < 2)
+			return;
+		ImGui::TextDisabled("A change here goes to all of them, and only the setting changed. The values are the first light's (%s);\n"
+			"'differ' marks a setting they do not share.", lights[indices[0]].name.c_str());
+		// The first light's values are edited on a copy, and what changed is written to every light.
+		light v = lights[indices[0]];
+		bool changed = false;
+		auto differ = [&](auto member)
+		{
+			return std::any_of(indices.begin(), indices.end(), [&](int i) { return !(lights[i].*member == v.*member); });
+		};
+		auto differ3 = [&](float (light::*member)[3])
+		{
+			return std::any_of(indices.begin(), indices.end(), [&](int i) { return !std::equal(std::begin(v.*member), std::end(v.*member), std::begin(lights[i].*member)); });
+		};
+		auto to_all = [&](auto member)
+		{
+			for (const int i : indices)
+				lights[i].*member = v.*member;
+			changed = true;
+		};
+		auto to_all3 = [&](float (light::*member)[3])
+		{
+			for (const int i : indices)
+				std::copy(std::begin(v.*member), std::end(v.*member), std::begin(lights[i].*member));
+			changed = true;
+		};
+		auto label = [&](const char* text, bool mixed, const char* help)
+		{
+			form_label(mixed ? std::format("{}  (differ)", text).c_str() : text, help);
+		};
+
+		if (form_checkbox(differ(&light::enabled) ? "Switched on  (differ)" : "Switched on", "##cm_on", &v.enabled, nullptr))
+			to_all(&light::enabled);
+		form_label("Position of the first (x, height, z)", "Moving it moves all of them by the same amount.");
+		{
+			float pos[3] = { v.pos[0], v.pos[1], v.pos[2] };
+			if (ImGui::DragFloat3("##cm_pos", pos, 0.02f, 0.0f, 0.0f, "%.2f"))
+			{
+				for (const int i : indices)
+					for (int c = 0; c < 3; ++c)
+						lights[i].pos[c] += pos[c] - v.pos[c];
+				changed = true;
+			}
+		}
+		label("Colour", differ3(&light::colour), nullptr);
+		if (ImGui::ColorEdit3("##cm_colour", v.colour))
+			to_all3(&light::colour);
+		if (form_checkbox(differ(&light::game_falloff) ? "Use the game's falloff  (differ)" : "Use the game's falloff", "##cm_game", &v.game_falloff,
+			"Off: a plain Remix sphere light. On: lit as the game lights its own."))
+			to_all(&light::game_falloff);
+		if (!v.game_falloff)
+		{
+			label("Intensity", differ(&light::remix_intensity), "Radiance on top of the colour, in Remix's units. Ctrl+click to type one.");
+			if (ImGui::DragFloat("##cm_rintensity", &v.remix_intensity, std::max(0.1f, v.remix_intensity * 0.01f), 0.0f, 1000000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp))
+				to_all(&light::remix_intensity);
+			label("Exposure", differ(&light::exposure), "Radiance x 2^exposure, in stops.");
+			if (ImGui::DragFloat("##cm_exposure", &v.exposure, 0.05f, -20.0f, 20.0f, "%.2f EV"))
+				to_all(&light::exposure);
+			label("Radius", differ(&light::radius), "The emitting sphere. Bigger = softer shadows.");
+			if (ImGui::DragFloat("##cm_radius", &v.radius, 0.005f, 0.001f, 10.0f, "%.3f m"))
+				to_all(&light::radius);
+			label("Volumetric scale", differ(&light::volumetric), "How strongly they light Remix's volumetric fog.");
+			if (ImGui::DragFloat("##cm_volumetric", &v.volumetric, 0.01f, 0.0f, 10.0f, "%.2f"))
+				to_all(&light::volumetric);
+		}
+		else
+		{
+			label("Intensity", differ(&light::intensity), "Brightness on top of the colour, as the game's light rows give it.");
+			if (ImGui::DragFloat("##cm_intensity", &v.intensity, 0.01f, 0.0f, 50.0f, "%.2f"))
+				to_all(&light::intensity);
+			label("Full strength out to", differ(&light::dwindle_begin), "Dwindle begin.");
+			if (ImGui::DragFloat("##cm_begin", &v.dwindle_begin, 0.05f, 0.0f, v.dwindle_end, "%.2f m"))
+				to_all(&light::dwindle_begin);
+			label("Fades to zero at", differ(&light::dwindle_end), "Dwindle end.");
+			if (ImGui::DragFloat("##cm_end", &v.dwindle_end, 0.05f, 0.05f, 200.0f, "%.2f m"))
+				to_all(&light::dwindle_end);
+			ImGui::Dummy(ImVec2(1.0f, ImGui::GetFrameHeight()));
+		}
+		if (form_checkbox(differ(&light::spot) ? "Spotlight  (differ)" : "Spotlight", "##cm_spot", &v.spot, "Shine in a cone instead of all around."))
+			to_all(&light::spot);
+		ImGui::BeginDisabled(!v.spot);
+		{
+			label("Aim direction", differ3(&light::dir), "The direction the cones point, (x, height, z).");
+			if (ImGui::DragFloat3("##cm_dir", v.dir, 0.01f, -1.0f, 1.0f, "%.3f"))
+				to_all3(&light::dir);
+			ImGui::SameLine();
+			float right[3] = {}, forward[3] = {};
+			if (ImGui::Button("Aim along camera") && shared::common::ffp_state::get().view_axes(right, forward))
+			{
+				std::copy(std::begin(forward), std::end(forward), std::begin(v.dir));
+				to_all3(&light::dir);
+			}
+			label("Cone half angle", differ(&light::cone_deg), nullptr);
+			if (ImGui::SliderFloat("##cm_cone", &v.cone_deg, 1.0f, 89.0f, "%.1f deg"))
+				to_all(&light::cone_deg);
+			label("Cone edge softness", differ(&light::softness), nullptr);
+			if (ImGui::SliderFloat("##cm_soft", &v.softness, 0.0f, 1.0f, "%.2f"))
+				to_all(&light::softness);
+			ImGui::BeginDisabled(v.game_falloff);
+			label("Focus", differ(&light::focus), "Remix lights only.");
+			if (ImGui::DragFloat("##cm_focus", &v.focus, 0.05f, 0.0f, 100.0f, "%.2f"))
+				to_all(&light::focus);
+			ImGui::EndDisabled();
+		}
+		ImGui::EndDisabled();
+		form_checkbox("Flash to find them", "##cm_flash", &flash_selected_, "Makes the selected lights 20 times brighter while ticked (those that are lit now).");
+
+		if (ImGui::Button("Delete these"))
+		{
+			// From the last to the first, so the indices still to go stay right.
+			for (auto it = indices.rbegin(); it != indices.rend(); ++it)
+				lights.erase(lights.begin() + *it);
+			select_custom(-1);
+			selection_.clear();
+			game::custom_lights::mark_dirty();
+			return;
+		}
+		tip("Takes all of them out of this map's file once saved. 'Revert custom lights' brings them back until then.");
+		ImGui::SameLine();
+		if (ImGui::Button("Duplicate these"))
+		{
+			const int first_new = static_cast<int>(lights.size());
+			for (const int i : indices)
+			{
+				light copy = lights[i];
+				copy.name += "_copy";
+				copy.file_index = -1;
+				lights.push_back(std::move(copy));
+			}
+			select_custom(first_new);
+			for (int i = first_new; i < static_cast<int>(lights.size()); ++i)
+				custom_selection_.insert(i);
+			selection_.clear();
+			open_custom_ = true;
+			game::custom_lights::mark_dirty();
+			return;
+		}
+		tip("A copy of each at the same spot, selected in their place, to move or change on their own.");
+		ImGui::SameLine();
+		if (ImGui::Button("Revert these"))
+		{
+			for (const int i : indices)
+				if (const auto* saved = game::custom_lights::saved(lights[i]))
+				{
+					lights[i] = *saved;
+					changed = true;
+				}
+		}
+		tip("Puts each back as the map's file has it. Lights added since stay as they are.");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!have_custom_clipboard_);
+		if (ImGui::Button("Paste onto these"))
+		{
+			for (const int i : indices)
+			{
+				auto pasted = custom_clipboard_;
+				pasted.name = lights[i].name;
+				pasted.file_index = lights[i].file_index;
+				std::copy(std::begin(lights[i].pos), std::end(lights[i].pos), std::begin(pasted.pos));
+				lights[i] = std::move(pasted);
+			}
+			changed = true;
+		}
+		ImGui::EndDisabled();
+		tip("Gives all of them the copied light's settings; each keeps its name and position.");
 		if (changed)
 			game::custom_lights::mark_dirty();
 	}
@@ -3125,7 +3404,7 @@ namespace comp
 			l.name = name;
 			l.file_index = -1;
 			lights.push_back(std::move(l));
-			custom_selected_ = static_cast<int>(lights.size()) - 1;
+			select_custom(static_cast<int>(lights.size()) - 1);
 			open_custom_ = true;
 			game::custom_lights::mark_dirty();
 		};
@@ -3276,7 +3555,7 @@ namespace comp
 		if (ImGui::Button("Revert custom lights"))
 		{
 			game::custom_lights::reload();
-			custom_selected_ = -1;
+			select_custom(-1);
 		}
 		tip("Throws away unsaved custom light changes and reads the file again. Save at the top writes them.");
 		if (game::custom_lights::dirty())
@@ -3730,7 +4009,7 @@ namespace comp
 		{
 			if (ImGui::Button("Edit position and aim"))
 			{
-				custom_selected_ = row.slot - game::custom_lights::kFirstSlot;
+				select_custom(row.slot - game::custom_lights::kFirstSlot);
 				open_custom_ = true;
 			}
 			tip("Opens this light under 'Custom lights for this map'.");

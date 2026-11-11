@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "custom_lights.hpp"
+#include "area_overrides.hpp"
 #include "atmosphere.hpp"
 #include "map_lights.hpp"
 
@@ -139,6 +140,9 @@ namespace comp::game::custom_lights
 		{
 			const auto& l = g_lights[i];
 			if (!l.enabled || (l.when && (l.when == 1) != atmosphere::ambient_is_cold()))
+				continue;
+			// A light that belongs to an area of this map (area_overrides.ini, `lights = <name prefix>`) is there only while the player is.
+			if (area_overrides::custom_light_away(l.name))
 				continue;
 			point_lights::light p {};
 			p.slot = kFirstSlot + static_cast<int>(i);

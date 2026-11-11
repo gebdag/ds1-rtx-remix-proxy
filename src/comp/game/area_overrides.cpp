@@ -27,6 +27,7 @@ namespace comp::game::area_overrides
 			float box_min[3] = {};
 			float box_max[3] = {};
 			int when = 0; // 0 always, 1 only in the map's dark version, 2 only in its light one (atmosphere::ambient_is_cold), -1 never (a bad value)
+			std::vector<std::string> light_prefixes; // `lights = <prefix>`: custom lights that exist only in this area
 			std::vector<std::pair<std::string, std::string>> values;
 		};
 
@@ -34,6 +35,10 @@ namespace comp::game::area_overrides
 		FILETIME g_file_time {};
 		bool g_file_seen = false;
 		std::vector<std::string> g_active;
+		// Custom light name prefixes claimed by this map's areas (`lights = `): with the claiming area's name, and whether the
+		// player is in none of the areas that claim it.
+		struct light_claim { std::string prefix; std::string area; bool away; };
+		std::vector<light_claim> g_light_claims;
 		std::map<std::string, std::string> g_applied;
 
 		std::string trim(const std::string& t)
@@ -91,6 +96,11 @@ namespace comp::game::area_overrides
 					else
 						shared::common::log("AreaOverrides", std::format("line {}: a box is six numbers: x y z x y z", number), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 				}
+				else if (key == "lights")
+				{
+					if (!value.empty())
+						a.light_prefixes.push_back(value);
+				}
 				else if (key == "when")
 				{
 					// Anything else (a typo) leaves the section off rather than always on.
@@ -101,7 +111,7 @@ namespace comp::game::area_overrides
 				else if (key.rfind("rtx.", 0) == 0 || (key.rfind("proxy.", 0) == 0 && key.find('.', 6) != std::string::npos))
 					a.values.emplace_back(key, value);
 				else
-					shared::common::log("AreaOverrides", std::format("line {}: {} is neither map, box, rtx.<option> nor proxy.<Section>.<Key>", number, key), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+					shared::common::log("AreaOverrides", std::format("line {}: {} is neither map, box, when, lights, rtx.<option> nor proxy.<Section>.<Key>", number, key), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 			}
 			shared::common::log("AreaOverrides", std::format("{}: {} area(s)", file_path(), g_areas.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
 		}
@@ -266,6 +276,31 @@ namespace comp::game::area_overrides
 		return false;
 	}
 
+	namespace
+	{
+		const light_claim* claim_of(const std::string& light_name)
+		{
+			// The longest prefix wins, so 'Hollow_top_' can have its own area inside 'Hollow_'.
+			const light_claim* best = nullptr;
+			for (const auto& c : g_light_claims)
+				if (light_name.rfind(c.prefix, 0) == 0 && (!best || c.prefix.size() > best->prefix.size()))
+					best = &c;
+			return best;
+		}
+	}
+
+	const char* custom_light_area(const std::string& light_name)
+	{
+		const auto* c = claim_of(light_name);
+		return c ? c->area.c_str() : nullptr;
+	}
+
+	bool custom_light_away(const std::string& light_name)
+	{
+		const auto* c = claim_of(light_name);
+		return c && c->away;
+	}
+
 	void frame_update(unsigned int frame)
 	{
 		if (frame % 15 != 0 || !shared::common::remix_api::is_initialized())
@@ -300,6 +335,24 @@ namespace comp::game::area_overrides
 			for (const auto& [key, value] : a.values)
 				wanted[key] = value;
 		}
+
+		// Which custom lights are away: a prefix claimed on this map, with the player in none of the areas claiming it.
+		std::vector<light_claim> claims;
+		for (const auto& a : g_areas)
+		{
+			if (a.map != map)
+				continue;
+			const bool in = std::find(active.begin(), active.end(), a.name) != active.end();
+			for (const auto& prefix : a.light_prefixes)
+			{
+				const auto known = std::find_if(claims.begin(), claims.end(), [&](const light_claim& c) { return c.prefix == prefix; });
+				if (known == claims.end())
+					claims.push_back({ prefix, a.name, !in });
+				else if (in)
+					known->away = false;
+			}
+		}
+		g_light_claims = std::move(claims);
 		if (active == g_active && wanted == g_applied)
 			return;
 		if (active != g_active)
