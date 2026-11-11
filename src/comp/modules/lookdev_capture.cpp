@@ -21,6 +21,7 @@
 #include <intrin.h>
 
 #include <atomic>
+#include "../game/input_customizer.hpp"
 #include <cctype>
 #include <optional>
 #include <tuple>
@@ -1964,24 +1965,40 @@ namespace comp
 		// data; the wide GetDeviceState is shared::common::dinput_v2's hook), the
 		// user32 key and cursor queries, and XInput. Only calls from the game's own
 		// code are blocked, so the proxy's key polling and ImGui keep working.
+		//
+		// In the game the same hooks hold the keyboard and the pad while the F4 menu (or the Remix menu) holds input:
+		// dinput_v2 only cleared the wide GetDeviceState, so keys typed into an F4 text field still reached the game. With the
+		// Dark Souls Input Customizer mod, keys reach it as a virtual pad: the mod reads them from the message queue and
+		// answers XInputGetState, so an Enter typed in F4 dismissed the game's notice (2026-11-11). A pad read made by the
+		// mod's module counts as the game's. The cursor is left alone for the menu.
 
 		POINT s_frozen_cursor {};
 		uintptr_t s_game_lo = 0, s_game_hi = 0;
 		std::atomic<uint32_t> s_blocked_seen = 0;
 
-		bool from_game(void* return_address)
+		uintptr_t s_mod_lo = 0, s_mod_hi = 0; // the Input Customizer mod, when installed
+
+		bool from_game(void* return_address, bool or_input_mod = false)
 		{
 			const auto a = reinterpret_cast<uintptr_t>(return_address);
-			return a >= s_game_lo && a < s_game_hi;
+			return (a >= s_game_lo && a < s_game_hi) || (or_input_mod && a >= s_mod_lo && a < s_mod_hi);
 		}
 
-		bool block_for_game(void* return_address, int api, const char* name)
+		bool menu_holds_game_keys()
 		{
-			if (!shared::globals::input_frozen || !from_game(return_address))
+			return shared::globals::remix_menu_open || (shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass);
+		}
+
+		// menu: also while a menu holds input (keyboard paths only).
+		bool block_for_game(void* return_address, int api, const char* name, bool menu = true, bool or_input_mod = false)
+		{
+			const bool frozen = shared::globals::input_frozen;
+			if (!(frozen || (menu && menu_holds_game_keys())) || !from_game(return_address, or_input_mod))
 				return false;
-			const uint32_t bit = 1u << api;
+			// Once per path and reason: which path the game reads shows in the log.
+			const uint32_t bit = 1u << (api + (frozen ? 0 : 16));
 			if (!(s_blocked_seen.fetch_or(bit) & bit))
-				log(std::format("Input freeze: blocked the game's {}", name));
+				log(std::format("{}: blocked the game's {}", frozen ? "Input freeze" : "Menu open", name));
 			return true;
 		}
 
@@ -1997,7 +2014,7 @@ namespace comp
 		get_keyboard_state_t s_get_keyboard_state_og = nullptr;
 		get_cursor_pos_t s_get_cursor_pos_og = nullptr;
 		xinput_get_state_t s_xinput_get_state_og = nullptr;
-		di_get_state_t s_di_get_state_og = nullptr;
+		di_get_state_t s_di_get_state_og[2] = {};
 		di_get_data_t s_di_get_data_og[2] = {};
 
 		SHORT WINAPI get_async_key_state_hk(int vk)
@@ -2020,7 +2037,7 @@ namespace comp
 
 		BOOL WINAPI get_cursor_pos_hk(LPPOINT pt)
 		{
-			if (pt && block_for_game(_ReturnAddress(), 3, "GetCursorPos"))
+			if (pt && block_for_game(_ReturnAddress(), 3, "GetCursorPos", false))
 			{
 				*pt = s_frozen_cursor;
 				return TRUE;
@@ -2033,7 +2050,7 @@ namespace comp
 		DWORD WINAPI xinput_get_state_hk(DWORD user, XINPUT_STATE* state)
 		{
 			const DWORD r = s_xinput_get_state_og(user, state);
-			if (r == ERROR_SUCCESS && state && block_for_game(_ReturnAddress(), 4, "XInputGetState"))
+			if (r == ERROR_SUCCESS && state && block_for_game(_ReturnAddress(), 4, "XInputGetState", true, true))
 			{
 				state->dwPacketNumber ^= 0x40000000u;
 				std::memset(&state->Gamepad, 0, sizeof(state->Gamepad));
@@ -2041,10 +2058,13 @@ namespace comp
 			return r;
 		}
 
+		// ANSI (0), and the wide keyboard device (1): dinput_v2 hooks the wide GetDeviceState it takes from a mouse device, and
+		// a DirectInput wrapper (the Input Customizer mod is one) can give each device kind its own methods.
+		template <int Slot>
 		HRESULT __stdcall di_get_state_hk(IDirectInputDevice8A* dev, DWORD size, LPVOID data)
 		{
-			const HRESULT hr = s_di_get_state_og(dev, size, data);
-			if (SUCCEEDED(hr) && data && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)"))
+			const HRESULT hr = s_di_get_state_og[Slot](dev, size, data);
+			if (SUCCEEDED(hr) && data && block_for_game(_ReturnAddress(), Slot ? 9 : 5, Slot ? "DirectInput GetDeviceState (wide keyboard)" : "DirectInput GetDeviceState (ANSI)"))
 				std::memset(data, 0, size);
 			return hr;
 		}
@@ -2086,6 +2106,12 @@ namespace comp
 			const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
 			s_game_lo = base;
 			s_game_hi = base + nt->OptionalHeader.SizeOfImage;
+			if (const auto mod = reinterpret_cast<uintptr_t>(game::input_customizer::module()))
+			{
+				const auto* mod_nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(mod + reinterpret_cast<const IMAGE_DOS_HEADER*>(mod)->e_lfanew);
+				s_mod_lo = mod;
+				s_mod_hi = mod + mod_nt->OptionalHeader.SizeOfImage;
+			}
 
 			hook_target(proc(L"user32.dll", "GetAsyncKeyState"), &get_async_key_state_hk, s_get_async_key_state_og, "GetAsyncKeyState");
 			hook_target(proc(L"user32.dll", "GetKeyState"), &get_key_state_hk, s_get_key_state_og, "GetKeyState");
@@ -2102,13 +2128,14 @@ namespace comp
 				&& SUCCEEDED(di_a->CreateDevice(GUID_SysKeyboard, &dev_a, nullptr)))
 			{
 				auto** vt = *reinterpret_cast<void***>(dev_a);
-				hook_target(vt[9], &di_get_state_hk, s_di_get_state_og, "DirectInput GetDeviceState (ANSI)");
+				hook_target(vt[9], &di_get_state_hk<0>, s_di_get_state_og[0], "DirectInput GetDeviceState (ANSI)");
 				hook_target(vt[10], &di_get_data_hk<0>, s_di_get_data_og[0], "DirectInput GetDeviceData (ANSI)");
 			}
 			if (SUCCEEDED(DirectInput8Create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8W, reinterpret_cast<void**>(&di_w), nullptr))
 				&& SUCCEEDED(di_w->CreateDevice(GUID_SysKeyboard, &dev_w, nullptr)))
 			{
 				auto** vt = *reinterpret_cast<void***>(dev_w);
+				hook_target(vt[9], &di_get_state_hk<1>, s_di_get_state_og[1], "DirectInput GetDeviceState (wide keyboard)");
 				hook_target(vt[10], &di_get_data_hk<1>, s_di_get_data_og[1], "DirectInput GetDeviceData (wide)");
 			}
 			if (dev_a) dev_a->Release();
@@ -2745,8 +2772,7 @@ namespace comp
 				log("Could not hook Present; captures disabled", shared::common::LOG_TYPE::LOG_TYPE_ERROR);
 				return 1;
 			}
-			if (!main_game())
-				hook_input_freeze();
+			hook_input_freeze(); // the lookdev's freeze, and the F4 menu's keyboard hold in the game
 			const auto& cfg = shared::common::config::get().lookdev;
 			log(std::format("Ready. Capture key 0x{:X}, or create {}\\capture.request; freeze-input key 0x{:X}",
 				cfg.capture_key, output_dir(), cfg.freeze_input_key));
