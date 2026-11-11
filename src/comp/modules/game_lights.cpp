@@ -2864,28 +2864,14 @@ namespace comp
 			"the panel below then changes all of them.");
 		ImGui::SameLine();
 		ImGui::Checkbox("Group by source", &group_rows_);
-		ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
-		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted("Sort by");
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
-		ImGui::Combo("##sort", &sort_mode_, "distance\0name\0");
 
-		// The sun and the player light pinned on top, then the rest filtered, sorted and (by default) in a
-		// section per source, stand-ins split by category.
+		// The sun and the player light pinned on top, then the rest filtered, sorted by the clicked column header
+		// (Light or Distance, within each section) and (by default) in a section per source, stand-ins split by category.
 		std::vector<const light_row*> rows;
 		rows.reserve(rows_.size());
 		for (const auto& r : rows_)
 			if (contains_no_case(r.name, filter_) || contains_no_case(r.origin, filter_) || contains_no_case(r.group, filter_))
 				rows.push_back(&r);
-
-		std::sort(rows.begin(), rows.end(), [&](const light_row* a, const light_row* b)
-		{
-			if (group_rows_ && a->kind != b->kind) return a->kind < b->kind;
-			if (group_rows_ && a->group != b->group) return a->group < b->group;
-			if (sort_mode_ == 1 && a->name != b->name) return a->name < b->name;
-			return a->distance < b->distance;
-		});
 
 		const auto& sun = game::sun_light::current(shared::common::ffp_state::get().frame_count(), sun_fallback_colour);
 		light_row sun_row;
@@ -2931,19 +2917,40 @@ namespace comp
 		player_row.state = player_row.drawn ? row_state::on : player_seen_ ? row_state::lights_off : row_state::no_params;
 
 		const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-			ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Hideable;
+			ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Hideable |
+			ImGuiTableFlags_Sortable;
 		if (ImGui::BeginTable("##light_list", 7, flags, ImVec2(0.0f, ImGui::GetFontSize() * 14.0f)))
 		{
+			constexpr ImGuiTableColumnFlags kNoSort = ImGuiTableColumnFlags_NoSort;
 			ImGui::TableSetupScrollFreeze(0, 1);
-			ImGui::TableSetupColumn("Light", ImGuiTableColumnFlags_WidthStretch, 4.0f);
+			ImGui::TableSetupColumn("Light", ImGuiTableColumnFlags_WidthStretch, 4.0f, kSortColumnName);
 			const float em = ImGui::GetFontSize();
-			ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, em * 9.0f);
-			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 14.0f);
-			ImGui::TableSetupColumn("Distance", ImGuiTableColumnFlags_WidthFixed, em * 4.5f);
-			ImGui::TableSetupColumn("Game colour", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide, em * 9.0f);
-			ImGui::TableSetupColumn("Reach (m)", ImGuiTableColumnFlags_WidthFixed, em * 5.5f);
-			ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultHide, 3.0f);
+			ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed | kNoSort, em * 9.0f);
+			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed | kNoSort, 14.0f);
+			ImGui::TableSetupColumn("Distance", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, em * 4.5f,
+				kSortColumnDistance);
+			ImGui::TableSetupColumn("Game colour", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide | kNoSort, em * 9.0f);
+			ImGui::TableSetupColumn("Reach (m)", ImGuiTableColumnFlags_WidthFixed | kNoSort, em * 5.5f);
+			ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultHide | kNoSort, 3.0f);
 			ImGui::TableHeadersRow();
+
+			if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsDirty)
+			{
+				if (specs->SpecsCount > 0)
+				{
+					sort_by_name_ = specs->Specs[0].ColumnUserID == kSortColumnName;
+					sort_descending_ = specs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
+				}
+				specs->SpecsDirty = false;
+			}
+			std::sort(rows.begin(), rows.end(), [&](const light_row* a, const light_row* b)
+			{
+				if (group_rows_ && a->kind != b->kind) return a->kind < b->kind;
+				if (group_rows_ && a->group != b->group) return a->group < b->group;
+				if (sort_by_name_ && a->name != b->name) return sort_descending_ ? a->name > b->name : a->name < b->name;
+				if (a->distance != b->distance) return sort_descending_ ? a->distance > b->distance : a->distance < b->distance;
+				return a->name < b->name;
+			});
 
 			// A band across the table: what follows belongs to it, level with every other row.
 			const ImU32 band_colour = ImGui::GetColorU32(ImVec4(0.26f, 0.38f, 0.58f, 0.55f));

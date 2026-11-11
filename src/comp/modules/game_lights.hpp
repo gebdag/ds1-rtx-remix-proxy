@@ -374,7 +374,10 @@ namespace comp
 		uint64_t solo_ = 0;
 		bool flash_selected_ = false;
 		bool group_rows_ = true;          // sections by source (stand-ins by category), else one flat list
-		int sort_mode_ = 0;               // within a section (or the flat list): 0 distance, 1 name
+		// Within a section (or the flat list), by the light list's clicked header: name or distance, either way.
+		static constexpr unsigned kSortColumnName = 1, kSortColumnDistance = 2;
+		bool sort_by_name_ = false;
+		bool sort_descending_ = false;
 		char filter_[64] = {};
 		std::string saved_text_;
 		std::string save_status_;
