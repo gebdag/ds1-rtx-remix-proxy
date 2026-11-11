@@ -90,7 +90,10 @@ namespace comp::game::ffx_lights
 	// but the sky above it (frame_20261111_142320: reach 1.2 to 9 m changed nothing on the bowl or the knight beside it).
 	// 0 when unknown or the rule is off, or under half a metre (a wall torch's 0.2 m gains nothing, and a moved light no longer
 	// matches the edits saved for its place); never down, at most 2.5 m up. The callers use it for steady flames only: persistent
-	// table effects and the game's own effect lights. Live: proxy.Lights.EffectSizeLift (0 keeps lights at the origin).
+	// table effects and the game's own effect lights. [Lights] EffectSizeLift, live proxy.Lights.EffectSizeLift: OFF by default.
+	// The centre it goes to is the light-weighted mean of everything the effect draws, sparks and all: for the Kiln brazier's
+	// cutscene fire (41812) 1.27 m over the effect's origin, which put that light 1.5 m over where the game has it, above three
+	// quarters of the fire's light and above the picture's top edge in frame_20261111_142320. A light must not leave its fire.
 	float sized_lift(int effect, float r, float g, float b);
 	// How far the light in this slot was raised (0: not). What is saved per light goes by its place (game_lights' own keys):
 	// that must stay the place the game has it at, or a new size table would orphan the edits made to a lifted light.

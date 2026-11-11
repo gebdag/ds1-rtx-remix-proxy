@@ -489,8 +489,8 @@ namespace comp
 			return;
 		fprintf(f, "=== rows %zu\n", rows_.size());
 		for (const auto& r : rows_)
-			fprintf(f, "key %016llx kind %d state %d slot %d %s | pos %.2f %.2f %.2f dist %.1f | colour %.3f %.3f %.3f range %.2f-%.2f | radiance %.3f %.3f %.3f %s\n",
-				static_cast<unsigned long long>(r.key), static_cast<int>(r.kind), static_cast<int>(r.state), r.slot, r.name.c_str(), r.pos[0], r.pos[1], r.pos[2], r.distance,
+			fprintf(f, "key %016llx kind %d state %d slot %d %s | pos %.2f %.2f %.2f lift %.2f dist %.1f | colour %.3f %.3f %.3f range %.2f-%.2f | radiance %.3f %.3f %.3f %s\n",
+				static_cast<unsigned long long>(r.key), static_cast<int>(r.kind), static_cast<int>(r.state), r.slot, r.name.c_str(), r.pos[0], r.pos[1], r.pos[2], r.lift, r.distance,
 				r.colour[0], r.colour[1], r.colour[2], r.range_begin, r.range_end, r.radiance[0], r.radiance[1], r.radiance[2], r.origin.c_str());
 		for (const auto& p : map_bound_)
 			fprintf(f, "map-bound %.2f %.2f %.2f\n", p[0], p[1], p[2]);
@@ -873,11 +873,17 @@ namespace comp
 				const float scale = intensity_scale * falloff * mult;
 				radiance = { colour[0] * scale, colour[1] * scale, colour[2] * scale };
 			}
+			// A light that stands at a placed flame is drawn raised out of what holds the flame (map_lights::flame_lift). Here and
+			// nowhere else: its key, the lists of lights the game binds and the covers all go by the place the game has it at.
+			const bool flame_kind = row.kind == kind::map_row || row.kind == kind::bank_entity || row.kind == kind::synthetic ||
+				row.kind == kind::ffx_table || row.kind == kind::fx_direct;
+			// An effect light its own flame's sprites already raised (ffx_lights::sized_lift) is where it belongs: one lift, not two.
+			row.lift = flame_kind && game::ffx_lights::lift_of(src.slot) == 0.0f ? game::map_lights::flame_lift(src.x, src.y, src.z) : 0.0f;
 			// The list's own offset (Move) on top: shared by every light of a group, as its other edits are.
 			const float* moved = o ? o->offset : nullptr;
 			const remixapi_Float3D position = {
 				src.x + manual_offset_[0] + (moved ? moved[0] : 0.0f),
-				src.y + manual_offset_[1] + (moved ? moved[1] : 0.0f),
+				src.y + manual_offset_[1] + (moved ? moved[1] : 0.0f) + row.lift,
 				src.z + manual_offset_[2] + (moved ? moved[2] : 0.0f),
 			};
 

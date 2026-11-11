@@ -91,6 +91,22 @@ namespace comp::game::map_lights
 	// Whether this map places a flame effect at this spot (rtx_comp\map_flames.tsv, the MSB's SFX events).
 	bool is_flame(float x, float y, float z);
 
+	// How far a light at this spot is drawn above it, 0 for most. The game puts a flame's light at the effect's origin and its lights
+	// cast no shadows; path traced, the dish, cup or torch head round the origin shadows the light: the four flame dishes round
+	// the Kiln's brazier hold their lights 4 cm under the rim, and neither the knights beside them nor the brazier's bowl were lit
+	// (frame_20261111_142320: the knight read 3.6 of 255, the game's 27; these two map lights are what lights him in the game).
+	// rtx_comp\flame_lift.tsv (scripts/gen_flame_lift.py, from the maps' geometry) lists the placed flames whose spot is shut in,
+	// with the smallest rise that frees it. The rise never passes the middle of that flame's own fire (flame_heights.tsv and
+	// ffx_sizes.tsv, from captures) nor half a metre, never goes up under a lid, and never leaves an enclosure through its top:
+	// the light stays in its fire. Wall torches rise 5 to 20 cm out of the torch's head, the Kiln's dishes 25 cm.
+	// The spot is matched within 10 cm.
+	// Only where the light is drawn (game_lights): what knows a light by its place keeps the game's place.
+	// [Lights] FlameLift=1 (live proxy.Lights.FlameLift) turns it on. OFF by default: every light is drawn where the game has it.
+	// With it the Kiln's flame dishes, which stand on 2.6 m columns, light the knights beside them at the map light's full
+	// strength (3.0, undimmed to 2 m), and the user judged that wrong against the dark knight by the brazier (2026-11-11).
+	float flame_lift(float x, float y, float z);
+	void set_flame_lift(bool on);
+
 	// Path last read for the map table, and why it produced nothing if it did.
 	const std::string& source_path();
 	const std::string& status();

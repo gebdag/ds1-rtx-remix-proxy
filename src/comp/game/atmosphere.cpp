@@ -1052,6 +1052,7 @@ namespace comp::game::atmosphere
 		else if (key.rfind("Lights.Kind", 0) == 0) { if (auto* gl = game_lights::get()) gl->set_kind_enabled(std::atoi(key.c_str() + 11), b); }
 		else if (key == "Lights.EmitterRadius") { if (auto* gl = game_lights::get()) gl->set_emitter_radius(static_cast<float>(std::atof(value.c_str()))); }
 		else if (key == "Lights.Dump") { if (auto* gl = game_lights::get()) gl->dump_rows(); }
+		else if (key == "Lights.FlameLift") map_lights::set_flame_lift(b);
 		// Reads the current map's custom lights file again (rtx_comp\lights\<map>.custom.txt), for placing lights from outside the F4 menu.
 		// Only on a new value: the live file is replayed whole on every write, and a reload throws unsaved menu edits away.
 		else if (key == "Lights.ReloadCustom") { static std::string last; if (value != last) { last = value; game::custom_lights::reload(); } }

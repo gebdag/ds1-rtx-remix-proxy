@@ -380,6 +380,50 @@ namespace comp::game::map_lights
 			{ return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) + (p[2] - z) * (p[2] - z) < kSame * kSame; });
 	}
 
+	namespace
+	{
+		int g_flame_lift_on = -1; // -1: not read from the ini yet
+	}
+
+	void set_flame_lift(bool on)
+	{
+		g_flame_lift_on = on ? 1 : 0;
+	}
+
+	float flame_lift(float x, float y, float z)
+	{
+		if (g_flame_lift_on < 0)
+			g_flame_lift_on = shared::common::config::get().get_int("Lights", "FlameLift", 0) != 0 ? 1 : 0;
+		if (!g_flame_lift_on)
+			return 0.0f;
+		constexpr float kSame = 0.1f;
+		static std::string s_map;
+		static std::vector<std::array<float, 4>> s_spots;
+		if (const auto map = current_map_name(); map != s_map)
+		{
+			s_map = map;
+			s_spots.clear();
+			std::ifstream file(shared::globals::root_path + "\\rtx_comp\\flame_lift.tsv");
+			std::string line;
+			while (std::getline(file, line))
+			{
+				if (line.compare(0, map.size(), map) != 0 || line.size() <= map.size() || line[map.size()] != '\t')
+					continue;
+				std::istringstream in(line.substr(map.size()));
+				std::array<float, 4> s;
+				// Never more than the generator's own ceiling of half a metre, whatever the file says: a light must stay in its fire.
+				if (in >> s[0] >> s[1] >> s[2] >> s[3] && s[3] > 0.0f && s[3] <= 0.5f)
+					s_spots.push_back(s);
+			}
+			if (!map.empty())
+				shared::common::log("MapLights", std::format("{}: {} placed flames whose light is raised out of its holder", map, s_spots.size()));
+		}
+		for (const auto& s : s_spots)
+			if ((s[0] - x) * (s[0] - x) + (s[1] - y) * (s[1] - y) + (s[2] - z) * (s[2] - z) < kSame * kSame)
+				return s[3];
+		return 0.0f;
+	}
+
 	// Every map change reports what it found, so a wrong id or a missing table is
 	// visible in the log instead of just being zero lights.
 	static void log_load()

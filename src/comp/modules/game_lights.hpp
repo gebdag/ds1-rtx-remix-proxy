@@ -234,6 +234,7 @@ namespace comp
 			std::string origin;         // where the light comes from, for the Details column
 			float pos[3] = {};
 			float distance = 0.0f;      // from the player (0 for the sun)
+			float lift = 0.0f;          // drawn this far above pos: out of what holds its flame (map_lights::flame_lift)
 			float colour[3] = {};       // the game's colour
 			float range_begin = 0.0f;
 			float range_end = 0.0f;

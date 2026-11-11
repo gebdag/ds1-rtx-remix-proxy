@@ -60,7 +60,7 @@ namespace comp::game::ffx_lights
 		float g_size_min = 0.4f;
 		float g_size_max = 12.0f;
 		bool g_size_game = true;      // the game's own fire effect lights are extended too
-		bool g_size_lift = true;      // fire lights stand at their flame's height (sized_lift)
+		bool g_size_lift = false;     // fire lights stand at their flame's height (sized_lift); off unless asked
 		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down); ini only
 		bool g_size_shrink = false;   // a table light may also become shorter than its table reach
 		constexpr float kSizeMinLift = 0.5f;
@@ -285,7 +285,7 @@ namespace comp::game::ffx_lights
 			g_size_min = std::clamp(cfg.get_float("Lights", "EffectSizeMin", 0.4f), 0.0f, 20.0f);
 			g_size_max = std::clamp(cfg.get_float("Lights", "EffectSizeMax", 12.0f), 0.5f, 100.0f);
 			g_size_game = cfg.get_int("Lights", "EffectSizeGame", 1) != 0;
-			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 1) != 0;
+			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 0) != 0;
 			g_size_learn = cfg.get_int("Lights", "EffectSizeLearn", 0) != 0;
 			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
 			load_sizes("ffx_sizes.tsv");
