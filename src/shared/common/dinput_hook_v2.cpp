@@ -222,7 +222,6 @@ namespace shared::common
 	{
 		HRESULT hr = g_dinput8_device_get_device_state_original(device, cbData, lpvData);
 		const auto di = dinput_v2::get();
-		bool do_not_clear = false;
 
 		switch (cbData)
 		{
@@ -236,14 +235,12 @@ namespace shared::common
 
 			case 256:
 				di->updateKeyState(static_cast<LPBYTE>(lpvData));
-				if (shared::globals::imgui_wants_text_input) {
-					do_not_clear = true;
-				}
 				break;
 		}
 
-		// Lookdev input freeze: the game sees no keys or mouse at all (ImGui was fed above).
-		if (shared::globals::input_frozen || shared::globals::remix_menu_open || (!do_not_clear && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)) {
+		// ImGui was fed above. The game sees no keys or mouse while the lookdev freezes input, a menu is open (typing
+		// in an F4 text field too) or the right mouse button has not handed input back to it.
+		if (shared::globals::input_frozen || shared::globals::remix_menu_open || (shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)) {
 			memset(lpvData, 0, cbData);
 		}
 

@@ -59,6 +59,5 @@ namespace shared::globals
 	std::string imgui_select_tab;
 	bool imgui_open_light_sections = false;
 	bool imgui_allow_input_bypass = false;
-	bool imgui_wants_text_input = false;
 	uint32_t imgui_allow_input_bypass_timeout = 0u;
 }

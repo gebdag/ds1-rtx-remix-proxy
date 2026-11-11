@@ -50,6 +50,5 @@ namespace shared::globals
 	// Open every section of the Lights tab on the next frame (live option proxy.Menu.Tab=Lights+).
 	extern bool imgui_open_light_sections;
 	extern bool imgui_allow_input_bypass;
-	extern bool imgui_wants_text_input;
 	extern uint32_t imgui_allow_input_bypass_timeout;
 }
