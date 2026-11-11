@@ -1020,6 +1020,7 @@ namespace comp::game::atmosphere
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
 		else if (key == "Sfx.OwnWhite") shared::common::config::get().sfx.own_white = b;
 		else if (key == "Sfx.OwnFog") shared::common::config::get().sfx.own_fog = b;
+		else if (key == "Sfx.SitSmoke") shared::common::config::get().sfx.sit_smoke = b;
 		else if (key == "Character.GhostSelfLit") g_ghost_self_lit = b;
 		else if (key == "FFP.WhitePassage") { g_white_passage_loaded = true; g_white_passage = std::clamp(std::atoi(value.c_str()), 0, 3); }
 		else if (key == "FFP.WhitePassageLight") { g_white_passage_loaded = true; g_white_passage_light = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 2.0f); }

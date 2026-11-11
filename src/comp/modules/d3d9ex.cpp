@@ -28,6 +28,7 @@ using comp::tracer;
 #include "../game/env_reflection.hpp"
 #include "../game/lightmap_sun.hpp"
 #include "../game/ffx_instances.hpp"
+#include "../game/fx_draw_owner.hpp"
 #include "../game/hud_scale.hpp"
 #include "../game/eye_sprites.hpp"
 #include "../game/aspect_ratio.hpp"
@@ -615,6 +616,24 @@ namespace {
 		return comp::game::vanilla_view::active() && current_sfx() == shared::common::sfx_class::Distortion;
 	}
 
+	// The smoke the bonfire's rest effect throws round the camera as the player sits down: FFX 90010, three grey sheets of about
+	// 2 m (s00313, alpha blended), gone after some three seconds. The game lays them over the effect's finished green streaks;
+	// Remix sorts them in among the streaks by depth, triangle by triangle: dark hard-edged shards across the whole frame
+	// (frame_20261111_142957; without the sheets the frame is the game's soft green burst). They are left out, and only they, by
+	// the effect that draws them (fx_draw_owner): s00313 is also every fog gate's texture, the smoke of the Kiln's cutscene and the
+	// mist of eight maps, so nothing can go by the texture. [Sfx] SitSmoke=1 (live proxy.Sfx.SitSmoke) draws them again.
+	// Not in the vanilla view, nor before the fixed-function conversion runs: the game's own picture has them.
+	bool sit_smoke_left_out()
+	{
+		constexpr int kRestEffect = 90010;
+		auto& ffp = shared::common::ffp_state::get();
+		if (shared::common::config::get().sfx.sit_smoke || !ffp.is_enabled() || comp::game::vanilla_view::active())
+			return false;
+		const unsigned owner = comp::game::fx_draw_owner::current();
+		return owner && comp::game::texture_names::name_of(ffp.cur_texture(0)) == "s00313" &&
+			comp::game::ffx_instances::top_effect_id(owner) == kRestEffect;
+	}
+
 	// Sprite particles of UP draws go fixed-function (ffp_state::draw_sprite_up);
 	// true when it drew. Everything else, and anything it cannot place, takes sfx_draw.
 	bool sfx_sprite_up(IDirect3DDevice9* dev, shared::common::sfx_class cls, D3DPRIMITIVETYPE prim, UINT prim_count,
@@ -623,6 +642,11 @@ namespace {
 	{
 		using shared::common::sfx_class;
 		const auto& cfg = shared::common::config::get().sfx;
+		if ((cls == sfx_class::Sprite || cls == sfx_class::SoftSprite) && sit_smoke_left_out())
+		{
+			hr = S_OK;
+			return true;
+		}
 		if (cfg.hide || !cfg.ffp_sprites)
 			return false;
 		if (cls != sfx_class::Sprite && cls != sfx_class::SoftSprite && cls != sfx_class::LitSprite)

@@ -322,6 +322,7 @@ namespace shared::common
 		sfx.debug_opaque = get_bool("Sfx", "DebugOpaque", false);
 		sfx.own_white = get_bool("Sfx", "OwnWhite", true);
 		sfx.own_fog = get_bool("Sfx", "OwnFog", true);
+		sfx.sit_smoke = get_bool("Sfx", "SitSmoke", false);
 		sfx.translate = get_bool("Sfx", "Translate", true);
 		sfx.drop_screen_effects = get_bool("Sfx", "DropScreenEffects", true);
 		sfx.hide = get_bool("Sfx", "Hide", false);

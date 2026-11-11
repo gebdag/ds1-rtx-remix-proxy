@@ -364,6 +364,9 @@ namespace shared::common
 			// Sprites that take the game's own fog and scattering for them in the proxy (set_own_fog_test: the wading droplets, s00027),
 			// and none of the look's haze, which only knows the surfaces' sets. Off: as every other sprite.
 			bool own_fog = true;
+			// The smoke the bonfire's rest effect throws round the camera as the player sits down (d3d9ex sit_smoke_left_out):
+			// left out of the Remix view. On: drawn as every other sprite.
+			bool sit_smoke = false;
 			// Express what each particle shader computes as stage state Remix reads:
 			// colour and alpha = texture * vertex colour. Off leaves whatever stage
 			// state the last converted draw left (alpha often texture-only).
