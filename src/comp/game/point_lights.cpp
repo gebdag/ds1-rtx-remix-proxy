@@ -2,6 +2,7 @@
 #include "point_lights.hpp"
 #include "fx_owner.hpp"
 #include "host_feed.hpp"
+#include "light_dump.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -341,7 +342,7 @@ namespace comp::game::point_lights
 		return text;
 	}
 
-	const std::vector<light>& harvest()
+	static const std::vector<light>& harvest_impl()
 	{
 		if (shared::globals::lookdev_host)
 			return host_feed::lights();   // the game's harvest of this frame, from the capture
@@ -460,6 +461,99 @@ namespace comp::game::point_lights
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			return false;
 		}
+	}
+
+	// SEH needs functions without C++ objects to unwind: the dump's two reads.
+	static bool copy_bytes(DWORD address, void* out, size_t size)
+	{
+		__try { memcpy(out, reinterpret_cast<const void*>(address), size); return true; }
+		__except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+	}
+
+	static bool call_light_params(DWORD entity, DWORD vtable, resolved_params& p)
+	{
+		__try {
+			const auto* vt = reinterpret_cast<DWORD*>(vtable);
+			reinterpret_cast<get_light_params_fn>(vt[VTABLE_GET_LIGHT_PARAMS / 4])(reinterpret_cast<void*>(entity), &p);
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+	}
+
+	// F6 light dump (light_dump.hpp): the manager's slots as they are in memory, every one with any non-zero byte (harvest
+	// skips slots without a handle or with a non-finite position), with the bank row's raw fields and the entity's own
+	// GetLightParams answer; then what harvest returned.
+	static void dump_slots_and_harvest()
+	{
+		if (shared::globals::lookdev_host)
+		{
+			light_dump::write(std::format("SLOT lookdev host: harvest is the capture's ({} lights)", s_lights.size()));
+		}
+		else
+		{
+			const DWORD manager = safe_read_ptr(EXE_BASE + POINT_LIGHT_MAN_RVA);
+			const DWORD table = s_walk_chosen >= 0 ? walk_to_table(WALKS[s_walk_chosen]) : 0;
+			light_dump::write(std::format("SLOT manager 0x{:08X} entity_table 0x{:08X} walk {} live {} bank {} entity {} unresolved {} resolve_entities {}",
+				manager, table, s_walk_chosen >= 0 ? WALKS[s_walk_chosen].name : "-", s_slots_live, s_from_bank, s_from_entity, s_unresolved,
+				s_resolve_entities ? 1 : 0));
+			for (int i = 0; manager && i < SLOT_CAPACITY; ++i)
+			{
+				DWORD raw[SLOT_STRIDE / 4] = {};
+				const bool readable = copy_bytes(manager + SLOT_ARRAY_OFFSET + i * SLOT_STRIDE, raw, sizeof(raw));
+				bool any = !readable;
+				for (const DWORD d : raw)
+					any = any || d != 0;
+				if (!any)
+					continue;
+				std::string s = std::format("SLOT {} {}raw", i, readable ? "" : "UNREADABLE ");
+				for (const DWORD d : raw)
+					s += std::format(" {:08X}", d);
+				float pos[4];
+				memcpy(pos, &raw[SLOT_POSITION / 4], sizeof(pos));
+				s += std::format(" | pos ({:.6g}, {:.6g}, {:.6g}, {:.6g}) row 0x{:08X} handle 0x{:08X}", pos[0], pos[1], pos[2], pos[3],
+					raw[SLOT_PARAM_ROW / 4], raw[SLOT_ENTITY_HANDLE / 4]);
+				if (const DWORD row = raw[SLOT_PARAM_ROW / 4])
+				{
+					float begin = 0.0f, end = 0.0f;
+					short rgb[3] = {}, intensity = 0;
+					DWORD row_raw[8] = {};
+					bool row_ok = read_raw_row(row, begin, end, rgb, intensity);
+					row_ok = copy_bytes(row, row_raw, sizeof(row_raw)) && row_ok;
+					s += row_ok ? std::format(" | row dwindle {:.6g}-{:.6g} rgb {} {} {} intensity {}% raw", begin, end, rgb[0], rgb[1], rgb[2], intensity)
+						: std::string(" | row UNREADABLE");
+					for (const DWORD d : row_raw)
+						s += std::format(" {:08X}", d);
+				}
+				DWORD vtable = 0;
+				if (const DWORD entity = resolve_entity(table, raw[SLOT_ENTITY_HANDLE / 4], vtable))
+				{
+					resolved_params p = {};
+					const bool ok = call_light_params(entity, vtable, p);
+					s += std::format(" | entity 0x{:08X} {} ", entity, entity_class_name(vtable));
+					s += ok ? std::format("params pos ({:.6g}, {:.6g}, {:.6g}) inv_range {:.6g} rgb ({:.6g}, {:.6g}, {:.6g}) dwindle_end {:.6g}",
+						p.x, p.y, p.z, p.inv_dwindle_range, p.r, p.g, p.b, p.dwindle_end) : std::string("params FAULT");
+				}
+				else
+					s += " | entity -";
+				light_dump::write(s);
+			}
+		}
+		for (const auto& l : s_lights)
+			light_dump::write(std::format("HARVEST slot {} pos ({:.6g}, {:.6g}, {:.6g}) rgb ({:.6g}, {:.6g}, {:.6g}) dwindle {:.6g}-{:.6g} has_params {} source {}"
+				" handle 0x{:08X} entity 0x{:08X} class {} row 0x{:08X} ffx {} top {}",
+				l.slot, l.x, l.y, l.z, l.r, l.g, l.b, l.dwindle_begin, l.dwindle_end, l.has_params ? 1 : 0, static_cast<int>(l.source),
+				l.entity_handle, l.entity, entity_class_name(l.entity_vtable), l.param_row, l.ffx_id, l.ffx_top_id));
+	}
+
+	const std::vector<light>& harvest()
+	{
+		const auto& lights = harvest_impl();
+		if (light_dump::active())
+		{
+			light_dump::frame_header();
+			dump_slots_and_harvest();
+		}
+		return lights;
 	}
 
 	std::string dump_to_log()

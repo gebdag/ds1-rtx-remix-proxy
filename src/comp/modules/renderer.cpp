@@ -25,6 +25,7 @@
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
 #include "../game/vanilla_view.hpp"
+#include "../game/light_dump.hpp"
 
 namespace comp
 {
@@ -629,6 +630,13 @@ namespace comp
 		if (ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_AMBIENT) && ffp.probe_texture())
 			game::atmosphere::observe_ambient(ffp.ps_const_data(), ffp.probe_texture(), ffp.frame_count(), primCount);
 
+		// F6 light dump: every draw that reads the game's point lights, with its raw light constants.
+		if (game::light_dump::active() && ffp.cur_ps_reads_point_lights())
+		{
+			auto* albedo = ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage));
+			game::light_dump::game_draw(ffp.ps_const_data(), ffp.cur_ps_point_light_count(), ffp.cur_decl_is_skinned(),
+				(ffp.cur_ps_sampler_mask() & (1u << 6)) != 0, static_cast<int>(game::texture_names::owner_of(albedo)), albedo, primCount);
+		}
 		// The lights the game binds to lightmapped map draws (which map lights it treats as dynamic there).
 		if (ffp.view_proj_valid() && ffp.cur_ps_reads_point_lights() && (ffp.cur_ps_sampler_mask() & (1u << 6)))
 			if (auto* gl = game_lights::get())

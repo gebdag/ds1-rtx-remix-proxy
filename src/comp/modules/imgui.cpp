@@ -23,6 +23,7 @@
 #include "../game/input_customizer.hpp"
 #include "../game/vanilla_view.hpp"
 #include "../game/dlss_nr.hpp"
+#include "../game/light_dump.hpp"
 
 // Allow us to directly call the ImGui WndProc function.
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -82,11 +83,9 @@ namespace comp
 			}
 		}
 
+		// F6: the light dump (game::light_dump), every frame's light data to a file until F6 again.
 		if (message_type == WM_KEYUP && wparam == VK_F6)
-		{
-			if (auto* d = diagnostics::get())
-				d->toggle_manual_capture();
-		}
+			game::light_dump::toggle();
 
 		// Ctrl + mouse wheel scales the UI (apply_menu_scale) and scrolls nothing.
 		if (message_type == WM_MOUSEWHEEL && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass &&
@@ -854,7 +853,7 @@ namespace comp
 			ImGui::SameLine();
 			if (d->is_manual_capture())
 			{
-				ImGui::Text("Manual mode, %d frames logged (F6 to stop)", d->frames_captured());
+				ImGui::Text("Manual mode, %d frames logged", d->frames_captured());
 			}
 			else
 			{
@@ -909,8 +908,6 @@ namespace comp
 		if (ImGui::Button(d->is_capturing() && d->is_manual_capture() ? "Stop Manual Capture" : "Toggle Manual Capture", ImVec2(200, 0)))
 			d->toggle_manual_capture();
 
-		ImGui::SameLine();
-		ImGui::TextDisabled("F6");
 
 		// Last capture info
 		if (!d->last_log_path().empty())
@@ -1247,6 +1244,7 @@ namespace comp
 					// Always-on HUD overlays (drawn regardless of menu state)
 					if (auto* gl = game_lights::get())
 						gl->draw_pos_hud();
+					game::light_dump::draw_overlay();
 					if (shared::common::config::get().lookdev.enabled)
 						draw_lookdev_input_hud();
 					else if (std::string name; lookdev_capture::recent_capture(name))

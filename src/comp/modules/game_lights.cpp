@@ -12,6 +12,7 @@
 #include "../game/atmosphere.hpp"
 #include "../game/camera.hpp"
 #include "../game/area_overrides.hpp"
+#include "../game/light_dump.hpp"
 #include "shared/common/remix_api.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
@@ -333,6 +334,7 @@ namespace comp
 			return false;
 
 		remix_api_ready_ = true;
+		game::light_dump::hook_api(shared::common::remix_api::get().m_bridge);
 
 		// DrawLightInstance is only honoured inside the bridge's begin_scene callback.
 		shared::common::remix_api::get().begin_scene_callback_external = remix_draw_callback;
@@ -670,6 +672,12 @@ namespace comp
 		const auto* player = find_player_light(harvested);
 		std::string falloff_table;
 		sync_player_light(player, falloff_table);
+		if (game::light_dump::active())
+			game::light_dump::write(player
+				? std::format("PLAYER source slot {} pos ({:.6g}, {:.6g}, {:.6g}) rgb ({:.6g}, {:.6g}, {:.6g}) dwindle {:.6g}-{:.6g} handle {:p} hash {:016x}",
+					player->slot, player->x, player->y, player->z, player->r, player->g, player->b, player->dwindle_begin, player->dwindle_end,
+					static_cast<void*>(player_light_.handle), player_light_.hash)
+				: std::format("PLAYER no source, handle {:p}", static_cast<void*>(player_light_.handle)));
 
 		const auto& synthetic = game::map_lights::get();
 		synthetic_count_ = static_cast<int>(synthetic.size());
@@ -983,6 +991,46 @@ namespace comp
 				s_logged_ok = ok;
 			}
 			falloff_table_sent_ = falloff_table;
+		}
+
+		// F6 light dump (light_dump.hpp): everything this sync went through, before and after its rules.
+		if (game::light_dump::active())
+		{
+			static const char* const kStateName[] = { "on", "rejected", "lights_off", "no_params", "effect_off", "source_off", "disabled",
+				"solo_other", "over_limit", "characters" };
+			game::light_dump::write(std::format("SYNC generic {} player {} ({:.6g}, {:.6g}, {:.6g}) sources {} rows {} live {} max_active {} skip_characters_only {}"
+				" radius_scale {:.6g} intensity_scale {:.6g} emitter {:.6g} game_falloff {}",
+				generic ? 1 : 0, have_player ? "at" : "none", player_pos[0], player_pos[1], player_pos[2], sources.size(), rows_.size(),
+				live_lights_.size(), max_active_lights_, skip_characters_only_ ? 1 : 0, radius_scale, intensity_scale, emitter_radius_, game_falloff_ ? 1 : 0));
+			for (const auto* s : sources)
+			{
+				const kind k = classify(*s);
+				game::light_dump::write(std::format("SOURCE kind {} slot {} pos ({:.6g}, {:.6g}, {:.6g}) rgb ({:.6g}, {:.6g}, {:.6g}) dwindle {:.6g}-{:.6g}"
+					" has_params {} source {} handle 0x{:08X} entity 0x{:08X} vtable 0x{:08X} row 0x{:08X} ffx {} top {} spot_dir ({:.6g}, {:.6g}, {:.6g})"
+					" cone {:.6g} softness {:.6g} physical {} emitter {:.6g} focus {:.6g} volumetric {:.6g} character_only_off {}",
+					kKindSource[static_cast<int>(k)], s->slot, s->x, s->y, s->z, s->r, s->g, s->b, s->dwindle_begin, s->dwindle_end, s->has_params ? 1 : 0,
+					static_cast<int>(s->source), s->entity_handle, s->entity, s->entity_vtable, s->param_row, s->ffx_id, s->ffx_top_id,
+					s->spot_dir[0], s->spot_dir[1], s->spot_dir[2], s->spot_cone_deg, s->spot_softness, s->physical ? 1 : 0, s->emitter_radius,
+					s->spot_focus, s->volumetric_scale, turned_off_as_character_only(*s) ? 1 : 0));
+			}
+			for (const auto& r : rows_)
+			{
+				const auto it = live_lights_.find(r.slot);
+				game::light_dump::write(std::format("ROW kind {} state {} slot {} key {:016x} id {:016x} group {:016x} own {:016x} name '{}' pos ({:.6g}, {:.6g}, {:.6g})"
+					" lift {:.6g} distance {:.6g} colour ({:.6g}, {:.6g}, {:.6g}) range {:.6g}-{:.6g} radiance ({:.6g}, {:.6g}, {:.6g}) drawn {} hash {:016x} handle {:p}"
+					" origin '{}'",
+					kKindSource[static_cast<int>(r.kind)], kStateName[static_cast<int>(r.state)], r.slot, r.key, r.id, r.group_key, r.own_key, r.name,
+					r.pos[0], r.pos[1], r.pos[2], r.lift, r.distance, r.colour[0], r.colour[1], r.colour[2], r.range_begin, r.range_end,
+					r.radiance[0], r.radiance[1], r.radiance[2], r.drawn ? 1 : 0, it != live_lights_.end() ? it->second.hash : 0ull,
+					it != live_lights_.end() ? static_cast<void*>(it->second.handle) : nullptr, r.origin));
+			}
+			for (const auto& p : map_bound_)
+				game::light_dump::write(std::format("BIND map ({:.6g}, {:.6g}, {:.6g}) map_id {}", p[0], p[1], p[2], bound_map_id_));
+			for (const auto& p : character_bound_)
+				game::light_dump::write(std::format("BIND character ({:.6g}, {:.6g}, {:.6g}) map_id {}", p[0], p[1], p[2], bound_map_id_));
+			for (const auto& p : lightmap_bound_)
+				game::light_dump::write(std::format("BIND lightmapped ({:.6g}, {:.6g}, {:.6g}) map_id {}", p[0], p[1], p[2], lightmap_bound_map_id_));
+			game::light_dump::write(std::format("FALLOFF {}", falloff_table));
 		}
 
 		// Drop lights not drawn this frame (slot went dark, filtered, disabled),
