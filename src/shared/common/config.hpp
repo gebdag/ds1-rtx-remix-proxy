@@ -97,6 +97,11 @@ namespace shared::common
 			// [FFP] WaterAreaStandIn: 1 = the water draws with the second stand-in colour (0xFF2F5D74 instead of 0xFF2F5D73), so its
 			// own mod material applies (ds1_water: New Londo's murk). Meant for area_overrides.ini, not the main INI.
 			int water_area_stand_in = 0;
+			// [FFP] WaterReflectionScale: scale per channel on the reflection level of water that takes the game's look (Ash Lake), on
+			// top of the game's own tint and weight (c132 * c131). The game's reflection is a small image sampled far off its mirror
+			// point (c124), so its water shows the sky's brightness where a traced ray meets the dark far shore. Meant for
+			// area_overrides.ini; the product is sent in 8 bits, so it ends at 1 (Ash Lake's level 0.21 leaves room up to 4.7).
+			float water_reflection_scale[3] = { 1.0f, 1.0f, 1.0f };
 			// Query D3DRS_ZWRITEENABLE from the device on every draw (one extra
 			// bridge round-trip per draw). Catches changes applied through
 			// StateBlock::Apply that the SetRenderState intercept can't see.

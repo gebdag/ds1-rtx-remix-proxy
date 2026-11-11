@@ -103,7 +103,10 @@ namespace comp::game::texture_scroll
 			if (game_look)
 			{
 				const float r = ps[131 * 4];
-				dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(ps[127 * 4 + 3]), to_byte(r * ps[132 * 4]), to_byte(r * ps[132 * 4 + 1]), to_byte(r * ps[132 * 4 + 2])));
+				// [FFP] WaterReflectionScale, per area: see config.hpp.
+				const float* scale = shared::common::config::get().ffp.water_reflection_scale;
+				dev->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(to_byte(ps[127 * 4 + 3]), to_byte(r * ps[132 * 4] * std::max(scale[0], 0.0f)),
+					to_byte(r * ps[132 * 4 + 1] * std::max(scale[1], 0.0f)), to_byte(r * ps[132 * 4 + 2] * std::max(scale[2], 0.0f))));
 				dev->SetTextureStageState(3, D3DTSS_BUMPENVLOFFSET, 0xD9000001u);
 			}
 			else
