@@ -61,6 +61,17 @@ namespace comp::game::ffx_lights
 		float g_size_max = 12.0f;
 		bool g_size_game = true;      // the game's own fire effect lights are extended too
 		bool g_size_lift = false;     // fire lights stand at their flame's height (sized_lift); off unless asked
+		float g_flicker = 0.15f;          // share of a lengthened game light's own flicker that is kept (steady_flicker)
+		float g_flicker_seconds = 1.0f;   // the time its running mean is taken over
+		struct flicker_state
+		{
+			float mean = 0.0f;
+			float age = 0.0f;   // seconds the mean has been taken over
+			int effect = 0;     // the effect the light belongs to: a slot is reused by other lights
+			std::chrono::steady_clock::time_point seen {};
+		};
+		std::unordered_map<int, flicker_state> g_flicker_state;
+		std::unordered_map<int, float> g_flicker_effect_mean; // per effect: the mean its light last settled at
 		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down); ini only
 		bool g_size_shrink = false;   // a table light may also become shorter than its table reach
 		constexpr float kSizeMinLift = 0.5f;
@@ -287,6 +298,10 @@ namespace comp::game::ffx_lights
 			g_size_game = cfg.get_int("Lights", "EffectSizeGame", 1) != 0;
 			g_size_lift = cfg.get_int("Lights", "EffectSizeLift", 0) != 0;
 			g_size_learn = cfg.get_int("Lights", "EffectSizeLearn", 0) != 0;
+			if (const float v = cfg.get_float("Lights", "EffectFlicker", g_flicker); std::isfinite(v))
+				g_flicker = std::clamp(v, 0.0f, 1.0f);
+			if (const float v = cfg.get_float("Lights", "EffectFlickerSeconds", g_flicker_seconds); std::isfinite(v))
+				g_flicker_seconds = std::clamp(v, 0.05f, 10.0f);
 			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
 			load_sizes("ffx_sizes.tsv");
 			// What the game learned itself, only while it is asked to learn (and never in the lookdev host: a capture must look
@@ -586,6 +601,52 @@ namespace comp::game::ffx_lights
 		return it != g_fades.end() ? it->second.level : -1.0f;
 	}
 
+	float effect_flicker()
+	{
+		if (!g_loaded)
+			load();
+		return g_flicker;
+	}
+
+	void steady_flicker(int slot, int effect, float& r, float& g, float& b)
+	{
+		if (!g_loaded)
+			load();
+		const float now_level = std::max({ r, g, b });
+		if (g_flicker >= 1.0f || !(now_level > 0.0f) || !std::isfinite(now_level))
+			return;
+		const auto now = std::chrono::steady_clock::now();
+		auto& s = g_flicker_state[slot];
+		const float dt = std::max(std::chrono::duration<float>(now - s.seen).count(), 0.0f);
+		// A light not seen for a second, or of another effect, is another light in the slot or the same one after a cut: its mean
+		// starts over, from what this effect's light last settled at when that is known.
+		if (!(s.mean > 0.0f) || dt > 1.0f || s.effect != effect)
+		{
+			const auto known = g_flicker_effect_mean.find(effect);
+			s.mean = known != g_flicker_effect_mean.end() ? known->second : now_level;
+			s.age = 0.0f;
+			s.effect = effect;
+		}
+		else
+		{
+			// A plain average while it is younger than the window, the running one after.
+			s.age += dt;
+			const float share = std::max(1.0f - std::exp(-dt / g_flicker_seconds), s.age > 0.0f ? std::min(dt / s.age, 1.0f) : 1.0f);
+			s.mean += (now_level - s.mean) * share;
+			if (s.age >= g_flicker_seconds)
+				g_flicker_effect_mean[effect] = s.mean;
+		}
+		s.seen = now;
+		// Far under its mean the light is going out: the game's own value, blended in between a fifth and a twentieth of the mean.
+		const float ratio = now_level / s.mean;
+		const float fading = std::clamp((0.2f - ratio) / 0.15f, 0.0f, 1.0f);
+		const float kept = s.mean * std::pow(ratio, g_flicker + (1.0f - g_flicker) * fading);
+		const float scale = kept / now_level;
+		r *= scale; g *= scale; b *= scale;
+		if (g_flicker_state.size() > 256)
+			std::erase_if(g_flicker_state, [&](const auto& t) { return std::chrono::duration<float>(now - t.second.seen).count() > 5.0f; });
+	}
+
 	bool size_rule_enabled()
 	{
 		// The ini is read with the table: before that the switches are not the user's yet, and a later load would undo a change.
@@ -612,6 +673,8 @@ namespace comp::game::ffx_lights
 		else if (key == "Lights.EffectSizeGame") { g_size_game = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.EffectSizeLift") g_size_lift = value != 0.0f;
 		else if (key == "Lights.EffectSizeShrink") { g_size_shrink = value != 0.0f; g_size_logged.clear(); }
+		else if (key == "Lights.EffectFlicker") { if (std::isfinite(value)) g_flicker = std::clamp(value, 0.0f, 1.0f); }
+		else if (key == "Lights.EffectFlickerSeconds") { if (std::isfinite(value)) g_flicker_seconds = std::clamp(value, 0.05f, 10.0f); }
 		else if (key == "Lights.FollowRiseSeconds") g_follow_rise_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFallSeconds") g_follow_fall_seconds = std::max(value, 0.001f);
 		else if (key == "Lights.FollowFullAlpha") g_follow_full_alpha = std::max(value, 0.001f);

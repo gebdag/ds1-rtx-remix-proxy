@@ -692,8 +692,12 @@ namespace comp
 			if (reach > l.dwindle_end || lift != 0.0f)
 			{
 				sized_game_lights_.push_back(l);
-				sized_game_lights_.back().dwindle_end = std::max(reach, l.dwindle_end);
-				sized_game_lights_.back().y += lift;
+				auto& sized = sized_game_lights_.back();
+				// Made longer, it is the fire's light and no longer a short accent: most of the game's flicker goes (steady_flicker).
+				if (reach > l.dwindle_end)
+					game::ffx_lights::steady_flicker(l.slot, l.ffx_top_id ? l.ffx_top_id : l.ffx_id, sized.r, sized.g, sized.b);
+				sized.dwindle_end = std::max(reach, l.dwindle_end);
+				sized.y += lift;
 				sources.push_back(&sized_game_lights_.back());
 			}
 			else
@@ -1731,6 +1735,7 @@ namespace comp
 			{ "Lights", "EffectSize", "Fire light reach from the flame", flag(game::ffx_lights::size_rule_enabled()) },
 			{ "Lights", "EffectSizeLift", "Raise fire lights to their flame", flag(game::ffx_lights::size_lift_enabled()) },
 			{ "Lights", "FlameLift", "Raise flame lights out of their holder", flag(game::map_lights::flame_lift_enabled()) },
+			{ "Lights", "EffectFlicker", "Flicker of lengthened fire lights", num(game::ffx_lights::effect_flicker()) },
 			{ "Lights", "ResolveEntityParams", "Read entity lights' parameters", flag(game::point_lights::resolve_entities()) },
 			{ "Lights", "SynthesizedLights", "Stand-in lights", flag(game::map_lights::enabled()) },
 			{ "Sun", "Enabled", "Sun on", flag(sun_enabled) },
@@ -1915,6 +1920,7 @@ namespace comp
 		game::ffx_lights::set_follow_option("Lights.EffectSize", cfg.get_bool("Lights", "EffectSize", true) ? 1.0f : 0.0f);
 		game::ffx_lights::set_follow_option("Lights.EffectSizeLift", cfg.get_bool("Lights", "EffectSizeLift", false) ? 1.0f : 0.0f);
 		game::map_lights::set_flame_lift(cfg.get_bool("Lights", "FlameLift", false));
+		game::ffx_lights::set_follow_option("Lights.EffectFlicker", cfg.get_float("Lights", "EffectFlicker", 0.15f));
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
@@ -2731,6 +2737,15 @@ namespace comp
 			"at full strength. Saved as [Lights] FlameLift.") |
 			revert_buttons("holder_rise", holder_rise, saved_bool("Lights", "FlameLift", false), false))
 			game::map_lights::set_flame_lift(holder_rise);
+		float flicker = game::ffx_lights::effect_flicker();
+		form_label("Flicker of lengthened fire lights",
+			"A game effect light that 'Fire light reach from the flame' makes longer keeps this share of the game's own\n"
+			"flicker about its running mean. The game flickers such lights hard and keeps them short (the Kiln brazier's:\n"
+			"0.24 to 2.14 in strength, 1 to 1.8 m long); made long they take a scene from lit to dark.\n"
+			"1 = the game's flicker as it is, 0 = steady. Saved as [Lights] EffectFlicker.");
+		if (ImGui::SliderFloat("##fire_flicker", &flicker, 0.0f, 1.0f, "%.2f") |
+			revert_buttons("fire_flicker", flicker, saved_float("Lights", "EffectFlicker", 0.15f), 0.15f))
+			game::ffx_lights::set_follow_option("Lights.EffectFlicker", flicker);
 		// The runtime's own view of every light it renders (rtx.ds1Lights.showView): not saved, off at every start.
 		static bool show_lights = false;
 		if (form_checkbox("Show lights in the world", "##show_lights", &show_lights,

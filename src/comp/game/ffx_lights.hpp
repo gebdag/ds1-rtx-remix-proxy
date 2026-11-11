@@ -88,6 +88,21 @@ namespace comp::game::ffx_lights
 	// centre ([Lights] EffectSizeLift). Set through set_follow_option("Lights.EffectSize" / "Lights.EffectSizeLift", 0 or 1).
 	bool size_rule_enabled();
 	bool size_lift_enabled();
+
+	// The flicker of a game effect light whose reach the flame's size makes longer. The game flickers such a light hard and keeps
+	// it short: the Kiln brazier's cutscene light (41812) went 1.09, 2.14, 1.32, 0.24, 1.09, 0.87 in six captures of one scene
+	// (frame_20261111_174512 to 174621), with a reach of 1.06 to 1.83 m, while the light its fire's sprites draw changed by about
+	// a fifth between captures of the same view and not in step with it. Made 9 m long it took the whole scene from lit to dark:
+	// (0.24 / 2.14)^2.2 is a 120th of the light. So a lengthened light is held at its own running mean (EffectFlickerSeconds, 1 s)
+	// and keeps this share of its swing about that mean, as a power: 0.15 turns the 8.8-fold swing into 1.4-fold, about what the
+	// sprites do. [Lights] EffectFlicker (0.15; 1 = the game's flicker as it is, 0 = steady), live proxy.Lights.EffectFlicker.
+	// Lights the rule does not lengthen keep the game's flicker over the game's reach.
+	// The mean starts from what the same effect's light last settled at (this session), or from the first sample when the
+	// effect is new, and is a plain average for its first EffectFlickerSeconds, so one odd first sample does not hold it.
+	// A light under a twentieth of its mean is fading out, not flickering (the brazier's lowest was a fifth): it goes by the
+	// game's value there, blending in from a fifth down.
+	void steady_flicker(int slot, int effect, float& r, float& g, float& b);
+	float effect_flicker();
 	// How far above its effect's origin such a light belongs: the height of the flame's light-weighted centre over the origin,
 	// learned with the spread (the same instance's). The game puts an effect's light at the origin, which for a brazier or a
 	// sconce is inside the bowl: its lights cast no shadows, so that never showed; path traced, the bowl shadows everything
