@@ -45,7 +45,7 @@ namespace comp
 		int seen_sun_frames_ = 0;
 		bool seen_map_light_ = false; // the map's geometry has shown its own key light (map c95) since the map was entered
 		game::map_sun::values seen_sun_;
-		bool turned_off_as_character_only(const game::point_lights::light& l) const;
+		bool turned_off_as_character_only(const game::point_lights::light& l);
 		float effect_table_scale = 1.0f; // [Lights] EffectTableScale, the colour of table effect lights: fire 1.8x in light, as the game's own fire lights
 		float intensity_scale = 1.0f;
 		float radius_scale = 1.0f;
@@ -156,12 +156,19 @@ namespace comp
 		// intro shaft's torch bank lights move a few cm a frame) matched the positions seen only now and then, so its strength
 		// jumped by pi from frame to frame until enough of its positions were seen (F6 dump lights_20261111_224543).
 		bool bound_to_lightmap(const game::point_lights::light& l);
-		std::unordered_set<uint64_t> lightmap_bound_lights_;
+		std::unordered_map<uint64_t, std::array<float, 3>> lightmap_bound_lights_; // where each was latched (light_identity / latched in game_lights.cpp)
 		unsigned lightmap_bound_lights_map_ = 0;
 		// Lights the game bound to map draws and to character draws on the current map (observe_draw_lights).
 		std::vector<std::array<float, 3>> map_bound_, character_bound_;
 		unsigned bound_map_id_ = 0;
 		bool characters_only(float x, float y, float z) const;
+		// The same for one light, by its engine slot and entity handle, kept for the map: once the game has bound it to a map draw
+		// it lights the map; otherwise once it has been bound to a character draw it lights characters only. Matched by position
+		// each frame instead, the intro shaft's swaying torch light (Map light 17) fell outside every map position it had been seen
+		// at for single frames and went out (F6 dump lights_20261111_225447: 5.6, 6.7 and 11.7 s).
+		bool characters_only(const game::point_lights::light& l);
+		std::unordered_map<uint64_t, std::array<float, 3>> lit_map_lights_, lit_character_lights_;
+		unsigned lit_lights_map_ = 0;
 		bool skip_characters_only_ = true;
 		void custom_lights_imgui();
 		// Every setting of one custom light (the custom section and a custom row's panel); true when one changed.

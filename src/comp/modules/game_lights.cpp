@@ -453,10 +453,10 @@ namespace comp
 		}
 	}
 
-	bool game_lights::turned_off_as_character_only(const game::point_lights::light& l) const
+	bool game_lights::turned_off_as_character_only(const game::point_lights::light& l)
 	{
 		const kind k = classify(l);
-		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity) || !characters_only(l.x, l.y, l.z) ||
+		if (!skip_characters_only_ || (k != kind::map_row && k != kind::bank_entity) || !characters_only(l) ||
 			game::map_lights::is_flame(l.x, l.y, l.z))
 			return false;
 		// One the user forced on shines.
@@ -475,6 +475,73 @@ namespace comp
 		return in(character_bound_) && !in(map_bound_);
 	}
 
+	namespace
+	{
+		// A latched decision for one engine light (the two rules below), keyed by slot and entity handle. Honoured only while
+		// the light is near where it was latched: a slot and handle can come back to another light (the handle's generation
+		// byte wraps after 128 frees of a slot, and the lookdev host replays captures from other game sessions, whose lights
+		// take other slots and handles), and a light carried away is decided by position again (and may latch anew where it
+		// is, which replaces the entry). The intro shaft's torches sway up to 0.33 m.
+		constexpr float kLatchReach = 0.5f;
+
+		uint64_t light_identity(const game::point_lights::light& l)
+		{
+			return (static_cast<uint64_t>(static_cast<uint32_t>(l.slot)) << 32) | l.entity_handle;
+		}
+
+		bool latched(std::unordered_map<uint64_t, std::array<float, 3>>& latches, uint64_t id, const game::point_lights::light& l)
+		{
+			const auto it = latches.find(id);
+			if (it == latches.end())
+				return false;
+			// Out of reach the latch is not honoured but kept: a light back near it (a short excursion) has it again.
+			const auto& p = it->second;
+			return (p[0] - l.x) * (p[0] - l.x) + (p[1] - l.y) * (p[1] - l.y) + (p[2] - l.z) * (p[2] - l.z) < kLatchReach * kLatchReach;
+		}
+	}
+
+	bool game_lights::characters_only(const game::point_lights::light& l)
+	{
+		// Engine lights only (an entity handle): the proxy's own lights stand still and have no lasting identity.
+		const unsigned map = game::map_lights::current_map_id();
+		if (map != lit_lights_map_)
+		{
+			lit_map_lights_.clear();
+			lit_character_lights_.clear();
+			lit_lights_map_ = map;
+		}
+		// The binding lists are cleared at the new map's first draw, after the first sync: until then they are the last map's,
+		// and nothing is latched from them.
+		const bool latch = l.entity_handle && bound_map_id_ == map;
+		const uint64_t id = light_identity(l);
+		if (latch && latched(lit_map_lights_, id, l))
+			return false;
+		constexpr float kSame = 0.1f;
+		auto in = [&](const std::vector<std::array<float, 3>>& list)
+		{
+			return std::any_of(list.begin(), list.end(), [&](const std::array<float, 3>& p)
+				{ return (p[0] - l.x) * (p[0] - l.x) + (p[1] - l.y) * (p[1] - l.y) + (p[2] - l.z) * (p[2] - l.z) < kSame * kSame; });
+		};
+		if (in(map_bound_))
+		{
+			if (latch)
+			{
+				lit_map_lights_[id] = { l.x, l.y, l.z };
+				lit_character_lights_.erase(id); // lights the map now: an older characters-only latch must not come back
+			}
+			return false;
+		}
+		if (latch && latched(lit_character_lights_, id, l))
+			return true;
+		if (in(character_bound_))
+		{
+			if (latch)
+				lit_character_lights_[id] = { l.x, l.y, l.z };
+			return true;
+		}
+		return false;
+	}
+
 	bool game_lights::bound_to_lightmap(float x, float y, float z) const
 	{
 		// The game's copy of a light's position and the harvested one agree to float precision; a light
@@ -486,19 +553,21 @@ namespace comp
 
 	bool game_lights::bound_to_lightmap(const game::point_lights::light& l)
 	{
-		if (const unsigned map = game::map_lights::current_map_id(); map != lightmap_bound_lights_map_)
+		const unsigned map = game::map_lights::current_map_id();
+		if (map != lightmap_bound_lights_map_)
 		{
 			lightmap_bound_lights_.clear();
 			lightmap_bound_lights_map_ = map;
 		}
-		// Engine lights only (an entity handle): the proxy's own lights stand still and have no lasting identity.
-		const uint64_t id = (static_cast<uint64_t>(static_cast<uint32_t>(l.slot)) << 32) | l.entity_handle;
-		if (l.entity_handle && lightmap_bound_lights_.count(id))
+		// Engine lights only (an entity handle), and only from this map's list (see characters_only).
+		const bool latch = l.entity_handle && lightmap_bound_map_id_ == map;
+		const uint64_t id = light_identity(l);
+		if (latch && latched(lightmap_bound_lights_, id, l))
 			return true;
 		if (!bound_to_lightmap(l.x, l.y, l.z))
 			return false;
-		if (l.entity_handle)
-			lightmap_bound_lights_.insert(id);
+		if (latch)
+			lightmap_bound_lights_[id] = { l.x, l.y, l.z };
 		return true;
 	}
 
@@ -832,7 +901,7 @@ namespace comp
 				: max_active_lights_ > 0 && active >= max_active_lights_ ? row_state::over_limit
 				: skip_characters_only_ && !(edit && edit->include_map) &&
 					(row.kind == kind::map_row || row.kind == kind::bank_entity) &&
-					characters_only(src.x, src.y, src.z) && !game::map_lights::is_flame(src.x, src.y, src.z) ? row_state::characters
+					characters_only(src) && !game::map_lights::is_flame(src.x, src.y, src.z) ? row_state::characters
 				: row_state::on;
 			if (row.state != row_state::on)
 			{
@@ -1048,6 +1117,15 @@ namespace comp
 				game::light_dump::write(std::format("BIND character ({:.6g}, {:.6g}, {:.6g}) map_id {}", p[0], p[1], p[2], bound_map_id_));
 			for (const auto& p : lightmap_bound_)
 				game::light_dump::write(std::format("BIND lightmapped ({:.6g}, {:.6g}, {:.6g}) map_id {}", p[0], p[1], p[2], lightmap_bound_map_id_));
+			for (const auto& [id, p] : lightmap_bound_lights_)
+				game::light_dump::write(std::format("LATCH lightmapped slot {} handle 0x{:08X} at ({:.6g}, {:.6g}, {:.6g}) map_id {}",
+					static_cast<int>(id >> 32), static_cast<uint32_t>(id), p[0], p[1], p[2], lightmap_bound_lights_map_));
+			for (const auto& [id, p] : lit_map_lights_)
+				game::light_dump::write(std::format("LATCH map slot {} handle 0x{:08X} at ({:.6g}, {:.6g}, {:.6g}) map_id {}",
+					static_cast<int>(id >> 32), static_cast<uint32_t>(id), p[0], p[1], p[2], lit_lights_map_));
+			for (const auto& [id, p] : lit_character_lights_)
+				game::light_dump::write(std::format("LATCH character slot {} handle 0x{:08X} at ({:.6g}, {:.6g}, {:.6g}) map_id {}",
+					static_cast<int>(id >> 32), static_cast<uint32_t>(id), p[0], p[1], p[2], lit_lights_map_));
 			game::light_dump::write(std::format("FALLOFF {}", falloff_table));
 		}
 

@@ -14,6 +14,7 @@
 //             custom, mesh), every field, before any rule
 //   ROW       game_lights' decision for each source: kind, state (on, or why not), key, colour, range, radiance sent
 //   BIND      the positions the game was seen binding to map, character and lightmapped draws (the characters-only rule)
+//   LATCH     the per-light decisions kept for the map (lightmapped / map / character), with where each was latched
 //   FALLOFF   the rtx.ds1Lights.falloffTable string built this frame
 //   DRAW      every draw whose pixel shader reads the game's point lights: c112-c119 raw (4 positions, 4 colours), the
 //             light count, skinned, lightmapped, texture
