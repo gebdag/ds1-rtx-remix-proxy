@@ -1,4 +1,5 @@
 #include <unordered_map>
+#include <unordered_set>
 #include "std_include.hpp"
 #include "skinning.hpp"
 
@@ -18,6 +19,7 @@ namespace comp
 	{
 		p_this = this;
 		initialized_ = true;
+		s_shell_fur = shared::common::config::get().get_int("Fur", "ShellGeometry", 0) != 0;
 		shared::common::log("Skinning", "Module initialized.", shared::common::LOG_TYPE::LOG_TYPE_WARN);
 	}
 
@@ -64,8 +66,18 @@ namespace comp
 		UINT stride = ffp.stream_stride(0);
 		UINT total_verts = min_vtx + num_verts;
 		// A fur shell carries its vertex colour (ffp_state::cur_draw_is_fur_shell).
-		const bool priscilla_fur = game::texture_names::name_of(ffp.cur_texture(0)) == "c2730_2" && ffp.cur_decl_has_color();
-		const bool fur = skin_overlay_decl_ && (priscilla_fur || ffp.cur_draw_is_fur_shell(dev));
+		const std::string diffuse_name = game::texture_names::name_of(ffp.cur_texture(0));
+		const bool priscilla_fur = diffuse_name == "c2730_2" && ffp.cur_decl_has_color();
+		// Shell fur whose diffuse is neither named for fur nor punch-through: Sif (c5210_2) and the Darkroot beast (c5360_2), seen in
+		// frame_20261111_115114 / 115217 / 115518. Listed by name, like Priscilla's; any other shell mesh is only reported, or taken
+		// with [Fur] ShellGeometry on (is_shell_fur).
+		// Blended draws only (every draw of the two in the captures is): also while the creature fades out (c139.w), as Priscilla's.
+		DWORD listed_blend = FALSE;
+		const bool listed_fur = (diffuse_name == "c5210_2" || diffuse_name == "c5360_2") && ffp.cur_decl_has_color() &&
+			SUCCEEDED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &listed_blend)) && listed_blend;
+		const bool shell_fur = skin_overlay_decl_ && !priscilla_fur &&
+			(listed_fur || is_shell_fur(dev, diffuse_name, src_vb, base_vtx, total_verts, stride));
+		const bool fur = skin_overlay_decl_ && (priscilla_fur || shell_fur || ffp.cur_draw_is_fur_shell(dev));
 		// A body part's vertices carry their place on the body, for the runtime's wet player. Hair reads the grid too,
 		// but its cards are not body-tagged in lightmap_sun, so only the body wets the grid.
 		// Not on what the game blends otherwise (ghosts, a fading body), which needs its alpha as it is.
@@ -155,14 +167,14 @@ namespace comp
 			dev->SetRenderState(D3DRS_ALPHAREF, game::atmosphere::seath_alpha_ref());
 			dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
 		}
-		// Blended fur (a diffuse named for fur: the Taurus Demon's c2250_fur, Priscilla's, the DLC's) carries the fur marker: Remix blends
-		// its denser texels in order rather than stochastically (rtx.stochasticAlphaBlendOpacityThresholdFur, Surface::isDs1Fur). By name,
-		// not by fur_shell: that test (punch-through DXT1 with vertex colour) also takes bushes and misses the Taurus. Stage 4 put back after.
+		// Blended fur (a diffuse named for fur: the Taurus Demon's c2250_fur, Priscilla's, the DLC's; or shell fur by its geometry: Sif,
+		// the Darkroot beast) carries the fur marker: Remix blends its denser texels in order rather than stochastically
+		// (rtx.stochasticAlphaBlendOpacityThresholdFur, Surface::isDs1Fur). Not by fur_shell: that test (punch-through DXT1 with vertex
+		// colour) also takes bushes. The Taurus is no shell geometry: each of its layers is a draw of its own. Stage 4 put back after.
 		constexpr DWORD kFurMarker = 0xD400000F;
 		DWORD fur_stage4 = 0, fur_alpha_blend = FALSE;
 		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &fur_alpha_blend);
-		const std::string diffuse_name = game::texture_names::name_of(ffp.cur_texture(0));
-		const bool fur_marked = fur_alpha_blend && (diffuse_name.find("_fur") != std::string::npos || priscilla_fur);
+		const bool fur_marked = fur_alpha_blend && (diffuse_name.find("_fur") != std::string::npos || priscilla_fur || shell_fur);
 		if (fur_marked)
 		{
 			dev->GetTextureStageState(4, D3DTSS_CONSTANT, &fur_stage4);
@@ -395,6 +407,115 @@ namespace comp
 		entry.raw_max_idx = cur_raw_max_idx_;
 
 		return exp_vb;
+	}
+
+	bool skinning::is_shell_fur(IDirect3DDevice9* dev, const std::string& diffuse_name, IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride)
+	{
+		auto& ffp = shared::common::ffp_state::get();
+		if (!src_vb || !stride || num_verts < 12 || !ffp.cur_decl_has_color() || !ffp.cur_decl_has_texcoord())
+			return false;
+		// The uv is compared as its four bytes: two shorts.
+		if (const int tc_type = ffp.cur_decl_texcoord_type(); tc_type != D3DDECLTYPE_SHORT2 && tc_type != D3DDECLTYPE_SHORT4)
+			return false;
+		// A character's own texture (cNNNN_...), never hair: hair cards repeat uvs the same way and have their own path.
+		if (diffuse_name.size() < 6 || diffuse_name[0] != 'c' || diffuse_name[5] != '_' || diffuse_name.find("hair") != std::string::npos)
+			return false;
+		for (int i = 1; i <= 4; i++)
+			if (diffuse_name[i] < '0' || diffuse_name[i] > '9')
+				return false;
+		// The game's straight-alpha blend with the alpha test, at full draw alpha (a fading character is not fur). From the device: the
+		// game applies blend state through state blocks.
+		DWORD blend = FALSE, test = FALSE, dest = D3DBLEND_ZERO;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+		dev->GetRenderState(D3DRS_ALPHATESTENABLE, &test);
+		dev->GetRenderState(D3DRS_DESTBLEND, &dest);
+		if (!blend || !test || dest != D3DBLEND_INVSRCALPHA || ffp.ps_const_data()[139 * 4 + 3] < 0.999f)
+			return false;
+		if (shell_fur_names_.contains(diffuse_name))
+			return true;
+		const shell_range range{ src_vb, base_vtx, num_verts };
+		if (shell_measured_.contains(range))
+			return false;
+		static const float min_share = std::clamp(shared::common::config::get().get_float("Fur", "ShellShare", 0.4f), 0.05f, 1.0f);
+		static const int min_layers = std::clamp(shared::common::config::get().get_int("Fur", "ShellLayers", 4), 3, 32);
+		unsigned char* src = nullptr;
+		if (FAILED(src_vb->Lock(static_cast<UINT>(base_vtx) * stride, num_verts * stride, reinterpret_cast<void**>(&src), D3DLOCK_READONLY)))
+			return false;
+		float share = 0.0f;
+		int layers = 0;
+		const bool shell = shell_geometry(src, num_verts, stride, ffp.cur_decl_pos_off(), ffp.cur_decl_texcoord_off(), min_share, min_layers, share, layers);
+		src_vb->Unlock();
+		// Once per range (the ranges are remembered): few lines, and they name a creature whose fur is not listed yet.
+		shared::common::log("FFP", std::format("shell geometry of {}: {} vertices, {:.0f}% in shells of {} layers: {}", diffuse_name, num_verts,
+			share * 100.0f, layers, !shell ? "not fur" : s_shell_fur ? "taken as fur" : "shell fur, not listed (only reported: [Fur] ShellGeometry is off)"));
+		if (shell && s_shell_fur)
+		{
+			shell_fur_names_.insert(diffuse_name);
+			return true;
+		}
+		// Buffers come and go: an address met again with other vertices is measured anew once the set is cleared.
+		if (shell_measured_.size() > 4096)
+			shell_measured_.clear();
+		shell_measured_.insert(range);
+		return false;
+	}
+
+	// Whether at least min_share of the vertices sit in groups of one uv at three or more places 2 mm to 0.5 m apart, the groups' median
+	// size being min_layers or more.
+	bool skinning::shell_geometry(const unsigned char* src, UINT num_verts, UINT stride, int pos_off, int uv_off, float min_share, int min_layers,
+		float& share, int& median_layers)
+	{
+		struct vert { uint32_t uv; float p[3]; };
+		std::vector<vert> verts(num_verts);
+		for (UINT v = 0; v < num_verts; v++)
+		{
+			const unsigned char* at = src + static_cast<size_t>(v) * stride;
+			std::memcpy(&verts[v].uv, at + uv_off, sizeof(uint32_t));
+			std::memcpy(verts[v].p, at + pos_off, sizeof(float) * 3);
+		}
+		std::sort(verts.begin(), verts.end(), [](const vert& a, const vert& b)
+		{
+			return a.uv != b.uv ? a.uv < b.uv : std::lexicographical_compare(a.p, a.p + 3, b.p, b.p + 3);
+		});
+		UINT in_shell = 0;
+		std::vector<int> layers;
+		for (size_t a = 0; a < verts.size();)
+		{
+			size_t b = a + 1;
+			while (b < verts.size() && verts[b].uv == verts[a].uv)
+				b++;
+			if (b - a >= 3)
+			{
+				int places = 1;
+				float lo[3] = { verts[a].p[0], verts[a].p[1], verts[a].p[2] }, hi[3] = { lo[0], lo[1], lo[2] };
+				for (size_t i = a + 1; i < b; i++)
+				{
+					// Sorted by position within the group: a new place differs from the one before by a tenth of a millimetre or more.
+					const float* p = verts[i].p; const float* q = verts[i - 1].p;
+					if (std::abs(p[0] - q[0]) > 1e-4f || std::abs(p[1] - q[1]) > 1e-4f || std::abs(p[2] - q[2]) > 1e-4f)
+						places++;
+					for (int k = 0; k < 3; k++)
+					{
+						lo[k] = std::min(lo[k], p[k]);
+						hi[k] = std::max(hi[k], p[k]);
+					}
+				}
+				const float spread = std::sqrt((hi[0] - lo[0]) * (hi[0] - lo[0]) + (hi[1] - lo[1]) * (hi[1] - lo[1]) + (hi[2] - lo[2]) * (hi[2] - lo[2]));
+				if (places >= 3 && spread > 0.002f && spread < 0.5f)
+				{
+					in_shell += static_cast<UINT>(b - a);
+					layers.push_back(places);
+				}
+			}
+			a = b;
+		}
+		share = static_cast<float>(in_shell) / static_cast<float>(num_verts);
+		median_layers = 0;
+		if (layers.empty())
+			return false;
+		std::nth_element(layers.begin(), layers.begin() + layers.size() / 2, layers.end());
+		median_layers = layers[layers.size() / 2];
+		return share >= min_share && median_layers >= min_layers;
 	}
 
 	// Shell fur: the same uv at several distances along the normal. The median gap between neighbours is the mesh's layer spacing, the median alpha lost per gap its fade.

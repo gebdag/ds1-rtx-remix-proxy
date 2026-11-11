@@ -71,6 +71,17 @@ namespace comp::game::atmosphere
 	int seath_glow_mode();
 	DWORD seath_alpha_ref();
 
+	// The Kiln's white passage (m0100B0A18, A18_WhitePassage[Dn]): an opaque unlit tube round the walkway the game draws at c100 7,
+	// seven times its texture. Remix lit it as a plain surface, about 1; the look's haze then took it by its region's tint (c105
+	// 0.2 seen from the Kiln, where 7 x 0.2 stays white in the game): the white doorway of the ending went grey
+	// (frame_20261111_112859). Only in the far view: where the game's tint would darken it and still leave it white (c105 under 1,
+	// c100 x c105 at 1 or more). From inside the passage the tint is 10 and the haze makes it white already; nothing changes there.
+	// proxy.FFP.WhitePassage, live: 0 as it was; 1 (default) the draw is tagged self-lit with its c100, so it is its texture seven
+	// times over again and stays white under the tint; 2 the look's haze leaves it alone instead (no light of its own: it then
+	// shows as bright as our own light on it happens to be, dim once the eye is used to a bright view).
+	// After tag_haze_set and tag_self_lit, for the opaque unlit m18_ao draw at c100 2 or more.
+	void tag_white_passage(IDirect3DDevice9* dev, const float* ps_const);
+
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
 		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false, const float* shaft_gain = nullptr,
 		const float* vs_const = nullptr, float shaft_distance = -1.0f, bool glow_mesh = false);

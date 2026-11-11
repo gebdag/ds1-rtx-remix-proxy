@@ -15,6 +15,7 @@
 #include "texture_names.hpp"
 #include "mesh_tables.hpp"
 #include "../modules/game_lights.hpp"
+#include "../modules/skinning.hpp"
 
 #include <cmath>
 
@@ -175,6 +176,7 @@ namespace comp::game::atmosphere
 		DWORD g_self_lit_below_tag = 0;
 		constexpr float kBrightCharacterMin = 1.2f;
 		int g_seath_glow = 2;            // proxy.Character.SeathGlow, live: 0 off, 1 additive, 2 cutout
+		int g_white_passage = 1;         // proxy.FFP.WhitePassage, live (tag_white_passage)
 		// proxy.Character.GhostSelfLit, live, off: New Londo's ghosts take their look from their replacement material in the mod
 		// (z_pbr ghosts.usda: Remix's own additive blend with emission from the albedo), not from a proxy tag.
 		bool g_ghost_self_lit = false;
@@ -688,6 +690,36 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	void tag_white_passage(IDirect3DDevice9* dev, const float* ps_const)
+	{
+		if (!dev || !ps_const || !g_white_passage)
+			return;
+		// Only where the game's own tint (c105) would darken it and still leave it white: c100 times the tint at 1 or more. That is
+		// the far view. From inside the passage the tint is 10: the look's haze makes it white there already.
+		const float tint = std::max({ ps_const[105 * 4], ps_const[105 * 4 + 1], ps_const[105 * 4 + 2] });
+		const float level = std::max({ ps_const[100 * 4], ps_const[100 * 4 + 1], ps_const[100 * 4 + 2] });
+		if (tint >= 1.0f || level * tint < 1.0f)
+			return;
+		if (g_white_passage == 1)
+		{
+			// Its own light, c100 times its texture, as a blended unlit layer's.
+			DWORD tag = kSelfLitMarker;
+			for (int c = 0; c < 3; c++)
+				tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(ps_const[100 * 4 + c], 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+			if (tag != g_self_lit_tag_set)
+			{
+				dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
+				g_self_lit_tag_set = tag;
+			}
+		}
+		else if (const DWORD tag = kHazeMarker | kUnhazedSlot; tag != g_tag_set)
+		{
+			// Left alone by the look's haze.
+			dev->SetTextureStageState(7, D3DTSS_CONSTANT, tag);
+			g_tag_set = tag;
+		}
+	}
+
 	int seath_glow_mode()
 	{
 		return g_seath_glow;
@@ -706,7 +738,7 @@ namespace comp::game::atmosphere
 		g_shaft_own_haze = false;
 		// Only blended layers (Bed of Chaos's glyph shells, the large bonfire's flame meshes). An opaque unlit mesh
 		// (m18_ao, c100 7) is an ordinary surface Remix lights, and the tag would add its c100 glow on top of that
-		// light. The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
+		// light (the Kiln's white passage gets it in its far view all the same: tag_white_passage). The tag makes the resolve sum a layer in gamma as the game's target does: the large bonfire's five
 		// flame layers, each (1, 0.39, 0.2) * texture, clip red and climb through orange to yellow there, while a
 		// linear sum stays red (frame_20261101_135237).
 		DWORD blended = FALSE, dst_blend = 0, src_blend = 0;
@@ -974,6 +1006,7 @@ namespace comp::game::atmosphere
 		else if (key == "Sfx.OwnWhite") shared::common::config::get().sfx.own_white = b;
 		else if (key == "Sfx.OwnFog") shared::common::config::get().sfx.own_fog = b;
 		else if (key == "Character.GhostSelfLit") g_ghost_self_lit = b;
+		else if (key == "FFP.WhitePassage") g_white_passage = std::clamp(std::atoi(value.c_str()), 0, 2);
 		else if (key == "Character.SeathGlow") g_seath_glow = std::clamp(std::atoi(value.c_str()), 0, 2);
 		else if (key == "Character.SeathAlphaRef") g_seath_alpha_ref = static_cast<DWORD>(std::clamp(std::atoi(value.c_str()), 0, 255));
 		else if (ffx_lights::set_follow_option(key, static_cast<float>(std::atof(value.c_str())))) {}
@@ -982,6 +1015,7 @@ namespace comp::game::atmosphere
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
+		else if (key == "Fur.ShellGeometry") comp::skinning::s_shell_fur = b;
 		else if (key == "Meshes.GapSkirtAlphaRef") shared::common::config::get().meshes.gap_skirt_alpha_ref = std::clamp(std::atoi(value.c_str()), 0, 255);
 		else if (key == "Meshes.GroundCardHeightKept") shared::common::config::get().meshes.ground_card_height_kept = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 1.0f);
 		else if (key == "Meshes.GroundCardClearance") shared::common::config::get().meshes.ground_card_clearance = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 0.05f);

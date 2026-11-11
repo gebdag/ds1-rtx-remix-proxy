@@ -602,6 +602,11 @@ namespace comp
 			ffp.probe_texture(), game::texture_names::is_lava(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))),
 			ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT), ffp.view_proj_valid() && ffp.cur_is_lit_effect_mesh(),
 			shaft_draw, shaft_gain, ffp.vs_const_data(), shaft_distance, game::mesh_tables::is_glow_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount));
+		// The Kiln's white passage: an opaque unlit draw of m18_ao, seven times over-bright (atmosphere.hpp tag_white_passage).
+		if (DWORD passage_blend = FALSE; ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_UNLIT) && ffp.ps_const_data() &&
+			ffp.ps_const_data()[100 * 4] >= 2.0f && SUCCEEDED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &passage_blend)) && !passage_blend &&
+			game::texture_names::name_of(ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) == "m18_ao")
+			game::atmosphere::tag_white_passage(dev, ffp.ps_const_data());
 		game::atmosphere::tag_view_fade(dev, ffp.view_proj_valid() && (ffp.cur_ps_light_flags() & ffp.PS_VIEW_FADE), ffp.ps_const_data());
 		game::env_reflection::tag(dev, ffp.view_proj_valid() && (ffp.cur_ps_sampler_mask() & ((1u << 11) | (1u << 12))) == ((1u << 11) | (1u << 12)),
 			ffp.ps_const_data());

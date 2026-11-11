@@ -1,5 +1,9 @@
 #pragma once
 
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+
 namespace comp
 {
 	/*
@@ -114,6 +118,38 @@ namespace comp
 		float fur_step_ = 0.015f;
 		float fur_alpha_step_ = 0.0f;
 		int fur_layer_count_ = 1;
+
+		// Shell fur by its geometry: a character's blended draw whose mesh repeats the same uv at several heights (Sif's c5210_2: 8 layers,
+		// 42-69% of the vertices of its fur draws; the Darkroot beast's c5360_2: 4 layers, 54% of one draw). Those two are listed by
+		// name in draw_skinned_dip and take the fur path: their vertex colour (the game multiplies by it: c5360_2 fades its layers
+		// through vertex alpha 39..255, Sif's shell edges go to 0) and the fur marker. The punch-through test
+		// (ffp_state::cur_draw_is_fur_shell) misses them: their diffuse is DXT5. This test only reports any other character mesh that
+		// measures as shell fur (the log's "[FFP] shell geometry of" lines), unless [Fur] ShellGeometry is on: then such a texture's
+		// draws take the fur path too. Off by default: the measure is known for about twenty named character textures (the others
+		// stay under 0.17), and hair cards reach as much as fur and are left out only by name.
+		bool is_shell_fur(IDirect3DDevice9* dev, const std::string& diffuse_name, IDirect3DVertexBuffer9* src_vb, INT base_vtx, UINT num_verts, UINT stride);
+		static bool shell_geometry(const unsigned char* src, UINT num_verts, UINT stride, int pos_off, int uv_off, float min_share, int min_layers,
+			float& share, int& median_layers);
+		std::unordered_set<std::string> shell_fur_names_;   // diffuse names one of whose draws was taken as shell geometry
+		struct shell_range
+		{
+			IDirect3DVertexBuffer9* vb;
+			INT base_vtx;
+			UINT num_verts;
+			bool operator==(const shell_range&) const = default;
+		};
+		struct shell_range_hash
+		{
+			size_t operator()(const shell_range& k) const
+			{
+				return std::hash<uintptr_t>{}(reinterpret_cast<uintptr_t>(k.vb)) ^ (std::hash<INT>{}(k.base_vtx) * 31u) ^ (std::hash<UINT>{}(k.num_verts) * 131u);
+			}
+		};
+		std::unordered_set<shell_range, shell_range_hash> shell_measured_;   // ranges that were not shell geometry
+	public:
+		// [Fur] ShellGeometry (live: proxy.Fur.ShellGeometry): on, any character mesh that measures as shell fur takes the fur path.
+		static inline bool s_shell_fur = false;
+	private:
 
 		// A two-layer draw's second diffuse, re-drawn as a coplanar decal (see draw_skinned_dip).
 		HRESULT draw_overlay(IDirect3DDevice9* dev, D3DPRIMITIVETYPE pt, IDirect3DVertexBuffer9* src_vb,
