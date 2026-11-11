@@ -19,6 +19,7 @@ namespace comp::game::custom_lights
 		std::string g_path;
 		std::string g_status = "no map loaded";
 		bool g_loaded = false;
+		unsigned int g_generation = 0;
 		bool g_dirty = false;
 		std::vector<light> g_saved; // the file's lights, by file_index
 
@@ -85,6 +86,7 @@ namespace comp::game::custom_lights
 			g_saved.clear();
 			g_dirty = false;
 			g_loaded = true;
+			++g_generation;
 			g_map = map_lights::current_map_name();
 			if (g_map.empty())
 			{
@@ -216,6 +218,7 @@ namespace comp::game::custom_lights
 	}
 
 	void reload() { load(); }
+	unsigned int generation() { ensure_current(); return g_generation; }
 
 	const light* saved(const light& l)
 	{

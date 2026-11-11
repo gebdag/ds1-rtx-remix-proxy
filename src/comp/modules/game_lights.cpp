@@ -2105,6 +2105,8 @@ namespace comp
 	{
 		selected_ = KEY_SUN;
 		selection_.clear();
+		list_custom_indices_.clear();
+		custom_owns_list_ = false;
 	}
 
 	void game_lights::tab_imgui()
@@ -2873,8 +2875,13 @@ namespace comp
 	{
 		ImGui::Spacing();
 		// Custom lights picked in the list are worked on by index from then on: moving or switching one off changes or takes away its row.
-		if (!list_custom_indices_.empty() && game::custom_lights::path() != custom_selection_path_)
-			list_custom_indices_.clear();
+		if (!list_custom_indices_.empty())
+		{
+			const int count = static_cast<int>(game::custom_lights::edit().size());
+			std::erase_if(list_custom_indices_, [&](int i) { return i < 0 || i >= count; });
+			if (game::custom_lights::generation() != list_custom_generation_ || list_custom_indices_.size() < 2)
+				list_custom_indices_.clear();
+		}
 		if (list_custom_indices_.size() > 1)
 		{
 			mirror_custom_to_list(list_custom_indices_);
@@ -2897,7 +2904,7 @@ namespace comp
 			{
 				for (const auto* r : rows)
 					list_custom_indices_.push_back(r->slot - game::custom_lights::kFirstSlot);
-				custom_selection_path_ = game::custom_lights::path();
+				list_custom_generation_ = game::custom_lights::generation();
 				ImGui::SeparatorText(std::format("{} custom lights selected", list_custom_indices_.size()).c_str());
 				ImGui::PushID("custom_rows");
 				custom_multi_imgui(std::vector<int>(list_custom_indices_));
@@ -3022,16 +3029,16 @@ namespace comp
 	{
 		auto& lights = game::custom_lights::edit();
 		const std::string& path = game::custom_lights::path();
-		// Indices belong to one map's file, and only as long as it has that many lights.
-		if (path != custom_selection_path_)
+		// Indices belong to one reading of one map's file, and only as long as it has that many lights.
+		if (const auto generation = game::custom_lights::generation(); generation != custom_generation_)
 		{
-			custom_selection_path_ = path;
+			custom_generation_ = generation;
 			select_custom(-1);
 		}
 		while (!custom_selection_.empty() && *custom_selection_.rbegin() >= static_cast<int>(lights.size()))
 			custom_selection_.erase(std::prev(custom_selection_.end()));
 		// The rows of the selected lights change as they move: kept in step, so flashing still finds them.
-		if (custom_selection_.size() > 1 && list_custom_indices_.empty())
+		if (custom_owns_list_ && custom_selection_.size() > 1)
 			mirror_custom_to_list(custom_selection_);
 		if (path.empty())
 		{
@@ -3111,10 +3118,11 @@ namespace comp
 				ImGui::TextUnformatted(l.spot ? (l.game_falloff ? "spotlight, game falloff" : "spotlight")
 					: (l.game_falloff ? "point, game falloff" : "point"));
 				// A light that belongs to an area of the map (area_overrides.ini, lights = <name prefix>).
+				// Asked first: asking for the area's name can rebuild what the name points into.
+				const bool away = game::area_overrides::custom_light_away(l.name);
 				if (const char* area = game::area_overrides::custom_light_area(l.name))
 				{
 					ImGui::SameLine();
-					const bool away = game::area_overrides::custom_light_away(l.name);
 					ImGui::TextColored(away ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), away ? "- away, only in %s" : "- only in %s", area);
 					tip("rtx_comp\\settings\\area_overrides.ini gives lights with this name's start to that area (lights = ...):\n"
 						"they are there only while the player is in it.");
@@ -3173,9 +3181,10 @@ namespace comp
 		custom_selection_.clear();
 		custom_anchor_ = index;
 		list_custom_indices_.clear();
-		// A selection made from outside the section (a row's Duplicate) belongs to this map's file too.
+		custom_owns_list_ = false;
+		// A selection made from outside the section (a row's Duplicate) belongs to this reading of the file too.
 		if (index >= 0)
-			custom_selection_path_ = game::custom_lights::path();
+			custom_generation_ = game::custom_lights::generation();
 	}
 
 	template <typename Indices> void game_lights::mirror_custom_to_list(const Indices& indices)
@@ -3195,9 +3204,12 @@ namespace comp
 		}
 		if (!rows.empty())
 		{
+			// The current row and the Shift anchor stay where the user put them while they are still among these.
+			if (!rows.count(selected_))
+				selected_ = current;
+			if (!rows.count(selection_anchor_))
+				selection_anchor_ = selected_;
 			selection_ = std::move(rows);
-			selected_ = current;
-			selection_anchor_ = current;
 		}
 	}
 
@@ -3240,8 +3252,9 @@ namespace comp
 			custom_selected_ = index;
 			custom_anchor_ = index;
 		}
-		// The same lights in the list above, so flashing finds them.
+		// The same lights in the list above, so flashing finds them, until a row of the list is clicked.
 		list_custom_indices_.clear();
+		custom_owns_list_ = true;
 		mirror_custom_to_list(custom_selection_);
 	}
 
@@ -3847,6 +3860,7 @@ namespace comp
 		{
 			const auto& io = ImGui::GetIO();
 			list_custom_indices_.clear();
+			custom_owns_list_ = false;
 			if (selection_.empty())
 				selection_.insert(selected_);
 			if (io.KeyShift)

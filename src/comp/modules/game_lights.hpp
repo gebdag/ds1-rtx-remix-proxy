@@ -172,7 +172,9 @@ namespace comp
 		std::vector<int> list_custom_indices_;
 		// Selects the list rows of these custom lights (those that have one: lights switched off or away have none).
 		template <typename Indices> void mirror_custom_to_list(const Indices& indices);
-		std::string custom_selection_path_;    // the file the indices belong to
+		unsigned int custom_generation_ = 0;   // the reading of the file (custom_lights::generation) the section's indices belong to
+		unsigned int list_custom_generation_ = 0;   // and the list editor's
+		bool custom_owns_list_ = false;        // the list's selection mirrors the section's, until a row of the list is clicked
 		// Selects one custom light (-1: none) and drops any multi-selection.
 		void select_custom(int index);
 		// A click on a custom light's row: plain, Ctrl (toggle) or Shift (range from the anchor).

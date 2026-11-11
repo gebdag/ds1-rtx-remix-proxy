@@ -160,6 +160,26 @@ namespace comp::game::area_overrides
 				shared::common::log("AreaOverrides", std::format("Remix refused {} = {}", key, value), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 		}
 
+		// The areas of this map the player is in now.
+		std::vector<std::string> areas_holding_player(const std::string& map)
+		{
+			float x = 0.0f, depth = 0.0f, up = 0.0f;
+			const bool have_position = camera::get_char_pos(x, depth, up) && !(x == 0.0f && depth == 0.0f && up == 0.0f);
+			const float position[3] = { x, up, depth };
+			std::vector<std::string> names;
+			for (const auto& a : g_areas)
+			{
+				if (a.map != map || a.when < 0 || (a.when && (a.when == 1) != atmosphere::ambient_is_cold()))
+					continue;
+				bool inside = !a.has_box || have_position;
+				for (int i = 0; i < 3 && inside && a.has_box; i++)
+					inside = position[i] >= a.box_min[i] && position[i] <= a.box_max[i];
+				if (inside)
+					names.push_back(a.name);
+			}
+			return names;
+		}
+
 		// Which custom lights are away: a prefix claimed on this map, with the player in none of the areas claiming it.
 		void build_light_claims(const std::string& map, const std::vector<std::string>& active)
 		{
@@ -306,7 +326,7 @@ namespace comp::game::area_overrides
 			// A map just loaded, before frame_update has placed the player in it: its claimed lights are away until it has,
 			// rather than all made for a few frames and taken down again.
 			if (const auto map = map_lights::current_map_name(); map != g_light_claims_map)
-				build_light_claims(map, {});
+				build_light_claims(map, areas_holding_player(map));
 			// The longest prefix wins, so 'Hollow_top_' can have its own area inside 'Hollow_'.
 			const light_claim* best = nullptr;
 			for (const auto& c : g_light_claims)

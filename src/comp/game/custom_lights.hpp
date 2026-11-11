@@ -58,6 +58,8 @@ namespace comp::game::custom_lights
 
 	bool save();
 	void reload();
+	// Goes up each time the lights are read from a file (a map change, a reload): indices into edit() from before are stale.
+	unsigned int generation();
 	// The light as the file has it (when it was last read or saved), nullptr for one added since.
 	const light* saved(const light& l);
 	const std::string& path();
