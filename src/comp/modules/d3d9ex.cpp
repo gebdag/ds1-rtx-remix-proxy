@@ -1,5 +1,6 @@
 ﻿// IDirect3DDevice9 proxy — thin delegation hub for all 119 vtable methods.
 #include "std_include.hpp"
+#include <tuple>
 #include "d3d9ex.hpp"
 #include "../d3d9_proxy.hpp"
 
@@ -412,6 +413,33 @@ namespace {
 		v.last_scaled = scaled;
 		v.have_last = true;
 		return true;
+	}
+
+	// A partial scissor inside the game's 1280x720 UI space on a larger target that is not one of the UI targets above
+	// stays where the game put it, which cuts away what it draws there (message text at 4K fullscreen). Each such case is
+	// logged once, with the target, so the target a cut-off UI draw goes to shows in the log.
+	void note_unscaled_ui_scissor(IDirect3DDevice9* dev, const RECT& rect)
+	{
+		if (rect.left < 0 || rect.top < 0 || rect.right > 1280 || rect.bottom > 720 ||
+			(!rect.left && !rect.top && rect.right == 1280 && rect.bottom == 720))
+			return;
+		IDirect3DSurface9* target = current_target(dev);
+		D3DSURFACE_DESC desc {};
+		if (!target || FAILED(target->GetDesc(&desc)) || (desc.Width <= 1280 && desc.Height <= 720))
+			return;
+		static std::set<std::tuple<IDirect3DSurface9*, LONG, LONG, LONG, LONG>> seen;
+		if (seen.size() >= 64 || !seen.emplace(target, rect.left, rect.top, rect.right, rect.bottom).second)
+			return;
+		IDirect3DSurface9* back_buffer = nullptr;
+		bool is_back_buffer = false;
+		if (SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) && back_buffer)
+		{
+			is_back_buffer = back_buffer == target;
+			back_buffer->Release();
+		}
+		shared::common::log("Scissor", std::format("UI-space scissor ({}, {}, {}, {}) left as is on a {}x{} {} target {:p}, not a known UI target",
+			rect.left, rect.top, rect.right, rect.bottom, desc.Width, desc.Height, is_back_buffer ? "back buffer" : "render",
+			static_cast<void*>(target)));
 	}
 
 	bool lookdev_passthrough()
@@ -1539,6 +1567,8 @@ namespace comp
 		}
 		if (RECT scaled; pRect && scaled_scissor(m_pIDirect3DDevice9, *pRect, scaled))
 			return m_pIDirect3DDevice9->SetScissorRect(&scaled);
+		if (pRect)
+			note_unscaled_ui_scissor(m_pIDirect3DDevice9, *pRect);
 		return m_pIDirect3DDevice9->SetScissorRect(pRect);
 	}
 
