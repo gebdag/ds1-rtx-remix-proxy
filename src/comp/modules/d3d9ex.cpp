@@ -339,8 +339,18 @@ namespace {
 		RECT last_scaled {}; // what the last scaled rect became: set again as it is (a Get and Set), it is not scaled twice
 		bool have_last = false;
 		LONG ui_width = 1280, ui_height = 720; // the size the game believes the target has
+		// A UI render texture CreateTexture registered: the size and format it was made at, to know it again after a Reset.
+		bool created_as_ui = false;
+		UINT made_width = 0, made_height = 0;
+		D3DFORMAT asked_format = D3DFMT_UNKNOWN;
 	};
 	std::unordered_map<IDirect3DSurface9*, remembered_viewport> s_remembered_viewports;
+
+	// The UI render textures there were before a Reset. After it the game makes them again at the size they had (3840x2160,
+	// not 1280x720) while its scissors there stay in 1280x720 space: the message text was cut away after the fullscreen
+	// switch at 4K (console.log 2026-11-11 21:38, the first CreateTexture after the Reset is the UI target again). The
+	// first render texture asked at such a size and format takes the entry back.
+	std::vector<remembered_viewport> s_ui_targets_before_reset;
 
 	IDirect3DSurface9* current_target(IDirect3DDevice9* dev)
 	{
@@ -372,6 +382,11 @@ namespace {
 	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
 	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
 	{
+		s_ui_targets_before_reset.clear();
+		if (std::string_view(where) == "Reset")
+			for (const auto& [surface, v] : s_remembered_viewports)
+				if (v.created_as_ui)
+					s_ui_targets_before_reset.push_back(v);
 		s_remembered_viewports.clear();
 		if (!pp)
 			return;
@@ -1089,7 +1104,9 @@ namespace comp
 		TRACE_IF_ACTIVE(trace_CreateTexture, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
 		const UINT asked_width = Width, asked_height = Height;
+		const D3DFORMAT asked_format = Format;
 		bool ui_target = false;
+		LONG ui_width = static_cast<LONG>(Width), ui_height = static_cast<LONG>(Height);
 		// Only render and depth textures: the game fills the others (the 1280x720 video frames) itself at the size it
 		// asked for, and writes past the end of a smaller one.
 		if (res.render_width > 0 && res.render_height > 0 && Pool == D3DPOOL_DEFAULT && (Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
@@ -1103,12 +1120,25 @@ namespace comp
 			else if ((Width == 1280 && Height == 720) || res.was_present_size(Width, Height))
 			{
 				shared::common::log("Resolution", std::format("CreateTexture override {}x{} -> {}x{} (present)", Width, Height, res.present_width, res.present_height));
-				// Only the game's own 1280x720 request: after a Reset it asks again at the size it was given (a present size), whose
-				// scissors are no longer in 1280x720 space.
+				// The game's own 1280x720 request. After a Reset it asks again at the size it was given: s_ui_targets_before_reset.
 				ui_target = (Usage & D3DUSAGE_RENDERTARGET) && Width == 1280 && Height == 720 &&
 					(res.present_width != Width || res.present_height != Height);
 				Width = res.present_width;
 				Height = res.present_height;
+			}
+			if (!ui_target && (Usage & D3DUSAGE_RENDERTARGET))
+			{
+				const auto it = std::find_if(s_ui_targets_before_reset.begin(), s_ui_targets_before_reset.end(), [&](const remembered_viewport& v)
+					{ return v.made_width == asked_width && v.made_height == asked_height && v.asked_format == asked_format; });
+				if (it != s_ui_targets_before_reset.end())
+				{
+					ui_target = Width != static_cast<UINT>(it->ui_width) || Height != static_cast<UINT>(it->ui_height);
+					ui_width = it->ui_width;
+					ui_height = it->ui_height;
+					shared::common::log("Resolution", std::format("CreateTexture {}x{}: the UI target again after the Reset, scissors scale from {}x{}",
+						asked_width, asked_height, ui_width, ui_height));
+					s_ui_targets_before_reset.erase(it);
+				}
 			}
 		}
 		// HDR10 output: the game's 8-bit render textures of the back buffer's size (its scene target, which Remix's
@@ -1139,8 +1169,12 @@ namespace comp
 					{
 						auto& v = s_remembered_viewports[surface];
 						v = {};
-						v.ui_width = static_cast<LONG>(asked_width);
-						v.ui_height = static_cast<LONG>(asked_height);
+						v.ui_width = ui_width;
+						v.ui_height = ui_height;
+						v.created_as_ui = true;
+						v.made_width = Width;
+						v.made_height = Height;
+						v.asked_format = asked_format;
 					}
 					else
 						s_remembered_viewports.erase(surface);
