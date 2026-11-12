@@ -79,7 +79,8 @@ namespace comp
 	{
 		static constexpr int keys[] = { VK_F4, VK_F1, VK_F6, VK_F7, VK_F8 };
 		static bool was_down[std::size(keys)] = {};
-		static const size_t key_count = shared::common::config::get().dev.enabled ? std::size(keys) : 1;
+		// F4 always; the rest with dev mode in its dev view (F4's footer checkbox switches to the player's).
+		const size_t key_count = shared::common::config::get().dev_view() ? std::size(keys) : 1;
 		const bool in_front = GetForegroundWindow() == shared::globals::main_window;
 		const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 		for (size_t i = 0; i < key_count; i++)
@@ -1025,8 +1026,8 @@ namespace comp
 		{
 			ImGui::PopStyleColor();
 			ImGui::PopStyleVar(1);
-			// Players get Lights, HUD and About; the rest are dev tools ([Dev] Enabled).
-			const bool dev = shared::common::config::get().dev.enabled;
+			// Players get Lights, HUD and About; the rest are dev tools ([Dev] Enabled, in the dev view).
+			const bool dev = shared::common::config::get().dev_view();
 			if (dev)
 			{
 				ADD_TAB("FFP", tab_ffp);
@@ -1058,6 +1059,18 @@ namespace comp
 			const char* movement_hint_str = movement_hint.c_str();
 
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+			// Dev mode: switch the menu and hotkeys to what a player gets, and back.
+			if (auto& dev_cfg = shared::common::config::get(); dev_cfg.dev.enabled)
+			{
+				const auto spos = ImGui::GetCursorScreenPos();
+				bool dev_view = !dev_cfg.dev.user_view;
+				if (ImGui::Checkbox("Dev view", &dev_view))
+					dev_cfg.dev.user_view = !dev_view;
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Off: F4 and its hotkeys as a player has them ([Dev] Enabled=0): Lights, HUD and About, and only F4.\n"
+					                  "What dev mode started with stays installed (hooks, file triggers, logs). Alt+X follows rtx.ds1Dev.enable.");
+				ImGui::SetCursorScreenPos(spos);
+			}
 			{
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y);
 				const auto spos = ImGui::GetCursorScreenPos();

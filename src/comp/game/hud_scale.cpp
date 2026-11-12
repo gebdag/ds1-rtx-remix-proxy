@@ -586,7 +586,7 @@ namespace comp::game::hud_scale
 		if (changed)
 			refresh_any();
 		// A dev tool: players get the scales only.
-		if (cfg.dev.enabled)
+		if (cfg.dev_view())
 		{
 			ImGui::Spacing();
 			ImGui::Checkbox("Log the UI's names to console.log", &g_log_names);

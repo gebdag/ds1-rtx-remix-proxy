@@ -2153,7 +2153,8 @@ namespace comp
 		void poll_request()
 		{
 			static bool key_down = false;
-			const int key = shared::common::config::get().lookdev.capture_key;
+			// The key follows F4's dev view (a player's game has no capture key); the request file stays (the host's).
+			const int key = shared::common::config::get().dev_view() ? shared::common::config::get().lookdev.capture_key : 0;
 			const bool down = key && (GetAsyncKeyState(key) & 0x8000) && GetForegroundWindow() == shared::globals::main_window;
 			if (down && !key_down)
 			{

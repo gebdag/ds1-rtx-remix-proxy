@@ -31,7 +31,13 @@ namespace shared::common
 		struct dev_settings
 		{
 			bool enabled = false;
+			// F4's "Dev view" checkbox off (dev mode only, this session): the menu and hotkeys as a player has them. What dev
+			// mode installed at start (hooks, file triggers, logs) stays; only what a player sees and presses follows it.
+			bool user_view = false;
 		} dev;
+
+		// Dev mode's menu and hotkeys showing: dev mode, and not switched to the player's view in F4.
+		bool dev_view() const { return dev.enabled && !dev.user_view; }
 
 		// The logs a player does not need (camera.log, eye_log.txt, hitch lines): with dev mode, or with
 		// [Troubleshooting] Verbose=1 when a player is asked for them.
