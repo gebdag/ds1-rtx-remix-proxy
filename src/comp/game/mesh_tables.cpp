@@ -14,7 +14,7 @@ namespace comp::game::mesh_tables
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted, ground };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted, ground, backing };
 
 		struct range_key
 		{
@@ -36,6 +36,7 @@ namespace comp::game::mesh_tables
 			UINT hide_first = 0;
 			UINT hide_last = 0;
 			std::vector<uint16_t> heights_mm; // ground card: each vertex's height above the ground, mm (0xFFFF: none)
+			std::vector<uint16_t> backing;    // backed skirt: its hanging faces, a triangle list over the draw's vertices
 		};
 
 		// Entries live in g_hashes for good (a node map: pointers stay valid).
@@ -104,6 +105,20 @@ namespace comp::game::mesh_tables
 					if (got != n)
 						continue;
 				}
+				// A backed skirt: '<texture> <index count> <index> ...', a triangle list.
+				if (k == kind::backing)
+				{
+					std::string tex;
+					size_t n = 0;
+					if (!(in >> tex >> n) || n == 0 || n % 3 != 0 || n > 196608)
+						continue;
+					e.backing.resize(n);
+					size_t got = 0;
+					for (unsigned v = 0; got < n && in >> v && v <= 0xFFFFu; got++)
+						e.backing[got] = static_cast<uint16_t>(v);
+					if (got != n)
+						continue;
+				}
 				// A no-shadow mesh may name prims of its draw that no view shows: 'hide <first> <last>'.
 				if (std::string word; k == kind::no_shadow && in >> word && word == "hide")
 				{
@@ -131,6 +146,7 @@ namespace comp::game::mesh_tables
 			g_loaded = true;
 			load_table_locked("sky_meshes.txt", kind::sky, "sky mesh", "sky layers stay world geometry");
 			load_table_locked("shell_meshes.txt", kind::shell, "blended shell", "blended shells stay decals");
+			load_table_locked("skirt_backing.txt", kind::backing, "backed skirt", "skirts over open air stay bare decals");
 			load_table_locked("glass_meshes.txt", kind::glass, "window glass", "window glass is not split");
 			// Before the thin walls: a face listed in both casts no shadow at all.
 			load_table_locked("no_shadow_meshes.txt", kind::no_shadow, "no-shadow", "every map mesh casts shadows");
@@ -173,7 +189,7 @@ namespace comp::game::mesh_tables
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
-					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : "light emitter";
+					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : it->second.k == kind::backing ? "backed skirt" : "light emitter";
 				shared::common::log("MeshTables", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -276,6 +292,12 @@ namespace comp::game::mesh_tables
 	{
 		const match m = lookup(ib, type, start_index, prim_count);
 		return m.k == kind::ground ? &m.e->heights_mm : nullptr;
+	}
+
+	const std::vector<uint16_t>* skirt_backing_indices(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		const match m = lookup(ib, type, start_index, prim_count);
+		return m.k == kind::backing ? &m.e->backing : nullptr;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

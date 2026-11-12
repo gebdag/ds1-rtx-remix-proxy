@@ -401,6 +401,10 @@ namespace shared::common
 			// A shell marked 'gap' (a skirt bridging a trench, New Londo) is cut at this alpha reference (0..255) instead of 64,
 			// so the faded part over the trench stays solid. Live: proxy.Meshes.GapSkirtAlphaRef.
 			int gap_skirt_alpha_ref = 8;
+			// Skirts in rtx_comp\mesh_tables\skirt_backing.txt stay decals and get their hanging faces drawn once more as a solid
+			// cutout, at GapSkirtAlphaRef (game/mesh_tables.hpp skirt_backing_indices). 0: bare decals, the sky shows through the
+			// seam under them. Live: proxy.Meshes.SkirtBacking.
+			bool skirt_backing = true;
 			// Window glass (rtx_comp\mesh_tables\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.

@@ -215,6 +215,65 @@ namespace comp
 			ctx.save_rs(dev, state);
 	}
 
+	// The hanging faces of a backed skirt (mesh_tables::skirt_backing_indices) once more, as a solid cutout with the draw's
+	// own vertices and texture: the surface its decal lands on where nothing lies below it. Lighting rays pass it (the
+	// no-shadow marker): where the game shows the skirt's fade over the drop, nothing casts a shadow or shuts light out of
+	// the seam. The index buffers are made once per table entry and kept (managed pool: they outlive a device reset).
+	HRESULT draw_skirt_backing(IDirect3DDevice9* dev, const std::vector<uint16_t>& faces, IDirect3DIndexBuffer9* mesh_ib,
+		UINT min_vertex, UINT num_vertices)
+	{
+		static std::unordered_map<const std::vector<uint16_t>*, IDirect3DIndexBuffer9*> buffers;
+		auto it = buffers.find(&faces);
+		if (it == buffers.end())
+		{
+			IDirect3DIndexBuffer9* ib = nullptr;
+			const UINT bytes = static_cast<UINT>(faces.size() * sizeof(uint16_t));
+			if (SUCCEEDED(dev->CreateIndexBuffer(bytes, D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ib, nullptr)) && ib)
+			{
+				void* data = nullptr;
+				if (SUCCEEDED(ib->Lock(0, bytes, &data, 0)) && data)
+				{
+					std::memcpy(data, faces.data(), bytes);
+					ib->Unlock();
+				}
+				else
+				{
+					ib->Release();
+					ib = nullptr;
+				}
+			}
+			// A failure is kept too: no retry on every draw.
+			it = buffers.emplace(&faces, ib).first;
+		}
+		if (!it->second)
+			return S_OK;
+		// An index past the draw's vertex range would read outside the expanded buffer.
+		for (const uint16_t v : faces)
+			if (v < min_vertex || v >= min_vertex + num_vertices)
+				return S_OK;
+
+		const D3DRENDERSTATETYPE states[] = { D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_ALPHAFUNC, D3DRS_ALPHAREF, D3DRS_ZWRITEENABLE };
+		DWORD saved[std::size(states)]{};
+		for (size_t i = 0; i < std::size(states); i++)
+			dev->GetRenderState(states[i], &saved[i]);
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+		dev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+		dev->SetRenderState(D3DRS_ALPHAREF, static_cast<DWORD>(shared::common::config::get().meshes.gap_skirt_alpha_ref));
+		dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		DWORD stage4 = 0;
+		dev->GetTextureStageState(4, D3DTSS_CONSTANT, &stage4);
+		dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
+		dev->SetIndices(it->second);
+		const HRESULT hr = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, min_vertex, num_vertices, 0, static_cast<UINT>(faces.size() / 3));
+		dev->SetIndices(mesh_ib);
+		dev->SetTextureStageState(4, D3DTSS_CONSTANT, stage4);
+		for (size_t i = 0; i < std::size(states); i++)
+			dev->SetRenderState(states[i], saved[i]);
+		shared::common::ffp_prof::count_converted_draw();
+		return hr;
+	}
+
 	// A window glass draw (mesh_tables::glass_texture) with a derived glass texture: the derived
 	// texture, else null (the draw then goes through as before).
 	IDirect3DBaseTexture9* glass_split_texture(IDirect3DDevice9* dev, shared::common::ffp_state& ffp,
@@ -1033,6 +1092,17 @@ namespace comp
 					shared::common::ffp_prof::count_converted_draw();
 					if (base_decal || unlit_layer)
 						ffp.clear_decal_marker(dev);
+
+					// A skirt whose faces hang over open air: those faces once more, solid, under the decal just drawn.
+					if (base_decal && SUCCEEDED(hr) && mesh_cfg.skirt_backing)
+					{
+						if (const auto* faces = game::mesh_tables::skirt_backing_indices(mesh_ib, PrimitiveType, startIndex, primCount))
+						{
+							const auto backing_hr = draw_skirt_backing(dev, *faces, mesh_ib, MinVertexIndex, NumVertices);
+							if (FAILED(backing_hr))
+								hr = backing_hr;
+						}
+					}
 
 					if (glass_texture && SUCCEEDED(hr) &&
 						ffp.setup_glass_pass(dev, BaseVertexIndex, MinVertexIndex, NumVertices, glass_texture))

@@ -355,6 +355,10 @@ namespace comp
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] GapSkirtAlphaRef: shells marked 'gap' (New Londo skirts over trenches) are cut here, not at 64");
 
+			ImGui::Checkbox("Skirt Backing", &cfg.meshes.skirt_backing);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] SkirtBacking: skirts over open air (Valley of Drakes bank) get their hanging faces drawn solid under the decal");
+
 			ImGui::Checkbox("Thin Walls", &cfg.meshes.thin_walls);
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] ThinWalls: lighting rays pass a facing wall face within 0.5 m. Off to test light leaks");

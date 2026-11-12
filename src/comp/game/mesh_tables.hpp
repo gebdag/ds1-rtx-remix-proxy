@@ -77,6 +77,13 @@ namespace comp::game::mesh_tables
 	// they keep their shadows. Null for any other draw.
 	const std::vector<uint16_t>* ground_card_heights(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A blended skirt part of whose faces hang over open air (rtx_comp\mesh_tables\skirt_backing.txt, scripts/gen_sky_meshes.py
+	// skirt_backings): the Valley of Drakes' bank skirt m2750B0A16 mesh4 lies on the grass with half its faces and spans the
+	// seam to the cliff with the rest, nothing below those within a metre. It stays the decal the game blends; where it hangs
+	// the decal had no surface to land on and the sky showed through the seam. For a listed draw: the hanging faces as a
+	// triangle list over the draw's own vertices, which the renderer draws once more as a solid cutout. Null for any other draw.
+	const std::vector<uint16_t>* skirt_backing_indices(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }

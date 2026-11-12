@@ -23,6 +23,10 @@ the proxy draws as their own surfaces instead of decals. Outside SHELL_MAPS only
 solid_shell): terrain pieces the game draws blended but paints opaque, fading only at their vertex edges.
 In GAP_SKIRT_MAPS the gap skirts (see gap_skirts) are listed too, their lines ending in ' gap'.
 
+And assets/mesh_tables/skirt_backing.txt: in GAP_SKIRT_MAPS, the skirts part of whose faces hang over open air (see
+skirt_backings) and that a capture confirmed (BACKING_CONFIRMED). They stay decals; the proxy draws their hanging faces once more as a solid cutout, so the decal has a
+surface there. One line per face set: <index FNV-1a 64> <index count> <source> <texture> <n> <n indices of a triangle list>.
+
 Each listed mesh contributes one line per face set (every LOD the engine may draw):
   <FNV-1a 64 of the u16 index bytes, hex> <index count> <map>/<model>/mesh<i>/lod<j> <texture>
 The engine's index buffers hold the face set indices verbatim (checked against a RenderDoc capture),
@@ -80,6 +84,26 @@ GAP_DEPTH = 0.5          # the runtime's decal lift: a decal further than this o
 GAP_SHARE = 0.4
 GAP_POINTS = 6           # sample points per visible face
 GAP_MIN_POINTS = 100     # sample points with a surface below them, at least: a share of a few faces says little
+# Backed skirts (skirt_backings), same maps: a skirt whose vertices lie on surfaces like a gap skirt's, but whose faces
+# span open air, not a trench: nothing lies within the ground's reach (1 m) below them. As a decal it was dropped there
+# and showed the sky through the seam between the Valley of Drakes' bank and its cliff (m2750B0A16 mesh4,
+# frame_20261112_014436, _014452, _014500). Cut whole like a gap skirt, its other half, which lies on the grass and fades
+# into it, became a hard-edged sheet of rock. So it stays a decal and only its hanging faces are drawn again, solid.
+BACKING_OPEN_SHARE = 0.25  # of its face points over open air. m2750B0A16 mesh4: 31%, its far copy m0100B0A16 mesh6: 30%;
+#                            the next plain skirt has 13% (m2600B0A16 mesh8)
+BACKING_MAX_OPEN = 0.5     # ... and no more than this: a piece mostly in the open is no skirt lying on the ground but a
+#                            shell (solid_shell's to judge). m2750B0A16 mesh12, 81% in the open, fades over most of its body and
+#                            is in no capture: it stays a decal
+BACKING_POINTS = 24        # sample points per face for that share
+# Only the skirts seen wrong in a capture and right with their backing are listed; any other the rule finds is printed as a
+# candidate and stays a decal until it is seen. m0100B0A16 mesh6 (30% in the open) is such a candidate: a coarser copy of
+# part of the same bank, drawn in none of the captures.
+BACKING_CONFIRMED = {
+    ('m16_00_00_00', 'm2750B0A16', 4),   # frame_20261112_014436, _014452, _014500
+}
+BACKING_STEP = 0.05        # m between the points that decide which faces hang: a face with one such point hanging is backed.
+#                            The seam is a slit a few centimetres wide across faces up to 5 m long; 24 points a face missed it
+#                            in places (frame_20261112_014500 kept two slivers)
 MIN_SKY_LAYER = 150.0
 MIN_BACKDROP = 1000.0
 
@@ -341,6 +365,78 @@ def gap_skirts(map_id, flvers, in_sky, skip):
     return out
 
 
+def strip_triangles(fs):
+    """A face set's triangles as index triples in the winding Direct3D draws them (a strip's odd triangles are turned)."""
+    idx = np.asarray(fs.indices, dtype=np.int64)
+    if not fs.triangle_strip:
+        return idx[: len(idx) // 3 * 3].reshape(-1, 3)
+    if len(idx) < 3:
+        return np.zeros((0, 3), dtype=np.int64)
+    t = np.stack([idx[:-2], idx[1:-1], idx[2:]], 1)
+    t[1::2] = t[1::2][:, [1, 0, 2]]
+    return t[(t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])]
+
+
+def skirt_backings(map_id, flvers, in_sky, skip):
+    """(model, mesh index, mesh, diffuse, share over open air, [hanging triangles per face set]) of the map's backed skirts
+    (see BACKING_OPEN_SHARE): gap skirt candidates (plain straight-alpha map meshes with the map's own textures, not in
+    skip) between BACKING_OPEN_SHARE and BACKING_MAX_OPEN of whose points inside visible faces have no opaque surface within
+    the ground's reach below them. A face hangs when a point of its BACKING_STEP lattice has no surface within GAP_DEPTH below it, the runtime's
+    decal lift."""
+    from gen_ground_cards import Ground
+    opaque, cands = [], []
+    for model, flver, names, sizes, layers in flvers:
+        for i, mesh in enumerate(flver.meshes):
+            mtd = os.path.basename(flver.materials[mesh.material_index].mtd).lower()
+            if '_alp' in mtd:
+                if ((map_id, model, i) not in in_sky and (model, i) not in skip and not ATMOSPHERIC_NAME.search(names[i])
+                        and SOLID_MTD.search(mtd) and names[i][:3] == map_id[:3]):
+                    cands.append((model, i, mesh, names[i]))
+            elif '_add' not in mtd and 'water' not in mtd:
+                opaque.append(mesh_triangles(mesh))
+    if not cands or not opaque:
+        return []
+    ground = Ground(np.concatenate(opaque))
+    out = []
+    for model, i, mesh, name in cands:
+        p = np.asarray(positions(mesh), dtype=np.float64)[:, :3]
+        a = mesh_alpha(mesh)
+        if a is None:
+            continue
+        def faces(fs):
+            t = strip_triangles(fs)
+            t = t[((t >= 0) & (t < len(p))).all(1)]
+            return t[a[t].max(1) > 0.0]   # a face at alpha 0 throughout draws nothing
+
+        t = faces(mesh.face_sets[0])
+        t = t[a[t].max(1) > 0.25]
+        # As many visible faces as a gap skirt needs (GAP_MIN_POINTS at GAP_POINTS a face): m0200B0A16 mesh3, six faces, is none.
+        if len(t) * GAP_POINTS < GAP_MIN_POINTS:
+            continue
+        w = np.random.default_rng(0).dirichlet((1, 1, 1), size=(len(t), BACKING_POINTS))
+        q = (w[..., None] * p[t][:, None, :, :]).sum(2).reshape(-1, 3)
+        share = float(np.mean([ground.below(v) is None for v in q]))
+        if share < BACKING_OPEN_SHARE or share > BACKING_MAX_OPEN:
+            continue
+        sets = []
+        for fs in mesh.face_sets:
+            t = faces(fs)
+            hang = np.zeros(len(t), dtype=bool)
+            for f, (va, vb, vc) in enumerate(p[t]):
+                n = max(1, int(np.ceil(max(np.linalg.norm(vb - va), np.linalg.norm(vc - va), np.linalg.norm(vc - vb)) / BACKING_STEP)))
+                for iu in range(n + 1):
+                    for iv in range(n + 1 - iu):
+                        d = ground.below(va + (vb - va) * (iu / n) + (vc - va) * (iv / n))
+                        if d is None or d > GAP_DEPTH:
+                            hang[f] = True
+                            break
+                    if hang[f]:
+                        break
+            sets.append(t[hang])
+        out.append((model, i, mesh, name, share, sets))
+    return out
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
@@ -365,6 +461,7 @@ def main():
     # too (m12_01 m1780B1A12 mesh11 lod0 = m12_00 m1501B0A12 mesh22 lod0, a Darkroot edge strip).
     keys = {}
     solid = []
+    backing_lines = []
 
     def add(map_id, model, i, mesh, name, out=lines):
         if out is lines:
@@ -445,6 +542,20 @@ def main():
                 start = len(solid)
                 add(map_id, model, i, mesh, name, solid)
                 solid[start:] = [l + ' gap' for l in solid[start:]]
+            gaps = {(l.split()[2].split('/')[1], int(l.split()[2].split('/')[2][4:])) for l in solid if l.endswith(' gap')}
+            for model, i, mesh, name, share, sets in skirt_backings(map_id, flvers, in_sky, shelled | off_surface | gaps):
+                if (map_id, model, i) not in BACKING_CONFIRMED:
+                    print(f'backed skirt candidate, not listed (in no capture): {map_id}/{model}/mesh{i} {name}: '
+                          f'{share:.0%} of its face points over open air, {len(sets[0])} of its faces hang')
+                    continue
+                print(f'backed skirt {map_id}/{model}/mesh{i} {name}: {share:.0%} of its face points over open air, '
+                      f'{len(sets[0])} of its faces hang')
+                for j, (fs, tris) in enumerate(zip(mesh.face_sets, sets)):
+                    if not len(tris):
+                        continue
+                    idx = np.asarray(fs.indices, dtype='<u2')
+                    backing_lines.append(f'{fnv1a64(idx.tobytes()):016x} {len(idx)} {map_id}/{model}/mesh{i}/lod{j} {name} '
+                                         f'{tris.size} ' + ' '.join(str(int(v)) for v in tris.reshape(-1)))
 
     for line in solid:
         key, count, source = line.split()[:3]
@@ -470,6 +581,26 @@ def main():
         f.write('# Generated by scripts/gen_sky_meshes.py; do not edit by hand.\n')
         f.writelines(line + '\n' for line in shell_lines)
     print(f'{len(shell_lines)} blended shell face sets -> {shells_out}')
+
+    # Backed skirts: a face set another mesh shares, or one listed as a shell or sky mesh, is left out (the proxy knows a
+    # draw by its indices alone). Two face sets of one mesh with the same indices give one line.
+    listed = {tuple(l.split()[:2]) for l in shell_lines + lines}
+    kept, seen = [], set()
+    for line in backing_lines:
+        key, count, source = line.split()[:3]
+        others = keys.get((int(key, 16), int(count)), set()) - {source.rsplit('/', 1)[0]}
+        if others or (key, count) in listed:
+            print(f'backed skirt {source} dropped: its indices are also {", ".join(sorted(others)) or "a listed shell or sky mesh"}')
+        elif (key, count) not in seen:
+            seen.add((key, count))
+            kept.append(line)
+    backing_out = os.path.join(os.path.dirname(os.path.abspath(args.out)), 'skirt_backing.txt')
+    with open(backing_out, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('# Dark Souls backed skirts (blended skirts whose faces hang over open air): <index FNV-1a 64> <index count> '
+                '<source> <diffuse> <n> <n indices: the hanging faces as a triangle list>\n')
+        f.write('# Generated by scripts/gen_sky_meshes.py; do not edit by hand.\n')
+        f.writelines(line + '\n' for line in kept)
+    print(f'{len(kept)} backed skirt face sets -> {backing_out}')
 
 
 if __name__ == '__main__':
