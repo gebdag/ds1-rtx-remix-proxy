@@ -15,3 +15,4 @@ lookdev/obj/
 
 # NuGet restore output (Microsoft.DXSDK.D3DX) -- restored by the build
 deps/packages/
+scripts/collision/out/
