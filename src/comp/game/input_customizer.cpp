@@ -16,10 +16,15 @@
 // window as large as the screen reaches under the taskbar, so the hidden cursor could slide onto
 // the taskbar and the camera spun. The pump narrows the mod's clip to the monitor's work area.
 //
-// F4 menu: the mod reads all of its input (camera mouse motion, bound keys and buttons) through
-// its own import of GetRawInputData while messages are retrieved, before any window procedure
-// runs, so the menu's WndProc block does not reach it. Its import is redirected so that presses
-// and motion are dropped while the menu holds input; releases still pass, so nothing sticks.
+// F4 menu: the mod reads all of its input (camera mouse motion, bound keys and buttons) from raw
+// input, which the menu's WndProc block does not reach, so presses and motion are dropped while the
+// menu holds input; releases still pass, so nothing sticks. v1.1 reads it through its own import of
+// GetRawInputData while messages are retrieved: that import is redirected, and DirectInput and the
+// bridge keep the real data. The 1.2.0 preview has no such import: it hooks win32u's
+// NtUserGetRawInputData (user32's GetRawInputData before Windows 10) with MinHook and reads every
+// caller's input inside its hook. The proxy hooks win32u's first, in its DllMain, so the mod's
+// hook, laid over the proxy's, reads what the proxy lets through. Everyone's input is held while the
+// menu is open then, which the menu wants anyway. If the mod hooked first, there is no gate.
 //
 // The Remix UI (Alt+X) is not covered: the proxy cannot see it, and the bridge's own raw input
 // filter drops button releases too and leaves keys alone for DirectInput games.
@@ -45,7 +50,7 @@ namespace comp::game::input_customizer
 			|| shared::globals::input_frozen || shared::globals::remix_menu_open;
 	}
 
-	// Only the mod's own import comes here; DirectInput and the bridge keep the real data.
+	// v1.1: only the mod's own import comes here. The preview: every raw input read, under the mod's hook.
 	static UINT WINAPI hooked_get_raw_input_data(HRAWINPUT raw, UINT command, LPVOID data, PUINT size, UINT header_size)
 	{
 		const UINT res = orig_get_raw_input_data_(raw, command, data, size, header_size);
@@ -76,9 +81,9 @@ namespace comp::game::input_customizer
 	// ClipCursor(nullptr) for real would release any clip, other programs' included, so the pump
 	// only calls it while the mod's detour (a jmp into its image at the top of ClipCursor) is in place.
 	// The mod hooks some time after the game window exists, so this is checked on every tick.
-	static bool mod_hooks_clip_cursor()
+	// Whether a function starts with a jmp into the mod's image: the mod's MinHook detour.
+	static bool jumps_into_mod(const BYTE* code)
 	{
-		static const auto* code = reinterpret_cast<const BYTE*>(GetProcAddress(GetModuleHandleA("user32.dll"), "ClipCursor"));
 		if (!code || code[0] != 0xE9)
 			return false;
 
@@ -86,6 +91,26 @@ namespace comp::game::input_customizer
 		const auto base = reinterpret_cast<std::uintptr_t>(mod_);
 		const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(mod_)->e_lfanew);
 		return target >= base && target < base + nt->OptionalHeader.SizeOfImage;
+	}
+
+	static bool mod_hooks_clip_cursor()
+	{
+		static const auto* code = reinterpret_cast<const BYTE*>(GetProcAddress(GetModuleHandleA("user32.dll"), "ClipCursor"));
+		return jumps_into_mod(code);
+	}
+
+	// The preview's raw input hook point: win32u's NtUserGetRawInputData, or user32's GetRawInputData where win32u has none.
+	// win32u's lies under user32's, so a hook there is under the mod's either way.
+	static bool gate_under_mod_hook()
+	{
+		auto* target = reinterpret_cast<BYTE*>(GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserGetRawInputData"));
+		if (!target)
+			target = reinterpret_cast<BYTE*>(GetProcAddress(GetModuleHandleA("user32.dll"), "GetRawInputData"));
+		if (!target || jumps_into_mod(target))
+			return false;
+
+		return MH_CreateHook(target, &hooked_get_raw_input_data, reinterpret_cast<void**>(&orig_get_raw_input_data_)) == MH_OK
+			&& MH_EnableHook(target) == MH_OK;
 	}
 
 	// Keeps the mod's clip off the taskbar and anything else outside the monitor's work area.
@@ -154,10 +179,16 @@ namespace comp::game::input_customizer
 			VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), PAGE_READWRITE, &old_protect);
 			thunk->u1.Function = reinterpret_cast<DWORD>(&hooked_get_raw_input_data);
 			VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), old_protect, &old_protect);
+			shared::common::log("InputCustomizer", "Dark Souls Input Customizer v1.1 found; its input is held while the F4 menu is open.");
+			return;
 		}
 
-		shared::common::log("InputCustomizer", std::format("Dark Souls Input Customizer found; F4 menu input gate {}.",
-			orig_get_raw_input_data_ ? "on" : "NOT installed (GetRawInputData import not found)"));
+		if (gate_under_mod_hook())
+			shared::common::log("InputCustomizer", "Dark Souls Input Customizer 1.2.0 preview found; raw input is held while the F4 menu is open.");
+		else
+			shared::common::log("InputCustomizer", "Dark Souls Input Customizer found (no GetRawInputData import, and its raw input hook was "
+				"in before the proxy's). The F4 menu opens, but the mod still moves the camera while it is open.",
+				shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 	}
 
 	void on_window_message(HWND window)

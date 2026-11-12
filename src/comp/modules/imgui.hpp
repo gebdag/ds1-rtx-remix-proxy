@@ -12,6 +12,8 @@ namespace comp
 		static imgui* get() { return p_this; }
 
 		static void on_present();
+		static void poll_hotkeys();
+		static void on_hotkey(int key);
 
 		void devgui();
 		void theme();

@@ -71,22 +71,58 @@ namespace comp
 		return CallWindowProc(g_game_wndproc, window, message_type, wparam, lparam);
 	}
 
+	// The function-key hotkeys are read from the key state once a frame, not from window messages: an input mod can take the
+	// keyboard away from the window (raw input without legacy key messages), and the F4 menu then never opened. Each acts when
+	// its key is released, as the WM_KEYUP it replaces did, with the game window in front and Alt up (Alt+F4 closes the game).
+	void imgui::poll_hotkeys()
+	{
+		static constexpr int keys[] = { VK_F1, VK_F4, VK_F6, VK_F7, VK_F8 };
+		static bool was_down[std::size(keys)] = {};
+		const bool in_front = GetForegroundWindow() == shared::globals::main_window;
+		const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+		for (size_t i = 0; i < std::size(keys); i++)
+		{
+			const bool down = in_front && (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
+			if (was_down[i] && !down && in_front && !alt)
+				on_hotkey(keys[i]);
+			was_down[i] = down;
+		}
+	}
+
+	void imgui::on_hotkey(const int key)
+	{
+		switch (key)
+		{
+		case VK_F4:
+			// Not while the right mouse button hands input to the game with the menu open.
+			if (!(GetAsyncKeyState(VK_RBUTTON) & 0x8000))
+				shared::globals::imgui_menu_open = !shared::globals::imgui_menu_open;
+			break;
+		case VK_F6:
+			// The light dump (game::light_dump), every frame's light data to a file until F6 again.
+			game::light_dump::toggle();
+			break;
+		case VK_F7:
+			// The game's time stopped and restarted, for capturing a frame of a cutscene.
+			if (!shared::globals::lookdev_host)
+				game::cutscenes::toggle_freeze();
+			break;
+		case VK_F1:
+			// DLSS 3D-Guided Neural Rendering on/off.
+			game::dlss_nr::request_toggle();
+			break;
+		case VK_F8:
+			// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.
+			if (!shared::common::config::get().lookdev.enabled)
+				game::vanilla_view::request_toggle();
+			break;
+		default:
+			break;
+		}
+	}
+
 	bool imgui::input_message(const UINT message_type, const WPARAM wparam, const LPARAM lparam)
 	{
-		if (message_type == WM_KEYUP && wparam == VK_F4) 
-		{
-			const auto& io = ImGui::GetIO();
-			if (!io.MouseDown[1]) {
-				shared::globals::imgui_menu_open = !shared::globals::imgui_menu_open;
-			} else {
-				ImGui_ImplWin32_WndProcHandler(shared::globals::main_window, message_type, wparam, lparam);
-			}
-		}
-
-		// F6: the light dump (game::light_dump), every frame's light data to a file until F6 again.
-		if (message_type == WM_KEYUP && wparam == VK_F6)
-			game::light_dump::toggle();
-
 		// Ctrl + mouse wheel scales the UI (apply_menu_scale) and scrolls nothing.
 		if (message_type == WM_MOUSEWHEEL && shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass &&
 			(GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) && m_menu_scale > 0.0f)
@@ -95,18 +131,6 @@ namespace comp
 			m_menu_scale = std::clamp(std::round((m_menu_scale + notches * 0.1f) * 10.0f) / 10.0f, 0.5f, 3.0f);
 			return true;
 		}
-
-		// The game's time stopped and restarted, for capturing a frame of a cutscene.
-		if (message_type == WM_KEYUP && wparam == VK_F7 && !shared::globals::lookdev_host)
-			game::cutscenes::toggle_freeze();
-
-		// DLSS 3D-Guided Neural Rendering on/off.
-		if (message_type == WM_KEYUP && wparam == VK_F1)
-			game::dlss_nr::request_toggle();
-
-		// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.
-		if (message_type == WM_KEYUP && wparam == VK_F8 && !shared::common::config::get().lookdev.enabled)
-			game::vanilla_view::request_toggle();
 
 		if (shared::globals::imgui_menu_open)
 		{
@@ -1148,6 +1172,8 @@ namespace comp
 
 	void imgui::on_present()
 	{
+		poll_hotkeys();
+
 		// A capture file's reference image holds only what the game and the proxy
 		// rendered; and ImGui's own device calls never go into a capture or stream.
 		if (lookdev_capture::writing_file())
