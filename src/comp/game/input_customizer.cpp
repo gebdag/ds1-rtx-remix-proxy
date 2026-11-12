@@ -30,6 +30,7 @@
 // filter drops button releases too and leaves keys alone for DirectInput games.
 #include "std_include.hpp"
 #include "input_customizer.hpp"
+#include "input_trace.hpp"
 
 namespace comp::game::input_customizer
 {
@@ -54,25 +55,32 @@ namespace comp::game::input_customizer
 	static UINT WINAPI hooked_get_raw_input_data(HRAWINPUT raw, UINT command, LPVOID data, PUINT size, UINT header_size)
 	{
 		const UINT res = orig_get_raw_input_data_(raw, command, data, size, header_size);
-		if (command != RID_INPUT || !data || res == static_cast<UINT>(-1) || res < sizeof(RAWINPUTHEADER) || !menu_holds_input())
+		if (command != RID_INPUT || !data || res == static_cast<UINT>(-1) || res < sizeof(RAWINPUTHEADER))
 			return res;
 
+		const bool hold = menu_holds_input();
 		auto* input = static_cast<RAWINPUT*>(data);
 		if (input->header.dwType == RIM_TYPEMOUSE && res >= offsetof(RAWINPUT, data) + sizeof(RAWMOUSE))
 		{
-			constexpr USHORT releases = RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP | RI_MOUSE_MIDDLE_BUTTON_UP
-				| RI_MOUSE_BUTTON_4_UP | RI_MOUSE_BUTTON_5_UP;
+			input_trace::on_raw_mouse(input->data.mouse.lLastX, input->data.mouse.lLastY, input->data.mouse.usButtonFlags, hold);
+			if (hold)
+			{
+				constexpr USHORT releases = RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP | RI_MOUSE_MIDDLE_BUTTON_UP
+					| RI_MOUSE_BUTTON_4_UP | RI_MOUSE_BUTTON_5_UP;
 
-			// The mod takes lLastX/Y as deltas even in absolute mode, so zero both kinds.
-			input->data.mouse.lLastX = 0;
-			input->data.mouse.lLastY = 0;
-			input->data.mouse.usButtonFlags &= releases;
-			input->data.mouse.usButtonData = 0;
+				// The mod takes lLastX/Y as deltas even in absolute mode, so zero both kinds.
+				input->data.mouse.lLastX = 0;
+				input->data.mouse.lLastY = 0;
+				input->data.mouse.usButtonFlags &= releases;
+				input->data.mouse.usButtonData = 0;
+			}
 		}
-		else if (input->header.dwType == RIM_TYPEKEYBOARD && res >= offsetof(RAWINPUT, data) + sizeof(RAWKEYBOARD)
-			&& !(input->data.keyboard.Flags & RI_KEY_BREAK))
+		else if (input->header.dwType == RIM_TYPEKEYBOARD && res >= offsetof(RAWINPUT, data) + sizeof(RAWKEYBOARD))
 		{
-			return static_cast<UINT>(-1); // the mod skips reads that fail
+			const bool press = !(input->data.keyboard.Flags & RI_KEY_BREAK);
+			input_trace::on_raw_keyboard(press, hold && press);
+			if (hold && press)
+				return static_cast<UINT>(-1); // the mod skips reads that fail
 		}
 
 		return res;

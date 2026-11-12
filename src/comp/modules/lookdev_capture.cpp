@@ -16,6 +16,7 @@
 #include "../game/fx_draw_owner.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/vanilla_view.hpp"
+#include "../game/input_trace.hpp"
 
 #include "shared/common/dinput_hook_v2.hpp"
 #include <Xinput.h>
@@ -1966,10 +1967,11 @@ namespace comp
 		// user32 key and cursor queries, and XInput. Only calls from the game's own
 		// code are blocked, so the proxy's key polling and ImGui keep working.
 		//
-		// In the game the same hooks hold the game's keyboard and DirectInput reads while the F4 menu (or the Remix menu)
-		// holds input: dinput_v2 only cleared the wide GetDeviceState, and the game reads the ANSI one (its keyboard, and
-		// likely its mouse, which shares the method) and user32 GetKeyboardState, so keys typed into an F4 text field reached
-		// it (2026-11-11 log). The cursor and the pad are left alone for the menu.
+		// In the game the same hooks hold the game's keyboard and mouse while the F4 menu (or the Remix menu) holds input:
+		// user32 GetKeyboardState, and DirectInput keyboard and mouse reads (dinput_v2 only clears the wide GetDeviceState,
+		// and the game may read the ANSI one). The cursor and the pad are left alone for the menu. That includes the game's
+		// DirectInput joystick (it carries the DIJOYSTATE format): an all-zero DIJOYSTATE is both sticks pushed fully up and
+		// left, so clearing it walked the character forward and left for as long as a menu was open.
 
 		POINT s_frozen_cursor {};
 		uintptr_t s_game_lo = 0, s_game_hi = 0;
@@ -2027,7 +2029,12 @@ namespace comp
 		BOOL WINAPI get_keyboard_state_hk(PBYTE keys)
 		{
 			const BOOL r = s_get_keyboard_state_og(keys);
-			if (r && keys && block_for_game(_ReturnAddress(), 2, "GetKeyboardState"))
+			if (!r || !keys)
+				return r;
+			const bool held = block_for_game(_ReturnAddress(), 2, "GetKeyboardState");
+			if (from_game(_ReturnAddress()))
+				game::input_trace::on_keyboard_state(keys, held);
+			if (held)
 				std::memset(keys, 0, 256);
 			return r;
 		}
@@ -2052,23 +2059,47 @@ namespace comp
 				state->dwPacketNumber ^= 0x40000000u;
 				std::memset(&state->Gamepad, 0, sizeof(state->Gamepad));
 			}
+			game::input_trace::on_xinput(from_game(_ReturnAddress()), user, r, state);
 			return r;
+		}
+
+		// Keyboard and mouse states are held by a menu, by their size; a joystick's never is (see above).
+		bool is_keyboard_or_mouse_state(DWORD size)
+		{
+			return size == 256 || size == sizeof(DIMOUSESTATE) || size == sizeof(DIMOUSESTATE2);
 		}
 
 		HRESULT __stdcall di_get_state_hk(IDirectInputDevice8A* dev, DWORD size, LPVOID data)
 		{
 			const HRESULT hr = s_di_get_state_og(dev, size, data);
-			if (SUCCEEDED(hr) && data && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)"))
+			if (FAILED(hr) || !data)
+				return hr;
+			const bool held = is_keyboard_or_mouse_state(size) && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)");
+			game::input_trace::on_di_state(from_game(_ReturnAddress()), size, held);
+			if (held)
 				std::memset(data, 0, size);
 			return hr;
 		}
 
-		// Buffered input: drained as usual, then reported empty.
+		// A DirectInput device's kind, asked once per device: buffered reads carry no size that tells.
+		bool is_keyboard_or_mouse_device(IDirectInputDevice8A* dev)
+		{
+			static std::mutex lock;
+			static std::unordered_map<void*, bool> kinds;
+			std::lock_guard guard(lock);
+			if (const auto it = kinds.find(dev); it != kinds.end())
+				return it->second;
+			DIDEVCAPS caps { sizeof(DIDEVCAPS) };
+			const BYTE type = SUCCEEDED(dev->GetCapabilities(&caps)) ? GET_DIDEVICE_TYPE(caps.dwDevType) : 0;
+			return kinds[dev] = type == DI8DEVTYPE_KEYBOARD || type == DI8DEVTYPE_MOUSE;
+		}
+
+		// Buffered keyboard and mouse input: drained as usual, then reported empty while a menu holds it.
 		template <int Slot>
 		HRESULT __stdcall di_get_data_hk(IDirectInputDevice8A* dev, DWORD object_size, LPDIDEVICEOBJECTDATA data, LPDWORD count, DWORD flags)
 		{
 			const HRESULT hr = s_di_get_data_og[Slot](dev, object_size, data, count, flags);
-			if (SUCCEEDED(hr) && count && block_for_game(_ReturnAddress(), 6 + Slot, "DirectInput GetDeviceData"))
+			if (SUCCEEDED(hr) && count && is_keyboard_or_mouse_device(dev) && block_for_game(_ReturnAddress(), 6 + Slot, "DirectInput GetDeviceData"))
 				*count = 0;
 			return hr;
 		}

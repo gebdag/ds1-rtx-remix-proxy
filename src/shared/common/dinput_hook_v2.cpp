@@ -27,6 +27,8 @@
 #include "dinput_hook_v2.hpp"
 
 #include "comp/modules/imgui.hpp"
+#include "comp/game/input_trace.hpp"
+#include <intrin.h>
 
 namespace shared::common
 {
@@ -239,8 +241,13 @@ namespace shared::common
 		}
 
 		// ImGui was fed above. The game sees no keys or mouse while the lookdev freezes input, a menu is open (typing
-		// in an F4 text field too) or the right mouse button has not handed input back to it.
-		if (shared::globals::input_frozen || shared::globals::remix_menu_open || (shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass)) {
+		// in an F4 text field too) or the right mouse button has not handed input back to it. A joystick's state is never
+		// cleared: all zeros is both sticks pushed fully up and left, which walked the character while a menu was open.
+		const bool keyboard_or_mouse = cbData == 256 || cbData == sizeof(DIMOUSESTATE) || cbData == sizeof(DIMOUSESTATE2);
+		const bool held = keyboard_or_mouse && SUCCEEDED(hr) && lpvData
+			&& (shared::globals::input_frozen || shared::globals::remix_menu_open || (shared::globals::imgui_menu_open && !shared::globals::imgui_allow_input_bypass));
+		comp::game::input_trace::on_di_state(comp::game::input_trace::is_game_address(_ReturnAddress()), cbData, held);
+		if (held) {
 			memset(lpvData, 0, cbData);
 		}
 

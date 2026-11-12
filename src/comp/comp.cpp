@@ -31,6 +31,7 @@
 #include "game/effect_lights.hpp"
 #include "game/ffx_lights.hpp"
 #include "game/texture_names.hpp"
+#include "game/input_trace.hpp"
 
 namespace comp
 {
@@ -70,6 +71,7 @@ namespace comp
 	void on_begin_scene_cb()
 	{
 		read_remix_menu_state();
+		game::input_trace::flush();
 		if (!tex_addons::initialized) {
 			tex_addons::init_texture_addons();
 		}
