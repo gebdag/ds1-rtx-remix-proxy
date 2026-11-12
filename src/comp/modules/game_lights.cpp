@@ -2054,6 +2054,10 @@ namespace comp
 			if (game::custom_lights::dirty() && !save_skip_.count("custom:" + map_name))
 				ok &= game::custom_lights::save();
 		}
+		// Custom lights of maps left with unsaved changes (kept for them across a map boundary).
+		for (const auto& [kept_map, count] : game::custom_lights::kept())
+			if (!save_skip_.count("custom:" + kept_map))
+				ok &= game::custom_lights::save_kept(kept_map);
 
 		saved_overrides_.clear();
 		for (const auto& [key, o] : written)
@@ -2563,6 +2567,13 @@ namespace comp
 				items.push_back({ "custom:" + map_name, std::format("Custom lights of {}", map_name), "changed",
 					static_cast<int>(reverts.size()) - 1 });
 			}
+		}
+		for (const auto& [kept_map, count] : game::custom_lights::kept())
+		{
+			const std::string m = kept_map;
+			reverts.push_back([m]() { game::custom_lights::discard_kept(m); });
+			items.push_back({ "custom:" + m, std::format("Custom lights of {} (a map you left)", m),
+				std::format("{} light(s), changed", count), static_cast<int>(reverts.size()) - 1 });
 		}
 
 		// Ticks of items that no longer differ are forgotten.
@@ -3352,6 +3363,10 @@ namespace comp
 			ImGui::SameLine();
 			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "unsaved changes");
 		}
+		// Maps left with unsaved lights: kept for them, back when you are, or written by Save at the top from here.
+		for (const auto& [kept_map, count] : game::custom_lights::kept())
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s: %d light(s) with unsaved changes, kept until you are back there (Save at the top writes them now)",
+				kept_map.c_str(), static_cast<int>(count));
 
 		float cam[3] = {}, right[3] = {}, forward[3] = {};
 		const bool have_cam = shared::common::ffp_state::get().world_offset(cam[0], cam[1], cam[2]);

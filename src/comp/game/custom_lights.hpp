@@ -57,7 +57,13 @@ namespace comp::game::custom_lights
 	const std::vector<point_lights::light>& get();
 
 	bool save();
+	// Throws away the current map's unsaved changes and reads its file again.
 	void reload();
+	// Maps left with unsaved changes, kept in memory until the player is back in them (or they are saved or thrown away
+	// below): map, light count. Crossing a map boundary does not lose placed lights.
+	std::vector<std::pair<std::string, size_t>> kept();
+	bool save_kept(const std::string& map);
+	void discard_kept(const std::string& map);
 	// Goes up each time the lights are read from a file (a map change, a reload): indices into edit() from before are stale.
 	unsigned int generation();
 	// The light as the file has it (when it was last read or saved), nullptr for one added since.

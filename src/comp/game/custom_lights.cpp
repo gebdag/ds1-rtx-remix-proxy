@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <map>
 #include <sstream>
 
 namespace comp::game::custom_lights
@@ -22,6 +23,21 @@ namespace comp::game::custom_lights
 		unsigned int g_generation = 0;
 		bool g_dirty = false;
 		std::vector<light> g_saved; // the file's lights, by file_index
+
+		// A map left with unsaved edits keeps them here until the player is back in it (or Save writes them, or they are
+		// thrown away): crossing a map boundary that is easy to reach (Undead Parish to Firelink Shrine's lift) used to drop
+		// lights placed and not yet saved (2026-11-12, three lights lost).
+		struct kept_map
+		{
+			std::vector<light> lights, saved;
+			std::string path;
+		};
+		std::map<std::string, kept_map> g_kept;
+
+		std::string file_path(const std::string& map)
+		{
+			return shared::globals::root_path + "\\rtx_comp\\lights\\" + map + ".custom.txt";
+		}
 
 		void remember_saved()
 		{
@@ -80,21 +96,23 @@ namespace comp::game::custom_lights
 			return true;
 		}
 
-		void load()
+		// The game thread writes the map id: callers read the name once and pass it, so the g_kept lookup and the load
+		// agree on the map.
+		void load(const std::string& map)
 		{
 			g_lights.clear();
 			g_saved.clear();
 			g_dirty = false;
 			g_loaded = true;
 			++g_generation;
-			g_map = map_lights::current_map_name();
+			g_map = map;
 			if (g_map.empty())
 			{
 				g_path.clear();
 				g_status = "no map loaded";
 				return;
 			}
-			g_path = shared::globals::root_path + "\\rtx_comp\\lights\\" + g_map + ".custom.txt";
+			g_path = file_path(g_map);
 			std::ifstream file(g_path);
 			if (!file)
 			{
@@ -122,9 +140,64 @@ namespace comp::game::custom_lights
 
 		void ensure_current()
 		{
-			// A map change drops unsaved edits of the old map: they belong to its file, not the new one's.
-			if (!g_loaded || map_lights::current_map_name() != g_map)
-				load();
+			const std::string map = map_lights::current_map_name(); // once: the game thread writes it
+			if (g_loaded && map == g_map)
+				return;
+			// Leaving a map with unsaved edits: they are kept for it, not dropped (they belong to its file, not the new one's).
+			if (g_loaded && g_dirty && !g_map.empty())
+			{
+				g_kept[g_map] = { g_lights, g_saved, g_path };
+				shared::common::log("CustomLights", std::format("{}: {} light(s) with unsaved changes kept until you are back or save",
+					g_map, g_lights.size()));
+			}
+			const auto it = g_kept.find(map);
+			if (map.empty() || it == g_kept.end())
+			{
+				load(map);
+				return;
+			}
+			// Back in a map left with unsaved edits: those, not the file.
+			g_lights = std::move(it->second.lights);
+			g_saved = std::move(it->second.saved);
+			g_path = std::move(it->second.path);
+			g_kept.erase(it);
+			g_map = map;
+			g_dirty = true;
+			g_loaded = true;
+			++g_generation;
+			g_status = std::format("{} light(s), unsaved changes kept from before", g_lights.size());
+			shared::common::log("CustomLights", std::format("{}: {}", map, g_status));
+		}
+
+		bool write_file(const std::string& path, const std::string& map, const std::vector<light>& lights)
+		{
+			std::ofstream file(path, std::ios::trunc);
+			if (!file)
+				return false;
+			file << "# Hand-placed lights for " << map << " (F4 > Lights > Custom lights writes this file).\n"
+				<< "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]\n"
+				<< "#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]\n"
+				<< "# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).\n";
+			for (const auto& l : lights)
+			{
+				auto byte = [](float v) { return static_cast<int>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
+				std::string name = l.name.empty() ? "light" : l.name;
+				std::replace(name.begin(), name.end(), ' ', '_');
+				file << std::format("{:.3f} {:.3f} {:.3f}  {:.3f} {:.3f}  {} {} {}  {:.0f}  {}", l.pos[0], l.pos[1], l.pos[2],
+					l.dwindle_begin, l.dwindle_end, byte(l.colour[0]), byte(l.colour[1]), byte(l.colour[2]), l.intensity * 100.0f, name);
+				if (!l.game_falloff)
+					file << std::format("  remix {:.3f} {:.2f} {:.3f} {:.2f}", l.remix_intensity, l.exposure, l.radius, l.volumetric);
+				if (l.spot)
+					file << std::format("  spot {:.4f} {:.4f} {:.4f} {:.1f} {:.2f}", l.dir[0], l.dir[1], l.dir[2], l.cone_deg, l.softness);
+				if (l.spot && !l.game_falloff && l.focus > 0.0f)
+					file << std::format("  focus {:.2f}", l.focus);
+				if (!l.enabled)
+					file << "  off";
+				if (l.when)
+					file << (l.when == 1 ? "  dark" : "  light");
+				file << '\n';
+			}
+			return static_cast<bool>(file);
 		}
 	}
 
@@ -182,34 +255,10 @@ namespace comp::game::custom_lights
 		ensure_current();
 		if (g_path.empty())
 			return false;
-		std::ofstream file(g_path, std::ios::trunc);
-		if (!file)
+		if (!write_file(g_path, g_map, g_lights))
 		{
 			g_status = "could not write " + g_path;
 			return false;
-		}
-		file << "# Hand-placed lights for " << g_map << " (F4 > Lights > Custom lights writes this file).\n"
-			<< "# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]\n"
-			<< "#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]\n"
-			<< "# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).\n";
-		for (const auto& l : g_lights)
-		{
-			auto byte = [](float v) { return static_cast<int>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
-			std::string name = l.name.empty() ? "light" : l.name;
-			std::replace(name.begin(), name.end(), ' ', '_');
-			file << std::format("{:.3f} {:.3f} {:.3f}  {:.3f} {:.3f}  {} {} {}  {:.0f}  {}", l.pos[0], l.pos[1], l.pos[2],
-				l.dwindle_begin, l.dwindle_end, byte(l.colour[0]), byte(l.colour[1]), byte(l.colour[2]), l.intensity * 100.0f, name);
-			if (!l.game_falloff)
-				file << std::format("  remix {:.3f} {:.2f} {:.3f} {:.2f}", l.remix_intensity, l.exposure, l.radius, l.volumetric);
-			if (l.spot)
-				file << std::format("  spot {:.4f} {:.4f} {:.4f} {:.1f} {:.2f}", l.dir[0], l.dir[1], l.dir[2], l.cone_deg, l.softness);
-			if (l.spot && !l.game_falloff && l.focus > 0.0f)
-				file << std::format("  focus {:.2f}", l.focus);
-			if (!l.enabled)
-				file << "  off";
-			if (l.when)
-				file << (l.when == 1 ? "  dark" : "  light");
-			file << '\n';
 		}
 		g_dirty = false;
 		remember_saved();
@@ -217,7 +266,36 @@ namespace comp::game::custom_lights
 		return true;
 	}
 
-	void reload() { load(); }
+	void reload()
+	{
+		ensure_current(); // a map we are back in leaves g_kept first, so the reload below drops it for good
+		load(g_map);
+	}
+
+	std::vector<std::pair<std::string, size_t>> kept()
+	{
+		std::vector<std::pair<std::string, size_t>> out;
+		for (const auto& [map, k] : g_kept)
+			out.emplace_back(map, k.lights.size());
+		return out;
+	}
+
+	bool save_kept(const std::string& map)
+	{
+		const auto it = g_kept.find(map);
+		if (it == g_kept.end())
+			return true;
+		if (!write_file(it->second.path, map, it->second.lights))
+		{
+			shared::common::log("CustomLights", "could not write " + it->second.path, shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+			return false;
+		}
+		shared::common::log("CustomLights", std::format("{}: {} light(s) saved from another map", map, it->second.lights.size()));
+		g_kept.erase(it);
+		return true;
+	}
+
+	void discard_kept(const std::string& map) { g_kept.erase(map); }
 	unsigned int generation() { ensure_current(); return g_generation; }
 
 	const light* saved(const light& l)
