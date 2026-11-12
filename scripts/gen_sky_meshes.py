@@ -113,6 +113,10 @@ SKIRTS_AS_SURFACES = set()
 # from either side (the proxy's backing marker): its faces lying against the mound leave it lit.
 SKIRT_BACKINGS_WHOLE = {
     ('m14_00_00_00', 'm0050B0A14', 10): 0.9,
+    # Undead Burg's rock cap over a pillar by the stairs (cull none, see the runtime's two-sided decals): seen from below, rays pass
+    # beside the pillar and its decal landed on a wall 3 m behind, past the runtime's 0.5 m decal lift: a black triangle in the
+    # rock (frame_20261112_193221, _195417). Backed whole (every face with any alpha), it is lit where it is from every side.
+    ('m10_01_00_00', 'm2110B1A10', 19): 0.01,
 }
 BACKING_STEP = 0.05        # m between the points that decide which faces hang: a face with one such point hanging is backed.
 #                            The seam is a slit a few centimetres wide across faces up to 5 m long; 24 points a face missed it
