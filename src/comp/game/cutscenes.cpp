@@ -319,6 +319,30 @@ namespace comp::game::cutscenes
 		load_table();
 	}
 
+	bool is_playing(int id)
+	{
+		// RemoMan: +0x28 four slots of 0x18 bytes, a queue filled by the request 0xEE1950. slot[0] is the scene playing (its
+		// start 0xEE1EF0 reads only slot[0]), later slots wait; a finished scene leaves and the rest move up (0xEE1D20). Each
+		// slot is a task whose +0x18 is the scene instance, its id at +0x3C. +0xE8 is set from the scene's load to its
+		// restore step and cleared with the slots (0xEE1C30); the event conditions read it (0xBB1AB0).
+		constexpr DWORD kBusy = 0xE8, kPlayingSlot = 0x28, kTaskScene = 0x18, kSceneId = 0x3C;
+		if (!s_available)
+			return false;
+		__try
+		{
+			const auto man = *reinterpret_cast<const BYTE* const*>(kRemoMan);
+			if (!man || !man[kBusy])
+				return false;
+			const auto task = *reinterpret_cast<const BYTE* const*>(man + kPlayingSlot);
+			const auto scene = task ? *reinterpret_cast<const BYTE* const*>(task + kTaskScene) : nullptr;
+			return scene && *reinterpret_cast<const int*>(scene + kSceneId) == id;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+	}
+
 	void toggle_freeze()
 	{
 		fps_unlock::set_frozen(!fps_unlock::is_frozen());

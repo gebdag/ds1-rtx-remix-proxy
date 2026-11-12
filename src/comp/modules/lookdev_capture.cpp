@@ -6,6 +6,7 @@
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/lookdev/capture_format.hpp"
+#include "../game/atmosphere.hpp"
 #include "../game/estus.hpp"
 #include "../game/camera.hpp"
 #include "../game/map_lights.hpp"
@@ -2487,6 +2488,8 @@ namespace comp
 			}
 			if (game::estus::player_flask_empty())
 				f.flags |= GAME_FRAME_ESTUS_EMPTY;
+			if (game::atmosphere::sky_in_shot_scene())
+				f.flags |= GAME_FRAME_SKY_IN_SHOT_SCENE;
 			f.map_id = game::map_lights::current_map_id();
 			c.w.rec(REC_GAME_FRAME, f);
 

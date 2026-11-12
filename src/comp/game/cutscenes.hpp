@@ -11,4 +11,9 @@ namespace comp::game::cutscenes
 
 	// Stops and restarts the game's time (F7).
 	void toggle_freeze();
+
+	// Whether the game is playing cutscene `id` (remo scene, e.g. 180101), from its load to its restore step: the remo
+	// manager's busy flag and its first scene slot, the one playing. Safe to call every frame; false outside the game, in
+	// the lookdev host (no game there) and when the build differs.
+	bool is_playing(int id);
 }

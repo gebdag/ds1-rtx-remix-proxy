@@ -123,6 +123,10 @@ namespace comp::game::atmosphere
 	// Once per frame: hands the values seen since the last call to Remix when they changed.
 	void frame_update(unsigned int frame);
 
+	// Whether a cutscene whose bounce rays take the sky (rtx.ds1Ambient.skyInShot) is playing: the Undead Asylum intro.
+	// In the lookdev host, the value the capture recorded.
+	bool sky_in_shot_scene();
+
 	// The game's ambient light (gamma space: probe sky gradient plus hemisphere) on a
 	// surface facing `normal`, from the last frame's ambient cube. False before one was seen.
 	bool ambient_toward(const float* normal, float* out_gamma);

@@ -14,6 +14,8 @@
 #include "map_lights.hpp"
 #include "texture_names.hpp"
 #include "mesh_tables.hpp"
+#include "cutscenes.hpp"
+#include "host_feed.hpp"
 #include "../modules/game_lights.hpp"
 #include "../modules/skinning.hpp"
 
@@ -437,42 +439,7 @@ namespace comp::game::atmosphere
 			report("adaptation", ok, std::format("rate {}, clamp {}..{}, key {}, c135.y {}", c54[0], c54[1], c54[2], c54[3], divisor));
 		}
 
-		// Shots of the knight looking down the shaft into the Undead Asylum cell (scn180101), where the game's ambient on bounce rays burns him out
-		// against the sky behind him. There the rays take the sky texture instead, which the user chose over dimming the ambient (2026-11-09: that left
-		// him very dark). Identified by the cutscene camera's exact place and lens, so play and every other shot keep the ambient. Close, frame_20261108_123227
-		// and frame_20261109_080703, Sy 11.5; from further away, frame_20261109_080657, Sy 2.54 (2.4 in play).
-		struct dark_shot
-		{
-			const char* map;
-			float camera[3];
-			float min_focal;   // vertical: Sy of the view-projection
-		};
-		constexpr dark_shot kDarkShots[] = {
-			{ "m18_01_00_00", { -15.65f, 186.48f, -46.66f }, 6.0f },
-			{ "m18_01_00_00", { -16.46f, 185.65f, -46.92f }, 2.5f },
-		};
-		constexpr float kDarkShotRadius = 0.1f;
-		constexpr float kCameraCutM = 0.5f;          // a camera that moved further than this since the last frame arrived by a cut
-		bool g_dark_shot_sent = false;
-
-		bool in_dark_shot()
-		{
-			auto& ffp = shared::common::ffp_state::get();
-			float x, y, z;
-			const float* rows = ffp.map_viewproj_rows();
-			if (!rows || !ffp.world_offset(x, y, z))
-				return false;
-			// The matrix is still the last frame's here, so the first frame after a cut is known by the camera's jump.
-			static float last[3] = {};
-			const bool cut = std::abs(x - last[0]) > kCameraCutM || std::abs(y - last[1]) > kCameraCutM || std::abs(z - last[2]) > kCameraCutM;
-			last[0] = x, last[1] = y, last[2] = z;
-			const float focal = std::sqrt(rows[4] * rows[4] + rows[5] * rows[5] + rows[6] * rows[6]);
-			for (const auto& shot : kDarkShots)
-				if ((cut || focal >= shot.min_focal) && std::abs(x - shot.camera[0]) < kDarkShotRadius && std::abs(y - shot.camera[1]) < kDarkShotRadius &&
-					std::abs(z - shot.camera[2]) < kDarkShotRadius && map_lights::current_map_name() == shot.map)
-					return true;
-			return false;
-		}
+		bool g_sky_in_shot_sent = false;
 
 		void send_ambient(const std::array<std::array<float, 3>, 6>& cube)
 		{
@@ -1200,6 +1167,19 @@ namespace comp::game::atmosphere
 		fclose(f);
 	}
 
+	bool sky_in_shot_scene()
+	{
+		// The Undead Asylum intro (remo scene 180101). In its shots of the knight looking down the shaft into the cell the game's
+		// ambient on bounce rays burns him out against the sky behind him (frame_20261108_123227, frame_20261109_080703,
+		// frame_20261109_080657); the rays take the sky texture instead, chosen over dimming the ambient, which left him very dark.
+		// Held for the whole scene, not per shot: a per-shot switch can only follow a cut a frame late, which flickers, and the
+		// scene's other shots don't suffer from the sky. Play and every other scene keep the ambient.
+		constexpr int kSkyInShotScenes[] = { 180101 };
+		if (shared::globals::lookdev_host)
+			return host_feed::frame().sky_in_shot_scene;
+		return std::ranges::any_of(kSkyInShotScenes, [](int id) { return cutscenes::is_playing(id); });
+	}
+
 	void frame_update(unsigned int frame)
 	{
 		if (frame == g_updated_frame)
@@ -1220,9 +1200,12 @@ namespace comp::game::atmosphere
 			close_ambient_frame();
 		if (!shared::common::remix_api::is_initialized())
 			return;
-		// At once, in and out: such a shot starts and ends on a hard cut.
-		if (const bool dark_shot = in_dark_shot(); dark_shot != g_dark_shot_sent && set("rtx.ds1Ambient.skyInShot", dark_shot ? "True" : "False"))
-			g_dark_shot_sent = dark_shot;
+		// Sent once when the scene starts and once when it ends, not at its cuts.
+		if (const bool sky = sky_in_shot_scene(); sky != g_sky_in_shot_sent && set("rtx.ds1Ambient.skyInShot", sky ? "True" : "False"))
+		{
+			g_sky_in_shot_sent = sky;
+			shared::common::log("Atmosphere", sky ? "Intro scene: bounce rays take the sky (skyInShot on)" : "skyInShot off");
+		}
 		if (probe_split split; g_have_ambient && split_probe(g_ambient_ready, split))
 		{
 			sun_light::set_probe_sun(split.sun);

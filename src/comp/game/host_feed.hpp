@@ -21,6 +21,7 @@ namespace comp::game::host_feed
 		float heading = 0.0f;    // camera::get_char_heading
 		unsigned map_id = 0;     // map_lights::current_map_id
 		bool estus_empty = false; // estus::player_flask_empty
+		bool sky_in_shot_scene = false; // atmosphere::sky_in_shot_scene
 	};
 
 	const frame_state& frame();
