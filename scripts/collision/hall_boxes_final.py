@@ -11,6 +11,13 @@ RECTS = {  # name: (x'0, x'1, z'0, z'1)
     "library hall 2 apse": (657.30, 669.60, 159.60, 188.28),
     "library hall 2 east": (643.75, 650.75, 153.50, 194.27),
 }
+# The third library room (navmesh n0044 and its far end n0040, the ladder shaft), added 2026-11-12 after the user's captures
+# frame_20261112_185455/_185459 stood in it: its own heights (y0, y1), from over the room below (n0051) to its ceiling (h0041).
+OTHER_ROOMS = {  # name: (x'0, x'1, z'0, z'1, y0, y1)
+    "library room 3": (628.70, 655.50, 187.60, 227.10, 271.8, 325.0),
+}
+
+
 def world_box(r):
     x0, x1, z0, z1 = r
     cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
