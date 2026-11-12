@@ -417,6 +417,9 @@ namespace shared::common
 			// Meshes in rtx_comp\mesh_tables\veil_meshes.txt are drawn as unlit layers in their vertex colour, out of the look's haze
 			// (game/mesh_tables.hpp is_veil_draw). 0: decals, as before. Live: proxy.Meshes.Veils.
 			bool veils = true;
+			// A veil listed with a tuck (veil_meshes.txt 'tuck') has its solid edge moved this far (m) under the wall it meets, closing
+			// the seam rays slipped through (the Kiln doorway's bright outline). 0: where the game has it. Live: proxy.Meshes.VeilTuck.
+			float veil_tuck = 0.1f;
 			// Window glass (rtx_comp\mesh_tables\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.

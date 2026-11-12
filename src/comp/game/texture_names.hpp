@@ -45,6 +45,10 @@ namespace comp::game::texture_names
 	// True for the Estus flask's diffuse (the drinking effect's model), see game/estus.hpp.
 	bool is_estus_flask(IDirect3DBaseTexture9* texture);
 
+	// True for m18_wall_06, the Kiln of the First Flame's rock wall (m0010B0A18 mesh5, the only model with it) and its doorway
+	// ring (mesh17): renderer.cpp kiln_wall.
+	bool is_kiln_doorway_wall(IDirect3DBaseTexture9* texture);
+
 	// True for the Moonlight Butterfly's diffuse (c3230): parts of its wings are two single-sided faces whose
 	// fronts face each other: the renderer tags its skinned draws with the thin-wall marker (renderer.cpp, thin_wall_skin).
 	bool is_butterfly_wing(IDirect3DBaseTexture9* texture);

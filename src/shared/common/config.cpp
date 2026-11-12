@@ -305,6 +305,7 @@ namespace shared::common
 		meshes.gap_skirt_alpha_ref = std::clamp(get_int("Meshes", "GapSkirtAlphaRef", 8), 0, 255);
 		meshes.skirt_backing = get_int("Meshes", "SkirtBacking", 1) != 0;
 		meshes.veils = get_int("Meshes", "Veils", 1) != 0;
+		meshes.veil_tuck = std::clamp(get_float("Meshes", "VeilTuck", 0.1f), 0.0f, 1.0f);
 		meshes.glass_split = get_bool("Meshes", "GlassSplit", get_bool("Sky", "GlassSplit", true));
 		meshes.thin_walls = get_bool("Meshes", "ThinWalls", get_bool("Sky", "ThinWalls", true));
 		meshes.no_shadow_meshes = get_bool("Meshes", "NoShadowMeshes", get_bool("Sky", "NoShadowMeshes", true));

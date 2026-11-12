@@ -37,6 +37,7 @@ namespace comp::game::mesh_tables
 			UINT hide_last = 0;
 			std::vector<uint16_t> heights_mm; // ground card: each vertex's height above the ground, mm (0xFFFF: none)
 			std::vector<uint16_t> backing;    // backed skirt: its hanging faces, a triangle list over the draw's vertices
+			std::vector<int16_t> tuck;        // veil: per vertex, the direction (x y z, 1/1000) its edge goes under the wall it meets
 		};
 
 		// Entries live in g_hashes for good (a node map: pointers stay valid).
@@ -117,6 +118,19 @@ namespace comp::game::mesh_tables
 					for (unsigned v = 0; got < n && in >> v && v <= 0xFFFFu; got++)
 						e.backing[got] = static_cast<uint16_t>(v);
 					if (got != n)
+						continue;
+				}
+				// A veil whose solid edge meets a wall: 'tuck <vertex count> <x y z> ...', unit directions in thousandths.
+				if (std::string word; k == kind::veil && in >> word && word == "tuck")
+				{
+					size_t n = 0;
+					if (!(in >> n) || n == 0 || n > 65536)
+						continue;
+					e.tuck.resize(n * 3);
+					size_t got = 0;
+					for (int c = 0; got < n * 3 && in >> c; got++)
+						e.tuck[got] = static_cast<int16_t>(std::clamp(c, -1000, 1000));
+					if (got != n * 3)
 						continue;
 				}
 				// A no-shadow mesh may name prims of its draw that no view shows: 'hide <first> <last>'.
@@ -304,6 +318,12 @@ namespace comp::game::mesh_tables
 	bool is_veil_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
 	{
 		return lookup(ib, type, start_index, prim_count).k == kind::veil;
+	}
+
+	const std::vector<int16_t>* veil_tuck(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		const match m = lookup(ib, type, start_index, prim_count);
+		return m.k == kind::veil && !m.e->tuck.empty() ? &m.e->tuck : nullptr;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

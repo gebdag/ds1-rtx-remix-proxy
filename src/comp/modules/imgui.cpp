@@ -382,6 +382,9 @@ namespace comp
 			ImGui::Checkbox("Veils", &cfg.meshes.veils);
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] Veils: black blended meshes over the fog (the Kiln exit's aura) are unlit layers that hide the fog behind them");
+			ImGui::SliderFloat("Veil Tuck (m)", &cfg.meshes.veil_tuck, 0.0f, 0.5f, "%.2f");
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] VeilTuck: a veil's solid edge goes this far under the wall it meets (no bright seam)");
 
 			ImGui::Checkbox("Skirt Backing", &cfg.meshes.skirt_backing);
 			ImGui::SameLine();

@@ -1394,6 +1394,8 @@ namespace shared::common
 
 		int as = cfg_->albedo_stage;
 		auto* tex = (as >= 0 && as < 8) ? cur_texture_[as] : cur_texture_[0];
+		if (albedo_override_ && tex)
+			tex = albedo_override_;
 		auto tex_ptr = reinterpret_cast<uintptr_t>(tex);
 
 		// Skip draws with NULL albedo
@@ -1600,7 +1602,7 @@ namespace shared::common
 		if (!cfg_ || !dev) return;
 
 		int as = cfg_->albedo_stage;
-		auto* albedo = (as >= 0 && as < 8) ? cur_texture_[as] : cur_texture_[0];
+		auto* albedo = albedo_override_ ? albedo_override_ : (as >= 0 && as < 8) ? cur_texture_[as] : cur_texture_[0];
 
 		dev->SetTexture(0, albedo);
 		for (DWORD ts = 1; ts < 8; ts++)
@@ -3962,6 +3964,13 @@ namespace shared::common
 			fp ^= (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ground_heights_mm_)) * 0x9E3779B97F4A7C15ull) ^
 				((static_cast<uint64_t>(kept_bits) << 32) | clearance_bits) ^ 0x6C0D5A11CA4D5ull;
 		}
+		if (reuse_enabled && tuck_dirs_)
+		{
+			uint32_t distance_bits = 0;
+			std::memcpy(&distance_bits, &tuck_distance_, 4);
+			fp ^= (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(tuck_dirs_)) * 0xC2B2AE3D27D4EB4Full) ^
+				(static_cast<uint64_t>(distance_bits) << 17) ^ 0x7E11C0FFEEull;
+		}
 		const bool fingerprint_match = reuse_enabled &&
 			entry.has_fingerprint &&
 			entry.fingerprint == fp &&
@@ -4166,6 +4175,14 @@ namespace shared::common
 			{
 				const float h = ground_heights_mm_[v] * 0.001f;
 				pos_out[1] += std::min(0.0f, ground_clearance_ + ground_kept_ * h - h);
+			}
+			// A veil's solid edge goes under the wall it meets.
+			if (tuck_dirs_ && v < tuck_count_)
+			{
+				const float s = tuck_distance_ * 0.001f;
+				pos_out[0] += tuck_dirs_[v * 3] * s;
+				pos_out[1] += tuck_dirs_[v * 3 + 1] * s;
+				pos_out[2] += tuck_dirs_[v * 3 + 2] * s;
 			}
 
 			// Normal (UBYTE4N -> FLOAT3, with fallbacks)

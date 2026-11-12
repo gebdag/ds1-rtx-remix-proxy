@@ -16,4 +16,6 @@ namespace comp::game::cutscenes
 	// manager's busy flag and its first scene slot, the one playing. Safe to call every frame; false outside the game, in
 	// the lookdev host (no game there) and when the build differs.
 	bool is_playing(int id);
+	// Whether the game is playing any cutscene (the remo manager's busy flag, as is_playing). False where is_playing is.
+	bool any_playing();
 }

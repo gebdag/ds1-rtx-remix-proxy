@@ -21,6 +21,7 @@
 #include "../game/swamp.hpp"
 #include "../game/texture_names.hpp"
 #include "../game/map_lights.hpp"
+#include "../game/cutscenes.hpp"
 #include "../game/mesh_lights.hpp"
 #include "../game/texture_scroll.hpp"
 #include "../game/env_reflection.hpp"
@@ -49,6 +50,8 @@ namespace comp
 		constexpr DWORD kThinWallMarker = 0xD4000003;
 		// Stage 4's D3DTSS_CONSTANT on a lamp the runtime's lighting rays pass (game/mesh_lights.hpp).
 		constexpr DWORD kLampMarker = 0xD4000004;
+		// Stage 0: the sprites' unhazed unlit layer (d3d9_rtx.cpp, Surface::isDs1Unhazed): the look's haze leaves it alone.
+		constexpr DWORD kUnhazedUnlitLayerMarker = 0xD15D0E23;
 		// Stage 4's D3DTSS_CONSTANT on foliage (texture_names::is_foliage): lighting rays pass it in part (Surface::isDs1Foliage).
 		constexpr DWORD kFoliageMarker = 0xD4000006;
 		// Stage 4's D3DTSS_CONSTANT on a surface whose vertex colour is painted shade (rtx_comp\mesh_tables\painted_meshes.txt, Surface::isDs1PaintedColour).
@@ -229,11 +232,81 @@ namespace comp
 		dev->GetRenderState(D3DRS_DESTBLEND, &dst);
 		if (!blend || src != D3DBLEND_SRCALPHA || dst != D3DBLEND_INVSRCALPHA)
 			return false;
-		constexpr DWORD kUnhazedUnlitMarker = 0xD15D0E23;
-		dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnhazedUnlitMarker);
+		dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnhazedUnlitLayerMarker);
 		// Its colour, and no fade where it lies on the wall behind it (atmosphere.hpp tag_veil).
 		game::atmosphere::tag_veil(dev, ffp.ps_const_data(), ffp.vs_const_data(), ffp.probe_texture(), distance);
 		return true;
+	}
+
+	// The Kiln ghost knights' stand-in texture (kiln_ghost below): 8x8 A8R8G8B8 of (254, 253, 252, 255), Remix hash
+	// A956F431F5AA1860 (xxh3 of those bytes), which rtx_comp\emissive_scales.txt scales. Made once, kept (managed pool).
+	IDirect3DTexture9* kiln_ghost_texture(IDirect3DDevice9* dev)
+	{
+		static IDirect3DTexture9* texture = nullptr;
+		static bool tried = false;
+		if (!tried)
+		{
+			tried = true;
+			if (SUCCEEDED(dev->CreateTexture(8, 8, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, nullptr)) && texture)
+			{
+				D3DLOCKED_RECT lr {};
+				if (SUCCEEDED(texture->LockRect(0, &lr, nullptr, 0)))
+				{
+					for (UINT y = 0; y < 8; y++)
+					{
+						auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(lr.pBits) + y * lr.Pitch);
+						for (UINT x = 0; x < 8; x++)
+							row[x] = 0xFFFEFDFCu;
+					}
+					texture->UnlockRect(0);
+				}
+				else
+				{
+					texture->Release();
+					texture = nullptr;
+				}
+			}
+		}
+		return texture;
+	}
+
+	// The Kiln doorway wall's stand-in (kiln_wall below): 8x8 A8R8G8B8 of (2, 1, 0, 255), Remix hash 1610381A5CEDCF0F (xxh3 of
+	// those bytes), which rtx_comp\emissive_scales.txt draws unlit at 0: black. Made once, kept (managed pool).
+	IDirect3DTexture9* kiln_wall_texture(IDirect3DDevice9* dev)
+	{
+		static IDirect3DTexture9* texture = nullptr;
+		static bool tried = false;
+		if (!tried)
+		{
+			tried = true;
+			if (SUCCEEDED(dev->CreateTexture(8, 8, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, nullptr)) && texture)
+			{
+				D3DLOCKED_RECT lr {};
+				if (SUCCEEDED(texture->LockRect(0, &lr, nullptr, 0)))
+				{
+					for (UINT y = 0; y < 8; y++)
+					{
+						auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(lr.pBits) + y * lr.Pitch);
+						for (UINT x = 0; x < 8; x++)
+							row[x] = 0xFF000102u;
+					}
+					texture->UnlockRect(0);
+				}
+				else
+				{
+					texture->Release();
+					texture = nullptr;
+				}
+			}
+		}
+		return texture;
+	}
+
+	// The Kiln of the First Flame (m18_00) while no cutscene plays: the white passage's fixes (kiln_ghost, kiln_wall) hold
+	// there only. The opening cutscene is staged in the same map and shows the same wall.
+	bool in_kiln_play()
+	{
+		return ((game::map_lights::current_map_id() >> 16) & 0xFFFF) == (18u << 8) && !game::cutscenes::any_playing();
 	}
 
 	// The hanging faces of a backed skirt (mesh_tables::skirt_backing_indices) once more, as a solid cutout with the draw's
@@ -866,8 +939,29 @@ namespace comp
 					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
 				if (thin_wall_skin)
 					dev->SetTextureStageState(4, D3DTSS_CONSTANT, kThinWallMarker);
+				// The Kiln of the First Flame's ghost knights (additive characters) walk up the white passage, whose fog is ten times
+				// white. The look composites a layer with the fog of its own depth, the passage's there: they came out white or orange,
+				// or vanished held behind it (frame_20261112_114418, _114424). The game adds them with their own fog, all but clear:
+				// they are drawn as the sprites' unhazed unlit layer (the veils' marker), in the Kiln only.
+				DWORD ghost_src = 0, ghost_dst = 0;
+				const bool kiln_ghost = !swamp && in_kiln_play() &&
+					SUCCEEDED(dev->GetRenderState(D3DRS_SRCBLEND, &ghost_src)) && SUCCEEDED(dev->GetRenderState(D3DRS_DESTBLEND, &ghost_dst)) &&
+					ghost_src == D3DBLEND_SRCALPHA && ghost_dst == D3DBLEND_ONE;
+				if (kiln_ghost)
+				{
+					dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnhazedUnlitLayerMarker);
+					// Their textures are plain white, which other draws share: the layer's brightness goes on a stand-in of their
+					// own, a white whose Remix hash nothing else has (rtx_comp\emissive_scales.txt sets it, as the game's light on
+					// them is far below what an unlit white layer shows).
+					ffp.set_albedo_override(kiln_ghost_texture(dev));
+				}
 				hr = skin->draw_skinned_dip(dev, PrimitiveType, BaseVertexIndex,
 					MinVertexIndex, NumVertices, startIndex, primCount);
+				if (kiln_ghost)
+				{
+					dev->SetTextureStageState(0, D3DTSS_CONSTANT, 0);
+					ffp.set_albedo_override(nullptr);
+				}
 				if (thin_wall_skin)
 					dev->SetTextureStageState(4, D3DTSS_CONSTANT, 0);
 				if (swamp)
@@ -967,11 +1061,21 @@ namespace comp
 					dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 				}
 
+				// The Kiln's rock wall round the white passage's doorway (and the ring over it, a veil): the game's own fog leaves
+				// them black there, ours gave them the passage's white, a solid wall standing in it with a hard edge
+				// (frame_20261112_114424). They are bound to a black stand-in drawn unlit at 0 (kiln_wall_texture), in the Kiln
+				// outside cutscenes only: m18_wall_06 is on no other model, and the opening cutscene, staged in this map, keeps it.
+				const bool kiln_wall = !water_draw && game::texture_names::is_kiln_doorway_wall(
+					ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage))) && in_kiln_play();
+				if (kiln_wall)
+					ffp.set_albedo_override(kiln_wall_texture(dev));
 				// Set albedo texture: use per-mesh diffuse if available,
 				// white fallback for globally-shared textures, skip if NULL.
 				const bool albedo_ok = water_draw
 					? ffp.setup_water_albedo(dev)
 					: ffp.setup_albedo_or_fallback(dev);
+				if (kiln_wall)
+					ffp.set_albedo_override(nullptr);
 				if (!albedo_ok)
 				{
 					ffp.restore_textures(dev);
@@ -994,6 +1098,11 @@ namespace comp
 				if (card_heights)
 					ffp.set_ground_lowering(card_heights->data(), static_cast<UINT>(card_heights->size()),
 						mesh_cfg.ground_card_height_kept, mesh_cfg.ground_card_clearance);
+				// A veil's solid edge is tucked under the wall it meets (mesh_tables::veil_tuck), so no ray slips through the seam.
+				const std::vector<int16_t>* veil_tuck = water_draw || !mesh_cfg.veils || mesh_cfg.veil_tuck <= 0.0f ? nullptr :
+					game::mesh_tables::veil_tuck(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+				if (veil_tuck)
+					ffp.set_vertex_tuck(veil_tuck->data(), static_cast<UINT>(veil_tuck->size() / 3), mesh_cfg.veil_tuck);
 
 				// Expand vertices to clean FLOAT3+FLOAT3+FLOAT2 for FFP compatibility
 				bool expanded = ffp.expand_rigid_texcoords(dev, BaseVertexIndex, MinVertexIndex, NumVertices);
@@ -1201,6 +1310,8 @@ namespace comp
 
 				if (card_heights)
 					ffp.clear_ground_lowering();
+				if (veil_tuck)
+					ffp.clear_vertex_tuck();
 				ffp.restore_rigid_source(dev);
 				ffp.restore_textures(dev);
 			}

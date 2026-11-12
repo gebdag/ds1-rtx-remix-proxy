@@ -84,6 +84,13 @@ namespace comp::game::mesh_tables
 	// triangle list over the draw's own vertices, which the renderer draws once more as a solid cutout. Null for any other draw.
 	const std::vector<uint16_t>* skirt_backing_indices(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A veil's tuck (veil_meshes.txt 'tuck', scripts/gen_veil_tuck.py): the Kiln ring's solid inner edge meets the doorway wall
+	// edge to edge, two meshes; rays slipped through the seam to the passage's white fog behind, a bright line round the wall
+	// (frame_20261112_114424). Per vertex of the mesh, x y z in thousandths: the direction along the ring, away from its fading
+	// side, that takes its solid edge under the wall; 0 0 0 elsewhere. The rigid expansion moves them [Meshes] VeilTuck metres
+	// (ffp_state set_vertex_tuck). Null for any other draw.
+	const std::vector<int16_t>* veil_tuck(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A veil (rtx_comp\mesh_tables\veil_meshes.txt, hand-kept): a blended map mesh the game lays over a surface it fogs with
 	// another set, fading out by vertex alpha. The Kiln's doorway at the end of the white passage: m0010B0A18 mesh17 is a ring of
 	// rock wall round the door, solid at the door and clear 10 m out. The game draws it dark, with its own fog, over the

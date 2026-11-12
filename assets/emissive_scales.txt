@@ -1,8 +1,10 @@
 # Emission scale per game texture (Alt+X > Developer Settings Menu > Dark Souls > Emissive per texture).
 # texture hash, scale (1 = as it was, 0 = no glow), optionally unlit or selflit (how it is drawn), the texture's name as a note
+1610381A5CEDCF0F 0.0000 unlit  # Kiln doorway wall's black stand-in (proxy renderer.cpp kiln_wall_texture)
 387068B9E751F908 0.1000  # c2670 (New Londo ghost)
 5CBED5C1AC67B1F1 0.1000  # c2670 wp_a_0102 (ghost's blades)
 9F6F5641F1FFEE81 0.1000  # c2680 (New Londo banshee)
+A956F431F5AA1860 0.0020  # Kiln ghost knights' stand-in white (proxy renderer.cpp kiln_ghost_texture)
 AD528951A61D1E70 3.0000 selflit  # s15390 (Four Kings sword trail)
 E38760C8183B35C6 2.9100 selflit  # s02002
 E47CC7DBE64BC3C4 0.3700 selflit  # s00115

@@ -379,6 +379,22 @@ namespace comp::game::cutscenes
 		}
 	}
 
+	bool any_playing()
+	{
+		constexpr DWORD kBusy = 0xE8;
+		if (!s_available)
+			return false;
+		__try
+		{
+			const auto man = *reinterpret_cast<const BYTE* const*>(build::at(kRemoMan));
+			return man && man[kBusy];
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+	}
+
 	void toggle_freeze()
 	{
 		fps_unlock::set_frozen(!fps_unlock::is_frozen());

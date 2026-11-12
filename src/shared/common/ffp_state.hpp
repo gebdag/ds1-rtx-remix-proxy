@@ -616,6 +616,22 @@ namespace shared::common
 			ground_clearance_ = clearance;
 		}
 		void clear_ground_lowering() { ground_heights_mm_ = nullptr; ground_heights_count_ = 0; }
+		// A veil's tuck (game/mesh_tables.hpp veil_tuck): while set, the rigid expansion moves vertex v (from the draw's base vertex)
+		// distance metres along dirs[3v..3v+2] / 1000. Cleared after the draw; the reuse fingerprint takes it in.
+		void set_vertex_tuck(const int16_t* dirs, UINT count, float distance)
+		{
+			tuck_dirs_ = dirs;
+			tuck_count_ = count;
+			tuck_distance_ = distance;
+		}
+		void clear_vertex_tuck() { tuck_dirs_ = nullptr; tuck_count_ = 0; }
+		const int16_t* tuck_dirs_ = nullptr;
+		UINT tuck_count_ = 0;
+		float tuck_distance_ = 0.0f;
+		// While set, the albedo binds (skinned and rigid) take this texture instead of the draw's own (the Kiln's stand-ins,
+		// renderer.cpp kiln_ghost and kiln_wall). Cleared after the bind or the draw.
+		void set_albedo_override(IDirect3DBaseTexture9* texture) { albedo_override_ = texture; }
+		IDirect3DBaseTexture9* albedo_override_ = nullptr;
 		const uint16_t* ground_heights_mm_ = nullptr;
 		UINT ground_heights_count_ = 0;
 		float ground_kept_ = 1.0f;

@@ -18,6 +18,7 @@ namespace comp::game::texture_names
 			bool atmospheric = false;
 			bool lit_effect = false;
 			bool estus_flask = false;
+			bool kiln_doorway_wall = false;
 			bool butterfly_wing = false;
 			bool lava = false;
 			bool waterfall = false;
@@ -326,6 +327,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.estus_flask = e.name == "s00902";
+		e.kiln_doorway_wall = e.name == "m18_wall_06";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
 		e.waterfall = classify_waterfall(e.name);
@@ -410,6 +412,15 @@ namespace comp::game::texture_names
 		return it != g_entries.end() && it->second.estus_flask;
 	}
 
+	bool is_kiln_doorway_wall(IDirect3DBaseTexture9* texture)
+	{
+		if (!texture)
+			return false;
+		std::shared_lock lock(g_mutex);
+		const auto it = g_entries.find(texture);
+		return it != g_entries.end() && it->second.kiln_doorway_wall;
+	}
+
 	bool is_light_shaft(IDirect3DBaseTexture9* texture)
 	{
 		if (!texture)
@@ -475,6 +486,7 @@ namespace comp::game::texture_names
 		e.atmospheric = classify_atmospheric(e.name);
 		e.lit_effect = classify_lit_effect(e.name);
 		e.estus_flask = e.name == "s00902";
+		e.kiln_doorway_wall = e.name == "m18_wall_06";
 		e.butterfly_wing = e.name == "c3230";
 		e.lava = classify_lava(e.name);
 		e.waterfall = classify_waterfall(e.name);
