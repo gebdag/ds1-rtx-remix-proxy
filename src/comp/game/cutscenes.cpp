@@ -272,11 +272,14 @@ namespace comp::game::cutscenes
 			}
 		}
 
-		// Only the first scene asked for puts the hook in: without one, the game runs as shipped.
+		// Only the first scene asked for puts the hook in: without one, the game runs as shipped. Never without dev mode (the
+		// player is a dev tool); the smooth camera and is_playing do not need it.
 		bool hook()
 		{
 			if (s_hooked)
 				return true;
+			if (!shared::common::config::get().dev.enabled)
+				return false;
 			const DWORD target = reinterpret_cast<DWORD>(&event_hook);
 			const DWORD slot = build::at(kScriptUpdateSlot);
 			s_hooked = slot && debug_tools::write_code(slot, reinterpret_cast<const BYTE*>(&target), sizeof(target));
@@ -397,6 +400,8 @@ namespace comp::game::cutscenes
 
 	void toggle_freeze()
 	{
+		if (!shared::common::config::get().dev.enabled)
+			return;
 		fps_unlock::set_frozen(!fps_unlock::is_frozen());
 		log("Cutscenes", fps_unlock::is_frozen() ? "Game frozen" : "Game running");
 	}

@@ -2,6 +2,7 @@
 #include "light_dump.hpp"
 #include "map_lights.hpp"
 #include "shared/common/ffp_state.hpp"
+#include "shared/common/config.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -180,6 +181,9 @@ namespace comp::game::light_dump
 
 	void toggle()
 	{
+		// F6 is a dev tool: no dump file without dev mode.
+		if (!g_active && !shared::common::config::get().dev.enabled)
+			return;
 		std::lock_guard lock(g_lock);
 		if (g_active)
 		{
@@ -245,7 +249,9 @@ namespace comp::game::light_dump
 
 	void hook_api(remixapi_Interface& api)
 	{
-		if (g_hooked || !api.CreateLight || !api.DestroyLight || !api.DrawLightInstance || !api.SetConfigVariable)
+		// Without dev mode the dump never runs, so the API calls are left as the bridge gave them.
+		if (g_hooked || !shared::common::config::get().dev.enabled || !api.CreateLight || !api.DestroyLight || !api.DrawLightInstance ||
+			!api.SetConfigVariable)
 			return;
 		g_original = api;
 		api.CreateLight = create_light;

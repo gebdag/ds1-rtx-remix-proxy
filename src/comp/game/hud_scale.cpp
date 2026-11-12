@@ -585,7 +585,11 @@ namespace comp::game::hud_scale
 		}
 		if (changed)
 			refresh_any();
-		ImGui::Spacing();
-		ImGui::Checkbox("Log the UI's names to console.log", &g_log_names);
+		// A dev tool: players get the scales only.
+		if (cfg.dev.enabled)
+		{
+			ImGui::Spacing();
+			ImGui::Checkbox("Log the UI's names to console.log", &g_log_names);
+		}
 	}
 }

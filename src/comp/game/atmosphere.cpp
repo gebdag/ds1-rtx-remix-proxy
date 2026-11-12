@@ -1085,7 +1085,10 @@ namespace comp::game::atmosphere
 	void apply_live_options(unsigned int frame)
 	{
 		static FILETIME last {};
-		if (frame % 6 != 0 || !shared::common::remix_api::is_initialized())
+		// Dev mode only (the lookdev host forces it on): a player's game never looks for the file, and so never writes
+		// look_state.txt either.
+		static const bool dev = shared::common::config::get().dev.enabled;
+		if (!dev || frame % 6 != 0 || !shared::common::remix_api::is_initialized())
 			return;
 		WIN32_FILE_ATTRIBUTE_DATA info;
 		g_dev_file = GetFileAttributesExA(live_options_path(), GetFileExInfoStandard, &info) != 0;

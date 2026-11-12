@@ -2,6 +2,7 @@
 #include "eye_sprites.hpp"
 
 #include "texture_names.hpp"
+#include "shared/common/config.hpp"
 
 namespace comp::game::eye_sprites
 {
@@ -34,10 +35,11 @@ namespace comp::game::eye_sprites
 		int g_log_lines = 0;
 
 		// Diagnostic: what an eye's quads add up to per frame, to read how it flashes. The game's particles age in real time but
-		// are emitted per frame, which nothing outside the frame can see. Lines stop at kLogLines.
+		// are emitted per frame, which nothing outside the frame can see. Lines stop at kLogLines. Only with dev mode or Verbose.
 		void log_draw(unsigned frame, int live, float sum, float largest, const float* first)
 		{
-			if (shared::globals::lookdev_host || g_log_lines >= kLogLines)
+			static const bool wanted = shared::common::config::get().dev_logs();
+			if (!wanted || shared::globals::lookdev_host || g_log_lines >= kLogLines)
 				return;
 			if (!g_log)
 			{

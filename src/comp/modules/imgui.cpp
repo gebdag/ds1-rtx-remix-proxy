@@ -74,13 +74,15 @@ namespace comp
 	// The function-key hotkeys are read from the key state once a frame, not from window messages: an input mod can take the
 	// keyboard away from the window (raw input without legacy key messages), and the F4 menu then never opened. Each acts when
 	// its key is released, as the WM_KEYUP it replaces did, with the game window in front and Alt up (Alt+F4 closes the game).
+	// Without dev mode only F4 (the menu) is read: F1, F6, F7 and F8 switch rendering, dump or stop the game.
 	void imgui::poll_hotkeys()
 	{
-		static constexpr int keys[] = { VK_F1, VK_F4, VK_F6, VK_F7, VK_F8 };
+		static constexpr int keys[] = { VK_F4, VK_F1, VK_F6, VK_F7, VK_F8 };
 		static bool was_down[std::size(keys)] = {};
+		static const size_t key_count = shared::common::config::get().dev.enabled ? std::size(keys) : 1;
 		const bool in_front = GetForegroundWindow() == shared::globals::main_window;
 		const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-		for (size_t i = 0; i < std::size(keys); i++)
+		for (size_t i = 0; i < key_count; i++)
 		{
 			const bool down = in_front && (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
 			if (was_down[i] && !down && in_front && !alt)
@@ -427,23 +429,7 @@ namespace comp
 	{
 		auto& cfg = shared::common::config::get();
 
-		// HDR10 output (config.hpp hdr_settings): the proxy's half (float scene target, final pass as a copy) and the
-		// runtime's (rtx.hdr.enable, sent by atmosphere::frame_update).
-		static const bool hdr_at_start = cfg.hdr.enabled;
-		if (ImGui::Checkbox("HDR10 Output (experimental)", &cfg.hdr.enabled))
-		{
-			if (!cfg.set_string("HDR", "Enabled", cfg.hdr.enabled ? "1" : "0"))
-				shared::common::log("HDR", "could not write [HDR] Enabled to " + cfg.ini_path(), shared::common::LOG_TYPE::LOG_TYPE_ERROR);
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Needs the hdr10 runtime and Windows HDR on for the display. The scene target's format is set when\n"
-			                  "the game creates it: a change here takes full effect at the next game start. Peak and SDR white\n"
-			                  "are in the Remix menu (Dark Souls tab > HDR10 output). The Remix menu's own HDR10 checkbox switches\n"
-			                  "only the runtime's half: the scene target stays 8-bit and the image stays SDR at paper white.");
-		if (cfg.hdr.enabled != hdr_at_start)
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "Restart the game to apply: the scene target gets its format when the game creates it.");
-		ImGui::Separator();
-
+		// HDR10 output has no switch here: it lives in the Remix menu (Alt+X), and [HDR] Enabled in the INI.
 		ImGui::Checkbox("Skip Post-FX (master)", &cfg.ffp.skip_postfx);
 		if (!cfg.ffp.skip_postfx)
 		{
@@ -1039,14 +1025,22 @@ namespace comp
 		{
 			ImGui::PopStyleColor();
 			ImGui::PopStyleVar(1);
-			ADD_TAB("FFP", tab_ffp);
-			ADD_TAB("Perf", perf::tab_imgui);
-			ADD_TAB("Cheats", game::cheats::tab_imgui);
-			ADD_TAB("Debug", game::debug_tools::tab_imgui);
-			ADD_TAB("Cutscenes", game::cutscenes::tab_imgui);
+			// Players get Lights, HUD and About; the rest are dev tools ([Dev] Enabled).
+			const bool dev = shared::common::config::get().dev.enabled;
+			if (dev)
+			{
+				ADD_TAB("FFP", tab_ffp);
+				ADD_TAB("Perf", perf::tab_imgui);
+				ADD_TAB("Cheats", game::cheats::tab_imgui);
+				ADD_TAB("Debug", game::debug_tools::tab_imgui);
+				ADD_TAB("Cutscenes", game::cutscenes::tab_imgui);
+			}
 			ADD_TAB("Lights", tab_lights);
 			ADD_TAB("HUD", game::hud_scale::tab_imgui);
-			ADD_TAB("Dev", tab_dev);
+			if (dev)
+			{
+				ADD_TAB("Dev", tab_dev);
+			}
 			ADD_TAB("About", tab_about);
 			shared::globals::imgui_select_tab.clear();
 			ImGui::EndTabBar();

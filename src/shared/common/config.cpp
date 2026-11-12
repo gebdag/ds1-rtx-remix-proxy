@@ -52,6 +52,7 @@ namespace shared::common
 	void config::load(const std::string& path)
 	{
 		ini_path_ = path;
+		dev.enabled = dev_forced_;
 
 		// Check if the INI file actually exists — GetPrivateProfileInt silently
 		// returns defaults for missing files, making it look like settings are ignored.
@@ -64,6 +65,10 @@ namespace shared::common
 		}
 
 		loaded_ = true;
+		// [Dev] Enabled, here and not in parse_all: once at startup, and never from an area's values.
+		dev.enabled = dev_forced_ || get_bool("Dev", "Enabled", false);
+		if (dev.enabled)
+			log("Config", dev_forced_ ? "Dev mode ON (lookdev)" : "Dev mode ON", LOG_TYPE::LOG_TYPE_STATUS, true);
 		parse_all();
 	}
 
@@ -213,17 +218,18 @@ namespace shared::common
 		// [Skinning]
 		skinning.enabled = get_bool("Skinning", "Enabled", false);
 
-		// [Cheats]
-		cheats.god_mode = get_bool("Cheats", "GodMode", false);
-		cheats.enemies_ignore_player = get_bool("Cheats", "EnemiesIgnorePlayer", false);
-		cheats.no_fall_damage = get_bool("Cheats", "NoFallDamage", false);
+		// [Cheats]: dev mode only, so a player's INI cannot change the course of the game.
+		cheats.god_mode = dev.enabled && get_bool("Cheats", "GodMode", false);
+		cheats.enemies_ignore_player = dev.enabled && get_bool("Cheats", "EnemiesIgnorePlayer", false);
+		cheats.no_fall_damage = dev.enabled && get_bool("Cheats", "NoFallDamage", false);
 
 		// [Troubleshooting]
 		troubleshooting.verbose = get_bool("Troubleshooting", "Verbose", false);
 
-		// [Diagnostics]
-		diagnostics.enabled = get_bool("Diagnostics", "Enabled", true);
-		diagnostics.auto_capture = get_bool("Diagnostics", "AutoCapture", true);
+		// [Diagnostics]: on by default with dev mode, off without it whatever the INI says (Verbose only adds log lines).
+		const bool diagnostics_allowed = dev.enabled;
+		diagnostics.enabled = diagnostics_allowed && get_bool("Diagnostics", "Enabled", true);
+		diagnostics.auto_capture = diagnostics_allowed && get_bool("Diagnostics", "AutoCapture", true);
 		diagnostics.delay_ms = get_int("Diagnostics", "DelayMs", 50000);
 		diagnostics.log_frames = get_int("Diagnostics", "LogFrames", 3);
 		diagnostics.log_draw_calls = get_bool("Diagnostics", "LogDrawCalls", true);
@@ -334,9 +340,10 @@ namespace shared::common
 		sfx.hide = get_bool("Sfx", "Hide", false);
 
 		// [Lookdev]
-		lookdev.enabled = get_bool("Lookdev", "Enabled", false);
+		// Captures (and the lookdev game's input freeze) are dev mode only: -lookdev forces it on.
+		lookdev.enabled = dev.enabled && get_bool("Lookdev", "Enabled", false);
 		lookdev.capture_key = get_int("Lookdev", "CaptureKey", VK_F9);
-		lookdev.main_game_capture = get_bool("Lookdev", "MainGameCapture", true);
+		lookdev.main_game_capture = dev.enabled && get_bool("Lookdev", "MainGameCapture", true);
 		lookdev.main_game_comparison = get_bool("Lookdev", "MainGameComparison", true);
 		lookdev.freeze_input_key = get_int("Lookdev", "FreezeInputKey", VK_F8);
 		lookdev.output_dir = get_string("Lookdev", "OutputDir", "rtx_comp\\lookdev");

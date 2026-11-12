@@ -203,14 +203,15 @@ namespace comp
 		// Requires "exposeRemixApi = True" in the "bridge.conf" that is located in the .trex folder
 		shared::common::remix_api::initialize(nullptr, nullptr, nullptr);
 
-		// Core modules
-		shared::common::loader::module_loader::register_module(std::make_unique<tracer>());
+		auto& cfg = shared::common::config::get();
+
+		// Core modules. The tracer only with dev mode: it polls for dxtrace_capture.trigger every frame.
+		if (cfg.dev.enabled)
+			shared::common::loader::module_loader::register_module(std::make_unique<tracer>());
 		shared::common::loader::module_loader::register_module(std::make_unique<imgui>());
 		shared::common::loader::module_loader::register_module(std::make_unique<renderer>());
 
-		auto& cfg = shared::common::config::get();
-
-		// Diagnostics module (on-demand capture available from ImGui when loaded)
+		// Diagnostics module (on-demand capture available from ImGui when loaded); dev mode only (config.cpp)
 		if (cfg.diagnostics.enabled)
 			shared::common::loader::module_loader::register_module(std::make_unique<diagnostics>());
 
@@ -223,7 +224,8 @@ namespace comp
 		shared::common::loader::module_loader::register_module(std::make_unique<shared::common::dinput_v2>());
 
 		// Lookdev frame capture: lookdev mode (-lookdev, remix-comp-proxy.lookdev.ini), and in the normal game
-		// one frame at a time ([Lookdev] MainGameCapture). Never in the host, which replays them.
+		// one frame at a time ([Lookdev] MainGameCapture). Never in the host, which replays them. Both are dev mode only (config.cpp):
+		// without it the F9 key, capture.request and snap.request are never polled.
 		if (cfg.lookdev.enabled || (cfg.lookdev.main_game_capture && !shared::globals::lookdev_host))
 			shared::common::loader::module_loader::register_module(std::make_unique<lookdev_capture>());
 		else if (!shared::globals::lookdev_host)

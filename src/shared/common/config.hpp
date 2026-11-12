@@ -21,6 +21,22 @@ namespace shared::common
 		// left out when the INI is written. Re-reads the settings: anything changed in the menu and not saved is lost.
 		void set_area_values(std::unordered_map<std::string, std::string> values);
 
+		// Before load: the lookdev modes (-lookdev, -lookdev-host) are tools that capture and edit options live, so they run
+		// with dev mode on whatever the INI says.
+		void force_dev_mode() { dev_forced_ = true; }
+
+		// [Dev] Enabled: the developer's tools. Off (the default), they are not only hidden but inert: the F4 tabs FFP, Perf,
+		// Cheats, Debug, Cutscenes and Dev, the hotkeys other than F4, the cheat hooks and [Cheats] keys, the tracer, frame
+		// captures, live option files and dev dumps. Read once at load: area overrides and the host overlay do not change it.
+		struct dev_settings
+		{
+			bool enabled = false;
+		} dev;
+
+		// The logs a player does not need (camera.log, eye_log.txt, hitch lines): with dev mode, or with
+		// [Troubleshooting] Verbose=1 when a player is asked for them.
+		bool dev_logs() const { return dev.enabled || troubleshooting.verbose; }
+
 		int get_int(const char* section, const char* key, int default_val) const;
 		std::string get_string(const char* section, const char* key, const char* default_val) const;
 		float get_float(const char* section, const char* key, float default_val) const;
@@ -197,6 +213,7 @@ namespace shared::common
 			bool enabled = false;
 		} skinning;
 
+		// [Cheats]: read only with dev mode; a player's INI cannot turn them on.
 		struct cheats_settings
 		{
 			bool god_mode = false;
@@ -204,10 +221,12 @@ namespace shared::common
 			bool no_fall_damage = false;
 		} cheats;
 
+		// Enabled and AutoCapture default to dev mode and stay off without it, whatever the INI says: the
+		// auto capture writes rtx_comp\diagnostics.log 50 s into every session.
 		struct diagnostics_settings
 		{
-			bool enabled = true;
-			bool auto_capture = true;
+			bool enabled = false;
+			bool auto_capture = false;
 			int delay_ms = 50000;
 			int log_frames = 3;
 
@@ -480,8 +499,9 @@ namespace shared::common
 		{
 			bool enabled = false;
 			int capture_key = VK_F9;
-			// The capture key also works in the normal game, with Remix (lookdev_capture.hpp).
-			bool main_game_capture = true;
+			// The capture key also works in the normal game, with Remix (lookdev_capture.hpp). Dev mode only: its default is
+			// dev mode, and without it the INI cannot turn it on.
+			bool main_game_capture = false;
 			// ... and first switches to vanilla graphics, for the file's game image.
 			bool main_game_comparison = true;
 			int freeze_input_key = VK_F8;
@@ -496,6 +516,7 @@ namespace shared::common
 		std::string overlay_path_;
 		std::unordered_map<std::string, std::string> area_values_;
 		bool loaded_ = false;
+		bool dev_forced_ = false;
 
 		bool overlay_value(const char* section, const char* key, std::string& out) const;
 

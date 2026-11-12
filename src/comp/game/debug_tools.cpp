@@ -104,7 +104,7 @@ namespace comp::game::debug_tools
 			{ "Never Framerate-Disconnect",
 				"When the framerate stays low the game warns that it is insufficient for online play and drops\n"
 				"to the title. This always skips that branch (the session monitor's jz becomes jmp). On by\n"
-				"default; [Cheats] NeverFramerateDisconnect=0 starts with it off.",
+				"default; [Fixes] NeverFramerateDisconnect=0 starts with it off.",
 				"80 7C 24 13 00 74 41 8B C6 E8", 5, 1, { 0x74 }, { 0xEB } },
 			{ "Weapons Never Break",
 				"Equipment wear does nothing (the wear function returns success at once). Durability already\n"
@@ -414,9 +414,11 @@ namespace comp::game::debug_tools
 		for (auto& p : s_patches)
 			install(p);
 
-		// PTDE's servers are gone: nothing is lost by never taking the game to the title for its framerate.
+		// PTDE's servers are gone: nothing is lost by never taking the game to the title for its framerate. A fix for everyone,
+		// dev mode or not: [Fixes] NeverFramerateDisconnect, with the old [Cheats] key read when an INI has no [Fixes] one.
 		auto& framerate = s_patches[0];
-		if (framerate.addr && shared::common::config::get().get_bool("Cheats", "NeverFramerateDisconnect", true) &&
+		const auto& cfg = shared::common::config::get();
+		if (framerate.addr && cfg.get_bool("Fixes", "NeverFramerateDisconnect", cfg.get_bool("Cheats", "NeverFramerateDisconnect", true)) &&
 			write_code_atomic(framerate.addr, framerate.patched, framerate.size))
 		{
 			framerate.on = true;

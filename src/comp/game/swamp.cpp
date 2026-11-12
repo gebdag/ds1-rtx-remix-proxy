@@ -4,6 +4,7 @@
 #include "texture_names.hpp"
 
 #include "shared/common/remix_api.hpp"
+#include "shared/common/config.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -330,9 +331,11 @@ namespace comp::game::swamp
 		// the two, every mip box-filtered from the one above. Both tile, so each read at its own scale of
 		// the same uv sees what the game's separate textures give there.
 		// The Texture Lab's helper finds a baked surface's source by these dumps: width, height, then the top level as Remix hashes it (BGRA).
-		// Only where the lab is set up (rtx_comp\\texlab exists), once per pair, at the bake (a load).
+		// Only where the lab is set up (rtx_comp\\texlab exists), once per pair, at the bake (a load). Dev mode only.
 		void dump_for_texture_lab(IDirect3DBaseTexture9* colour, IDirect3DBaseTexture9* height, UINT w, UINT h, const std::vector<uint8_t>& rgba)
 		{
+			if (!shared::common::config::get().dev.enabled)
+				return;
 			const std::string lab = shared::globals::root_path + "\\rtx_comp\\texlab";
 			const auto colour_name = texture_names::name_of(colour), height_name = texture_names::name_of(height);
 			if (GetFileAttributesA(lab.c_str()) == INVALID_FILE_ATTRIBUTES || colour_name.empty() || height_name.empty())

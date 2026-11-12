@@ -134,8 +134,12 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		// -lookdev (lookdev\lookdev.ps1) selects the lookdev INI: vanilla rendering plus frame capture.
 		// The lookdev host (-lookdev-host) renders like the game, so it reads the normal INI.
 		shared::globals::lookdev_host = shared::common::flags::has_flag("lookdev-host");
-		const char* ini_name = shared::common::flags::has_flag("lookdev")
+		const bool lookdev_game = shared::common::flags::has_flag("lookdev");
+		const char* ini_name = lookdev_game
 			? "\\remix-comp-proxy.lookdev.ini" : "\\remix-comp-proxy.ini";
+		// Both lookdev modes are tools (captures, the live options file): dev mode on, whatever their INI says.
+		if (lookdev_game || shared::globals::lookdev_host)
+			shared::common::config::get().force_dev_mode();
 		shared::common::config::get().load(shared::globals::settings_path + ini_name);
 		if (shared::globals::lookdev_host)
 			shared::common::config::get().set_overlay(shared::globals::settings_path + "\\remix-comp-proxy.host.ini");

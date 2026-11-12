@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "cutscenes.hpp"
 #include "shared/common/flags.hpp"
+#include "shared/common/config.hpp"
 #include "camera.hpp"
 #include "cheats.hpp"
 #include "debug_tools.hpp"
@@ -129,7 +130,10 @@ namespace comp::game
 		intro_skip::init();
 		camera::init();
 		debug_tools::init();
-		cheats::init();
+		// The cheats patch the game's code (the god mode cave, the fall damage call): dev mode only, so a player's game runs
+		// without them. debug_tools stays: it only finds addresses, and applies the framerate-disconnect fix.
+		if (shared::common::config::get().dev.enabled)
+			cheats::init();
 		cutscenes::init();
 		input_customizer::init();
 	}

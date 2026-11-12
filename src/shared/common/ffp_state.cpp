@@ -34,6 +34,9 @@ namespace shared::common
 		const float* c4, const float* c5, const float* c6,
 		float det3, const float* view, const float* proj)
 	{
+		// A line every frame: only with dev mode or [Troubleshooting] Verbose.
+		static const bool wanted = config::get().dev_logs();
+		if (!wanted) return;
 		cam_log_open();
 		if (!s_cam_log || frame == s_cam_log_frame) return;
 		s_cam_log_frame = frame;
