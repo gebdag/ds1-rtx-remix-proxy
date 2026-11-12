@@ -1018,6 +1018,21 @@ namespace comp
 		ImGui::GetWindowDrawList()->AddLine(pre_tabbar_spos + ImVec2(0, 40.0f), pre_tabbar_spos + ImVec2(ImGui::GetWindowWidth(), 40.0f),
 			col_border, 1.0f);
 
+		// Dev mode: a checkbox at the header's right switches the menu and hotkeys to what a player gets ([Dev] Enabled=0), and back.
+		if (auto& dev_cfg = shared::common::config::get(); dev_cfg.dev.enabled)
+		{
+			const char* label = "Dev mode";
+			const float box = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label).x;
+			ImGui::SetCursorScreenPos(pre_tabbar_spos + ImVec2(ImGui::GetWindowWidth() - box - 16.0f, (40.0f - ImGui::GetFrameHeight()) * 0.5f));
+			bool dev_view = !dev_cfg.dev.user_view;
+			if (ImGui::Checkbox(label, &dev_view))
+				dev_cfg.dev.user_view = !dev_view;
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Off: F4 and its hotkeys as a player has them ([Dev] Enabled=0): Lights, HUD and About, and only F4.\n"
+				                  "For this session; what dev mode started with stays installed (hooks, file triggers, logs).\n"
+				                  "Alt+X has its own switch, rtx.ds1Dev.enable in user.conf.");
+		}
+
 		ImGui::SetCursorScreenPos(pre_tabbar_spos + ImVec2(12,8));
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x + 12.0f, 8));
@@ -1059,18 +1074,6 @@ namespace comp
 			const char* movement_hint_str = movement_hint.c_str();
 
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-			// Dev mode: switch the menu and hotkeys to what a player gets, and back.
-			if (auto& dev_cfg = shared::common::config::get(); dev_cfg.dev.enabled)
-			{
-				const auto spos = ImGui::GetCursorScreenPos();
-				bool dev_view = !dev_cfg.dev.user_view;
-				if (ImGui::Checkbox("Dev view", &dev_view))
-					dev_cfg.dev.user_view = !dev_view;
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Off: F4 and its hotkeys as a player has them ([Dev] Enabled=0): Lights, HUD and About, and only F4.\n"
-					                  "What dev mode started with stays installed (hooks, file triggers, logs). Alt+X follows rtx.ds1Dev.enable.");
-				ImGui::SetCursorScreenPos(spos);
-			}
 			{
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y);
 				const auto spos = ImGui::GetCursorScreenPos();
