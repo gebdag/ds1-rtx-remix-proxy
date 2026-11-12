@@ -70,10 +70,12 @@ namespace comp
 		const bool priscilla_fur = diffuse_name == "c2730_2" && ffp.cur_decl_has_color();
 		// Shell fur whose diffuse is neither named for fur nor punch-through: Sif (c5210_2) and the Darkroot beast (c5360_2), seen in
 		// frame_20261111_115114 / 115217 / 115518. Listed by name, like Priscilla's; any other shell mesh is only reported, or taken
-		// with [Fur] ShellGeometry on (is_shell_fur).
+		// with [Fur] ShellGeometry on (is_shell_fur). The covenant cat Alvina (c5369_2, frame_20261112_015533) is the beast's model
+		// with her own textures; hers is punch-through, so she had her vertex colour but not the fur marker below. Her texture
+		// gets its name from its content (texture_names.cpp name_by_content).
 		// Blended draws only (every draw of the two in the captures is): also while the creature fades out (c139.w), as Priscilla's.
 		DWORD listed_blend = FALSE;
-		const bool listed_fur = (diffuse_name == "c5210_2" || diffuse_name == "c5360_2") && ffp.cur_decl_has_color() &&
+		const bool listed_fur = (diffuse_name == "c5210_2" || diffuse_name == "c5360_2" || diffuse_name == "c5369_2") && ffp.cur_decl_has_color() &&
 			SUCCEEDED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &listed_blend)) && listed_blend;
 		const bool shell_fur = skin_overlay_decl_ && !priscilla_fur &&
 			(listed_fur || is_shell_fur(dev, diffuse_name, src_vb, base_vtx, total_verts, stride));

@@ -173,6 +173,46 @@ namespace comp::game::texture_names
 			return std::nullopt;
 		}
 
+		// Textures find_name cannot reach, known by their content. find_name scans back from the DDS only to the start of its
+		// memory page (region_of: VirtualQuery reports a region from the queried page on), so of a TPF that holds several
+		// textures only the first, right behind the header, gets a name. The covenant cat Alvina (c5369) is drawn with the
+		// Darkroot beast's model and her own six-texture TPF; her fur shells' diffuse c5369_2 is its fourth texture, 525000
+		// bytes past the header (frame_20261112_015533: unnamed, so the fur listing by name missed her). The beast's own
+		// c5360_2 and Sif's c5210_2 come one per TPF and have their names. Size first, then FNV-1a 64 over the first 4096
+		// bytes, then over the whole DDS: a DDS of another size costs one compare, and one of the same size (842 of the game's
+		// DDS are 349672 bytes, a 1024 x 512 DXT5) costs 4 KB of hashing unless it is the one.
+		struct known_content
+		{
+			UINT size;
+			uint64_t prefix_hash; // the first kPrefixBytes
+			uint64_t hash;
+			const char* name;
+		};
+		constexpr UINT kPrefixBytes = 4096;
+		constexpr known_content kKnownContent[] = {
+			{ 349672, 0xC58E04D231CBDE1Dull, 0x1EF61664762EDF14ull, "c5369_2" },
+		};
+
+		std::optional<std::string> name_by_content(const void* dds, UINT dds_size)
+		{
+			for (const auto& k : kKnownContent)
+			{
+				if (k.size != dds_size || dds_size < kPrefixBytes)
+					continue;
+				const auto* data = static_cast<const uint8_t*>(dds);
+				uint64_t h = 0xCBF29CE484222325ull;
+				for (UINT i = 0; i < kPrefixBytes; i++)
+					h = (h ^ data[i]) * 0x100000001B3ull;
+				if (h != k.prefix_hash)
+					continue;
+				for (UINT i = kPrefixBytes; i < dds_size; i++)
+					h = (h ^ data[i]) * 0x100000001B3ull;
+				if (h == k.hash)
+					return std::string(k.name);
+			}
+			return std::nullopt;
+		}
+
 		// Lower-case file stem: "N:\...\m10_sky.tga" -> "m10_sky".
 		std::string stem(std::string name)
 		{
@@ -265,6 +305,12 @@ namespace comp::game::texture_names
 			return;
 
 		auto name = find_name(dds, dds_size);
+		if (!name)
+		{
+			name = name_by_content(dds, dds_size);
+			if (name)
+				shared::common::log("TexNames", std::format("{} named by its content (no TPF header within reach)", *name));
+		}
 		if (!name)
 		{
 			const auto n = ++g_unnamed;
