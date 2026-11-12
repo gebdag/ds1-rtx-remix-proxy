@@ -80,6 +80,12 @@ namespace comp::game::ffx_lights
 		std::unordered_map<int, float> g_flicker_effect_mean; // per effect: the mean its light last settled at
 		bool g_size_learn = false;    // the game adds what it measures to the shipped sizes (and writes it down); ini only
 		bool g_size_shrink = false;   // a table light may also become shorter than its table reach
+		// [Lights] EffectFollowFade: effect ids whose light follows its burst sprite's own fade by age, the impact rule, whatever the
+		// table says (a child emitter that outlives the visuals held the light on). EffectFollowFadeAll: every effect the table does not
+		// call persistent. Off by default: an effect that keeps emitting (a breath, a fire on the ground, a storm of pillars) would go dark
+		// once its first burst faded, while it still burns.
+		std::unordered_set<int> g_follow_fade;
+		bool g_follow_fade_all = false;
 		constexpr float kSizeMinLift = 0.5f;
 		constexpr int kSizeMinSprites = 4;
 		constexpr float kSizeSmoothing = 0.08f; // per frame
@@ -309,6 +315,13 @@ namespace comp::game::ffx_lights
 			if (const float v = cfg.get_float("Lights", "EffectFlickerSeconds", g_flicker_seconds); std::isfinite(v))
 				g_flicker_seconds = std::clamp(v, 0.05f, 10.0f);
 			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
+			g_follow_fade_all = cfg.get_int("Lights", "EffectFollowFadeAll", 0) != 0;
+			{
+				std::stringstream ids(cfg.get_string("Lights", "EffectFollowFade", ""));
+				for (std::string id; std::getline(ids, id, ',');)
+					if (const int v = std::atoi(id.c_str()); v > 0)
+						g_follow_fade.insert(v);
+			}
 			g_bonfire_centre = cfg.get_int("Lights", "BonfireLightCentre", 1) != 0;
 			if (const float v = cfg.get_float("Lights", "BonfireLightHeight", g_bonfire_height); std::isfinite(v))
 				g_bonfire_height = std::clamp(v, -0.5f, 1.5f);
@@ -748,6 +761,7 @@ namespace comp::game::ffx_lights
 		else if (key == "Lights.EffectSizeGame") { g_size_game = value != 0.0f; g_size_logged.clear(); }
 		else if (key == "Lights.EffectSizeLift") g_size_lift = value != 0.0f;
 		else if (key == "Lights.EffectSizeShrink") { g_size_shrink = value != 0.0f; g_size_logged.clear(); }
+		else if (key == "Lights.EffectFollowFadeAll") g_follow_fade_all = value != 0.0f;
 		else if (key == "Lights.EffectFlicker") { if (std::isfinite(value)) g_flicker = std::clamp(value, 0.0f, 1.0f); }
 		else if (key == "Lights.EffectFlickerSeconds") { if (std::isfinite(value)) g_flicker_seconds = std::clamp(value, 0.05f, 10.0f); }
 		else if (key == "Lights.BonfireLightCentre") g_bonfire_centre = value != 0.0f;
@@ -852,7 +866,7 @@ namespace comp::game::ffx_lights
 				f->second.own_age = own_age;
 			}
 			const float age = std::isfinite(own_age) ? std::max(own_age, now - f->second.first_seen) : now - f->second.first_seen;
-			if (c.e->impact)
+			if (c.e->impact || g_follow_fade.contains(inst.ffx_id) || (g_follow_fade_all && !c.e->persistent))
 				f->second.level = fade_at(*c.e, age);
 			else if (age >= c.e->visual_life)
 			{
