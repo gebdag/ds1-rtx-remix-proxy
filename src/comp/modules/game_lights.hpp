@@ -57,6 +57,10 @@ namespace comp
 		// [Ambient] Lock (gamma, usually from an area override): the ambient as this one value on every side, whatever the game's dominant region says this frame.
 		// [Ambient] PreferScale: the area's ambient comes only from the draws of the set whose c86.x this is (0 = the frame's dominant set).
 		float ambient_prefer_scale = 0.0f;
+		// [Ambient] ProbeFaces (from an area override): the ambient is the probe's six faces as they are, each side its own, not the
+		// up-to-down gradient with the sun split off. For an area the game lights with its probe alone and where nothing stands
+		// in for a sun: the Abyss, where every lit thing is a character under the characters' probe (atmosphere.cpp).
+		bool ambient_probe_faces = false;
 		bool ambient_lock_set = false;
 		float ambient_lock[3] = {};
 		float sun_fallback_colour[3] = { 0.7f, 0.7f, 0.7f };

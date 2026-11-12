@@ -12,3 +12,12 @@
 # Anor Londo, the terrace above Gwyndolin's corridor: a 1 km wide plane at height 50 (m15_floor_stone_04, 102 indices). The corridor, at height 30, is under it, so no
 # ray at the game's sun angle reaches the windows there: every band the game shows on that floor is baked (frame_20261109_150311, 150041).
 991750b6b73c79dd 102 m15_01_00_00/terrace_plane/m15_floor_stone_04
+#
+# The Abyss (the Four Kings' arena): one box 188 m wide and 109 m high round it, m3000B0A16 mesh0 (m16_wall_stone), which the game paints
+# black by vertex colour (0 on most vertices, 0.125 at most) and never shows. Remix drops that colour on rigid draws, so any light showed
+# its stone texture, stretched over walls 100 m high; and the box shut the arena off from the game's ambient, the only light the game
+# gives the Kings and the player there, so both stood black (frame_20261112_020437, _020519). The whole draw is left out, every level
+# of detail; the player walks on collision 8 m above its floor.
+f9dc31a4a965aa2d 286 m16_00_00_00/m3000B0A16/mesh0/lod0 hide 0 283
+6ca97bf398f5f6b9 238 m16_00_00_00/m3000B0A16/mesh0/lod1 hide 0 235
+f21460b8fafaaa21 106 m16_00_00_00/m3000B0A16/mesh0/lod2 hide 0 103

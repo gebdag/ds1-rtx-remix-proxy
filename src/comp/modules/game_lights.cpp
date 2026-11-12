@@ -2116,6 +2116,7 @@ namespace comp
 
 		ambient_lock_set = cfg.get_float3("Ambient", "Lock", ambient_lock);
 		ambient_prefer_scale = cfg.get_float("Ambient", "PreferScale", 0.0f);
+		ambient_probe_faces = cfg.get_bool("Ambient", "ProbeFaces", false);
 		sun_enabled = cfg.get_bool("Sun", "Enabled", true);
 		sun_intensity_scale = cfg.get_float("Sun", "IntensityScale", 1.0f);
 		sun_angular_diameter = cfg.get_float("Sun", "AngularDiameter", 0.53f);

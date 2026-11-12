@@ -1191,6 +1191,19 @@ namespace comp::game::atmosphere
 			sun_light::set_probe_sun(split.sun);
 			std::array<std::array<float, 3>, 6> cube;
 			ambient_cube(g_ambient_ready, split, cube);
+			// [Ambient] ProbeFaces: the probe's faces as the game's shaders read them, each side its own (cube * c86 + the
+			// hemisphere), with nothing split off for a sun. The Abyss: its character probe is brightest from -X and above and
+			// half that from +X, and the fit to an up-down gradient gave every side their mean (frame_20261112_020437). The runtime
+			// takes them as sky radiance, so after its cosine weighting the contrast between sides is about half the probe's.
+			// The sun split above still runs: harmless where the map's sun is none (m16), counted twice where it is not.
+			if (const auto* gl = game_lights::get(); gl && gl->ambient_probe_faces && g_ambient_ready.has_faces)
+				for (int f = 0; f < 6; f++)
+					for (int c = 0; c < 3; c++)
+					{
+						const auto& s = g_ambient_ready;
+						const float hemi = f == 2 ? s.upper[c] : f == 3 ? s.lower[c] : 0.5f * (s.upper[c] + s.lower[c]);
+						cube[f][c] = s.scale[c] * s.faces[f][c] + hemi;
+					}
 			if (const auto* gl = game_lights::get(); gl && gl->ambient_lock_set)
 				for (auto& face : cube)
 					for (int c = 0; c < 3; c++)
