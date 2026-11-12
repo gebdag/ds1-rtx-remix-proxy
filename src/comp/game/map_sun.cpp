@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "map_sun.hpp"
+#include "game_build.hpp"
 
 #include "atmosphere.hpp"
 #include "shared/common/ffp_state.hpp"
@@ -86,7 +87,8 @@ namespace comp::game::map_sun
 		{
 			uintptr_t man = 0, list = 0, entries = 0;
 			int count = 0;
-			if (!read(kDrawParamMan, man) || !man || !read(man + 8, list) || !list || !read(list + 4, count) || !read(list + 8, entries) || !entries)
+			const uintptr_t draw_param_man = build::at(static_cast<DWORD>(kDrawParamMan)); // 2015-06-15 address -> running build's
+			if (!draw_param_man || !read(draw_param_man, man) || !man || !read(man + 8, list) || !list || !read(list + 4, count) || !read(list + 8, entries) || !entries)
 				return false;
 			for (int i = 0; i < std::min(count, kMaxAreas); i++)
 			{

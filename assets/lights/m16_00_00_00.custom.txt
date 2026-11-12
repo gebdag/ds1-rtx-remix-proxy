@@ -1,0 +1,14 @@
+# Hand-placed lights for m16_00_00_00 (F4 > Lights > Custom lights writes this file).
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
+103.100 -125.000 -7.480  0.500 4.000  0 11 28  100  newlondo_1  remix 0.300 0.00 1.500 1.00
+99.900 -124.940 2.780  0.500 4.000  0 11 28  100  newlondo_2  remix 0.300 0.00 1.500 1.00
+92.520 -124.880 -5.560  0.500 4.000  0 11 28  100  newlondo_4  remix 0.300 0.00 1.500 1.00
+103.100 -119.500 -7.480  0.500 4.000  0 11 28  100  newlondo_1_copy  remix 0.300 0.00 1.500 1.00
+103.100 -134.840 -7.480  0.500 4.000  0 11 28  100  newlondo_1_copy_copy  remix 0.300 0.00 1.500 1.00
+103.100 -135.900 -7.480  0.500 4.000  0 11 28  100  newlondo_1_copy  remix 0.300 0.00 1.500 1.00
+99.900 -135.840 2.780  0.500 4.000  0 11 28  100  newlondo_2_copy  remix 0.300 0.00 1.500 1.00
+92.520 -135.780 -5.560  0.500 4.000  0 11 28  100  newlondo_4_copy  remix 0.300 0.00 1.500 1.00
+103.100 -130.400 -7.480  0.500 4.000  0 11 28  100  newlondo_1_copy_copy  remix 0.300 0.00 1.500 1.00
+103.100 -145.740 -7.480  0.500 4.000  0 11 28  100  newlondo_1_copy_copy_copy  remix 0.300 0.00 1.500 1.00

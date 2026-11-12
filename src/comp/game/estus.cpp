@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "estus.hpp"
+#include "game_build.hpp"
 
 #include "camera.hpp"
 #include "glass.hpp"
@@ -38,9 +39,12 @@ namespace comp::game::estus
 		// True only when the inventory proves it: an empty flask and no full one. A failed read says not empty.
 		bool read_empty()
 		{
+			const DWORD game_data_man = build::at(kGameDataMan); // 2015-06-15 address -> running build's
+			if (!game_data_man)
+				return false;
 			__try
 			{
-				const DWORD man = *reinterpret_cast<const DWORD*>(kGameDataMan);
+				const DWORD man = *reinterpret_cast<const DWORD*>(game_data_man);
 				if (!man)
 					return false;
 				const DWORD player = *reinterpret_cast<const DWORD*>(man + kPlayerGameData);

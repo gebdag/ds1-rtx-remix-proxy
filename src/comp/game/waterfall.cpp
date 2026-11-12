@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "waterfall.hpp"
+#include "game_build.hpp"
 #include "camera.hpp"
 #include "ffx_instances.hpp"
 #include "lightmap_sun.hpp"
@@ -433,7 +434,8 @@ namespace comp::game::waterfall
 		int player_animation()
 		{
 			DWORD p = 0;
-			if (!read_dword(kAnimBase, p) || !p || !read_dword(p + 0x10, p) || !p || !read_dword(p + 0x38, p) || !p ||
+			const DWORD anim_base = build::at(kAnimBase); // 2015-06-15 address -> running build's
+			if (!anim_base || !read_dword(anim_base, p) || !p || !read_dword(p + 0x10, p) || !p || !read_dword(p + 0x38, p) || !p ||
 				!read_dword(p + 0x46C, p) || !p || !read_dword(p + 0x60, p))
 				return -1;
 			return static_cast<int>(p);

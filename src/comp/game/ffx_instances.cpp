@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "ffx_instances.hpp"
+#include "game_build.hpp"
 #include "shared/common/ffp_state.hpp"
 
 #include <algorithm>
@@ -80,16 +81,29 @@ namespace comp::game::ffx_instances
 			}
 		}
 
+		// The vtables above are the 2015-06-15 build's; these are the running build's (0 = not available).
+		DWORD root_vtable()
+		{
+			static const DWORD vtable = build::at(kRootVtable);
+			return vtable;
+		}
+
+		DWORD adapter_vtable()
+		{
+			static const DWORD vtable = build::at(kAdapterVtable);
+			return vtable;
+		}
+
 		int effect_id(DWORD address)
 		{
 			const DWORD root = read_dword(address + kInstanceRoot);
-			return root && read_dword(root) == kRootVtable ? static_cast<int>(read_dword(root + kRootId)) : 0;
+			return root && root_vtable() && read_dword(root) == root_vtable() ? static_cast<int>(read_dword(root + kRootId)) : 0;
 		}
 
 		void walk_manager(DWORD manager)
 		{
 			const DWORD adapter = read_dword(manager + kManagerAdapter);
-			if (!adapter || read_dword(adapter) != kAdapterVtable)
+			if (!adapter || !adapter_vtable() || read_dword(adapter) != adapter_vtable())
 				return;
 
 			std::vector<DWORD> stack;
@@ -116,7 +130,8 @@ namespace comp::game::ffx_instances
 		void walk()
 		{
 			g_instances.clear();
-			const DWORD frpg = read_dword(kFrpgFx);
+			const DWORD frpg_slot = build::at(kFrpgFx);
+			const DWORD frpg = frpg_slot ? read_dword(frpg_slot) : 0;
 			if (!frpg)
 				return;
 

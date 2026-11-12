@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "point_lights.hpp"
+#include "game_build.hpp"
 #include "fx_owner.hpp"
 #include "host_feed.hpp"
 #include "light_dump.hpp"
@@ -59,6 +60,13 @@ namespace comp::game::point_lights
 	static constexpr DWORD VTABLE_BANK_RVA = 0x00DAB110;       // NS_FRPG::BankPointLightEntity
 	static constexpr DWORD VTABLE_DIRECT_RVA = 0x00DAB24C;     // NS_FRPG::DirectPointLightEntity
 	static constexpr DWORD VTABLE_LERP_BANK_RVA = 0x00DAB394;  // NS_FRPG::LerpBankPointLightEntity
+
+	// The RVAs above are the 2015-06-15 build's. This is the running exe's address for one
+	// (game_build.hpp); 0 when it is not available on this build.
+	static DWORD game_addr(DWORD rva)
+	{
+		return build::at(0x00400000 + rva);
+	}
 
 	// What GetLightParams writes: two float4 shader registers, position + colour.
 	struct resolved_params
@@ -178,7 +186,7 @@ namespace comp::game::point_lights
 
 	static DWORD walk_to_table(const table_walk& walk)
 	{
-		const DWORD hg = safe_read_ptr(EXE_BASE + HG_GLOBAL_RVA);
+		const DWORD hg = safe_read_ptr(game_addr(HG_GLOBAL_RVA));
 		if (!hg) return 0;
 		const DWORD ctx = safe_read_ptr(hg + walk.ctx_offset);
 		if (!ctx) return 0;
@@ -199,13 +207,17 @@ namespace comp::game::point_lights
 	// so comparing a captured vtable against it classified every light from a capture as unresolved.
 	constexpr DWORD kGameImageBase = 0x00400000;
 
+	// A live entity's vtable, in game memory: the running build's (game_build.hpp), where an
+	// unavailable one is 0 and never matches. The host has no live entities.
 	static bool is_light_vtable(DWORD vtable)
 	{
-		return vtable == kGameImageBase + VTABLE_BANK_RVA
-			|| vtable == kGameImageBase + VTABLE_DIRECT_RVA
-			|| vtable == kGameImageBase + VTABLE_LERP_BANK_RVA;
+		return vtable && (vtable == game_addr(VTABLE_BANK_RVA)
+			|| vtable == game_addr(VTABLE_DIRECT_RVA)
+			|| vtable == game_addr(VTABLE_LERP_BANK_RVA));
 	}
 
+	// light::entity_vtable holds 2015-06-15 vtables on every build (build::to_current), so captures
+	// from any build read the same in the host.
 	const char* entity_class_name(unsigned vtable)
 	{
 		if (vtable == kGameImageBase + VTABLE_BANK_RVA) return "Bank";
@@ -305,7 +317,7 @@ namespace comp::game::point_lights
 	{
 		if (shared::globals::lookdev_host)
 			return !host_feed::lights().empty();
-		return safe_read_ptr(EXE_BASE + POINT_LIGHT_MAN_RVA) != 0;
+		return safe_read_ptr(game_addr(POINT_LIGHT_MAN_RVA)) != 0;
 	}
 
 	void set_resolve_entities(bool on) { s_resolve_entities = on; }
@@ -320,8 +332,8 @@ namespace comp::game::point_lights
 	std::string chain_diagnostics()
 	{
 		std::string text;
-		const DWORD hg = safe_read_ptr(EXE_BASE + HG_GLOBAL_RVA);
-		text += std::format("HG global (0x{:08X}) -> 0x{:08X}\n", EXE_BASE + HG_GLOBAL_RVA, hg);
+		const DWORD hg = safe_read_ptr(game_addr(HG_GLOBAL_RVA));
+		text += std::format("HG global (0x{:08X}) -> 0x{:08X}\n", game_addr(HG_GLOBAL_RVA), hg);
 
 		for (int i = 0; i < WALK_COUNT; ++i)
 		{
@@ -354,7 +366,7 @@ namespace comp::game::point_lights
 		s_from_entity = 0;
 		s_unresolved = 0;
 
-		const DWORD manager = safe_read_ptr(EXE_BASE + POINT_LIGHT_MAN_RVA);
+		const DWORD manager = safe_read_ptr(game_addr(POINT_LIGHT_MAN_RVA));
 		if (!manager)
 		{
 			return s_lights;
@@ -428,7 +440,7 @@ namespace comp::game::point_lights
 			if (entity && read_entity_params(entity, vtable, out))
 			{
 				out.entity = entity;
-				out.entity_vtable = vtable;
+				out.entity_vtable = build::to_current(vtable); // 2015-06-15 value on every build
 				out.source = param_source::entity;
 				out.has_params = true;
 				++s_from_entity;
@@ -491,7 +503,7 @@ namespace comp::game::point_lights
 		}
 		else
 		{
-			const DWORD manager = safe_read_ptr(EXE_BASE + POINT_LIGHT_MAN_RVA);
+			const DWORD manager = safe_read_ptr(game_addr(POINT_LIGHT_MAN_RVA));
 			const DWORD table = s_walk_chosen >= 0 ? walk_to_table(WALKS[s_walk_chosen]) : 0;
 			light_dump::write(std::format("SLOT manager 0x{:08X} entity_table 0x{:08X} walk {} live {} bank {} entity {} unresolved {} resolve_entities {}",
 				manager, table, s_walk_chosen >= 0 ? WALKS[s_walk_chosen].name : "-", s_slots_live, s_from_bank, s_from_entity, s_unresolved,
@@ -529,7 +541,7 @@ namespace comp::game::point_lights
 				{
 					resolved_params p = {};
 					const bool ok = call_light_params(entity, vtable, p);
-					s += std::format(" | entity 0x{:08X} {} ", entity, entity_class_name(vtable));
+					s += std::format(" | entity 0x{:08X} {} ", entity, entity_class_name(build::to_current(vtable)));
 					s += ok ? std::format("params pos ({:.6g}, {:.6g}, {:.6g}) inv_range {:.6g} rgb ({:.6g}, {:.6g}, {:.6g}) dwindle_end {:.6g}",
 						p.x, p.y, p.z, p.inv_dwindle_range, p.r, p.g, p.b, p.dwindle_end) : std::string("params FAULT");
 				}

@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "camera.hpp"
+#include "game_build.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "frustum_culling.hpp"
 #include "host_feed.hpp"
@@ -213,7 +214,7 @@ namespace comp::game::camera
 		constexpr DWORD GAMEREND_OFFSET = 0x6F8;
 		constexpr DWORD CULL_CAM_OFFSET = 0x14;
 		constexpr DWORD FRPG_CAMERA_ENTITY_VTABLE = 0x01174478;
-		const DWORD hgman = safe_read_ptr(HGMAN_SLOT_VA);
+		const DWORD hgman = safe_read_ptr(build::at(HGMAN_SLOT_VA));
 		const DWORD gamerend = hgman ? safe_read_ptr(hgman + GAMEREND_OFFSET) : 0;
 		const DWORD cam = gamerend ? safe_read_ptr(gamerend + CULL_CAM_OFFSET) : 0;
 		const DWORD handle = cam ? safe_read_ptr(cam + 0x04) : 0;
@@ -229,7 +230,8 @@ namespace comp::game::camera
 		// The engine itself ignores the generation byte; the entity keeps its full handle at +0x08,
 		// which rules out another camera entity briefly holding a reused slot after a re-create.
 		// HGCameraEntity is only the base class's vtable while an entity is being destroyed.
-		if (!entity || safe_read_ptr(entity) != FRPG_CAMERA_ENTITY_VTABLE || safe_read_ptr(entity + 0x08) != handle)
+		const DWORD camera_vtable = build::at(FRPG_CAMERA_ENTITY_VTABLE);
+		if (!entity || !camera_vtable || safe_read_ptr(entity) != camera_vtable || safe_read_ptr(entity + 0x08) != handle)
 			return 0;
 		return entity;
 	}

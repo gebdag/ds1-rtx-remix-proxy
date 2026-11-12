@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "fx_owner.hpp"
+#include "game_build.hpp"
 #include "ffx_instances.hpp"
 
 #include <algorithm>
@@ -65,7 +66,8 @@ namespace comp::game::fx_owner
 		// The light slot a live point-light host lit, or -1.
 		int host_slot(DWORD host)
 		{
-			if (!host || read_dword(host) != kPointLightHostVtable)
+			static const DWORD host_vtable = build::at(kPointLightHostVtable); // 2015-06-15 address -> running build's
+			if (!host || !host_vtable || read_dword(host) != host_vtable)
 				return -1;
 			bool ok = false;
 			const int slot = read_short(host + kHostSlot, ok);
@@ -82,7 +84,8 @@ namespace comp::game::fx_owner
 				return;
 			const auto& instances = ffx_instances::current();
 			g_walk_instances = static_cast<int>(instances.size());
-			const DWORD host_offset = read_dword(kHostOffsetGlobal);
+			const DWORD host_offset_global = build::at(kHostOffsetGlobal);
+			const DWORD host_offset = host_offset_global ? read_dword(host_offset_global) : 0;
 			if (!host_offset)
 				return;
 			for (const auto& inst : instances)

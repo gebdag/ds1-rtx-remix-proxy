@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "hud_scale.hpp"
+#include "game_build.hpp"
 #include "aspect_ratio.hpp"
 #include "shared/globals.hpp"
 #include "shared/common/config.hpp"
@@ -230,7 +231,8 @@ namespace comp::game::hud_scale
 		{
 			__try {
 				auto* context = static_cast<char*>(dc);
-				if (*reinterpret_cast<DWORD*>(context) != kMenuDcVtable)
+				const DWORD menu_dc_vtable = build::at(kMenuDcVtable); // 2015-06-15 address -> running build's
+				if (!menu_dc_vtable || *reinterpret_cast<DWORD*>(context) != menu_dc_vtable)
 					return false;
 				auto* buffer = *reinterpret_cast<char**>(context + kDcBuffer);
 				if (!buffer)
@@ -379,15 +381,18 @@ namespace comp::game::hud_scale
 			g_scale[g] = std::clamp(cfg.get_float("Hud", kGroups[g].key, 1.0f), 0.3f, 1.5f);
 		refresh_any();
 
-		if (std::memcmp(reinterpret_cast<const void*>(kDialogDraw), kDialogDrawBytes, sizeof(kDialogDrawBytes)) != 0 ||
-			std::memcmp(reinterpret_cast<const void*>(kObjectDraw), kObjectDrawBytes, sizeof(kObjectDrawBytes)) != 0)
+		// 2015-06-15 addresses -> the running build's (game_build.hpp); 0 = not available.
+		const DWORD dialog_draw = build::at(kDialogDraw), object_draw = build::at(kObjectDraw);
+		if (!dialog_draw || !object_draw ||
+			std::memcmp(reinterpret_cast<const void*>(dialog_draw), kDialogDrawBytes, sizeof(kDialogDrawBytes)) != 0 ||
+			std::memcmp(reinterpret_cast<const void*>(object_draw), kObjectDrawBytes, sizeof(kObjectDrawBytes)) != 0)
 		{
 			shared::common::log("HudScale", "the dialog draws are not where they should be: HUD scaling is off",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 			return;
 		}
-		if (MH_CreateHook(reinterpret_cast<void*>(kDialogDraw), &dialog_draw_detour, reinterpret_cast<void**>(&g_dialog_draw)) != MH_OK ||
-			MH_CreateHook(reinterpret_cast<void*>(kObjectDraw), &object_draw_detour, reinterpret_cast<void**>(&g_object_draw)) != MH_OK)
+		if (MH_CreateHook(reinterpret_cast<void*>(dialog_draw), &dialog_draw_detour, reinterpret_cast<void**>(&g_dialog_draw)) != MH_OK ||
+			MH_CreateHook(reinterpret_cast<void*>(object_draw), &object_draw_detour, reinterpret_cast<void**>(&g_object_draw)) != MH_OK)
 		{
 			shared::common::log("HudScale", "hooking the dialog draws failed: HUD scaling is off",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);

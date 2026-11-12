@@ -1,15 +1,16 @@
 # Per-category light tuning for the synthesized map lights.
+# Scales multiply the values in the per-map tables, so 1.0 is exactly the
+# map's own POINT_LIGHT_BANK row. Categories are global: torch_small covers
+# every torch in the game.
 #
-# Scales multiply the values in the per-map tables, so 1.0 is exactly the map's own
-# POINT_LIGHT_BANK row. Categories are global: torch_small covers every torch in the
-# game, in every map, so one number tunes them all.
-#
-# Edited live in F4 > Lights > Light Categories; Save Categories writes this file.
+# followsEffect 1: each light follows its effect's sprites drawn at its spot, at
+# (sprite alpha / effectAlpha) of its brightness (effects that come and go, like
+# Tomb of the Giants' lantern halos). effectAlpha: the sprites' alpha at full strength.
 #
 # category  intensityScale  radiusScale  enabled  followsEffect  effectAlpha
-torch_small  1.000  1.000  1  0  1.000            # 113 lights
-catacombs_brazier  1.000  1.000  1  0  1.000      # 110 lights
-lantern  1.000  1.000  1  1  0.196                # 49 lights
-candlestick  1.000  1.000  1  0  1.000            # 40 lights
-oolacile_lantern  1.000  1.000  1  0  1.000       # 11 lights
-kiln_embers  1.000  1.000  1  0  1.000            # 10 lights
+torch_small  1.000  1.000  1  0  1.000
+catacombs_brazier  1.000  1.000  1  0  1.000
+lantern  1.000  1.000  1  1  0.196
+candlestick  1.000  1.000  1  0  1.000
+oolacile_lantern  1.000  1.000  1  0  1.000
+kiln_embers  1.000  1.000  1  0  1.000
