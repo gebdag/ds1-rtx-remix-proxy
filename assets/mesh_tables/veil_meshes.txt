@@ -1,0 +1,11 @@
+# Dark Souls veils: blended map meshes the game lays over a surface it fogs with another set, fading out by vertex alpha.
+# Drawn as unlit layers in the game's colour for them and left out of the look's haze, so they hide the fog behind them by their
+# alpha (game/mesh_tables.hpp is_veil_draw). Hand-kept: <index FNV-1a 64> <index count> <source>  (hashes as in shell_meshes.txt)
+#
+# Kiln of the First Flame, the doorway at the end of the white passage: m0010B0A18 mesh17 (m18_wall_06), a ring of rock wall
+# round the door, vertex alpha 1 at the door, 0.8, 0.5, 0 at its outer edge 10 m out. In the game the white fog thins to
+# black towards the door; as a decal the ring went white with the passage, and the solid wall inside it stood in the white
+# with a hard edge (frame_20261112_020600, frame_20261112_020606).
+6a69afb786985778 966 m18_00_00_00/m0010B0A18/mesh17/lod0
+d97164dfb61f5222 672 m18_00_00_00/m0010B0A18/mesh17/lod1
+21274dedefcae08d 293 m18_00_00_00/m0010B0A18/mesh17/lod2

@@ -405,6 +405,9 @@ namespace shared::common
 			// cutout, at GapSkirtAlphaRef (game/mesh_tables.hpp skirt_backing_indices). 0: bare decals, the sky shows through the
 			// seam under them. Live: proxy.Meshes.SkirtBacking.
 			bool skirt_backing = true;
+			// Meshes in rtx_comp\mesh_tables\veil_meshes.txt are drawn as unlit layers in their vertex colour, out of the look's haze
+			// (game/mesh_tables.hpp is_veil_draw). 0: decals, as before. Live: proxy.Meshes.Veils.
+			bool veils = true;
 			// Window glass (rtx_comp\mesh_tables\glass_meshes.txt): draw the leaded came as an alpha-tested
 			// opaque surface and the glass as a separate blended surface with its derived texture
 			// (rtx_comp\glass), which the ds1_glass mod makes translucent. Off: as the game draws it.

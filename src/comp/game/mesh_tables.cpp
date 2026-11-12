@@ -14,7 +14,7 @@ namespace comp::game::mesh_tables
 {
 	namespace
 	{
-		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted, ground, backing };
+		enum class kind : uint8_t { none, sky, shell, glass, thin_wall, emitter, no_shadow, glow, painted, ground, backing, veil };
 
 		struct range_key
 		{
@@ -147,6 +147,7 @@ namespace comp::game::mesh_tables
 			load_table_locked("sky_meshes.txt", kind::sky, "sky mesh", "sky layers stay world geometry");
 			load_table_locked("shell_meshes.txt", kind::shell, "blended shell", "blended shells stay decals");
 			load_table_locked("skirt_backing.txt", kind::backing, "backed skirt", "skirts over open air stay bare decals");
+			load_table_locked("veil_meshes.txt", kind::veil, "veil", "veils stay decals");
 			load_table_locked("glass_meshes.txt", kind::glass, "window glass", "window glass is not split");
 			// Before the thin walls: a face listed in both casts no shadow at all.
 			load_table_locked("no_shadow_meshes.txt", kind::no_shadow, "no-shadow", "every map mesh casts shadows");
@@ -189,7 +190,7 @@ namespace comp::game::mesh_tables
 				const char* what = it->second.k == kind::sky ? "sky mesh" :
 					it->second.k == kind::shell ? "blended shell" :
 					it->second.k == kind::glass ? "window glass" :
-					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : it->second.k == kind::backing ? "backed skirt" : "light emitter";
+					it->second.k == kind::thin_wall ? "thin wall" : it->second.k == kind::no_shadow ? "no-shadow mesh" : it->second.k == kind::glow ? "glow mesh" : it->second.k == kind::painted ? "painted colour mesh" : it->second.k == kind::ground ? "ground card" : it->second.k == kind::backing ? "backed skirt" : it->second.k == kind::veil ? "veil" : "light emitter";
 				shared::common::log("MeshTables", std::format("{} drawn: {}", what, it->second.source));
 			}
 			return { it->second.k, &it->second };
@@ -298,6 +299,11 @@ namespace comp::game::mesh_tables
 	{
 		const match m = lookup(ib, type, start_index, prim_count);
 		return m.k == kind::backing ? &m.e->backing : nullptr;
+	}
+
+	bool is_veil_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		return lookup(ib, type, start_index, prim_count).k == kind::veil;
 	}
 
 	bool is_emitter_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)

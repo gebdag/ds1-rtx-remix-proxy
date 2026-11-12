@@ -215,6 +215,27 @@ namespace comp
 			ctx.save_rs(dev, state);
 	}
 
+	// A veil (mesh_tables::is_veil_draw): the game's straight-alpha blend kept, the sprites' unhazed unlit marker in stage 0's
+	// constant (ffp_state draw_sprite_up: Remix composites the layer as the game does and the look's haze leaves it alone and
+	// shows the fog behind it only as far as the layer lets it through), and its colour the texture times the vertex colour
+	// (Remix reads stage 0's CURRENT as the vertex colour) times the game's light on it at the draw's distance
+	// (atmosphere::tag_veil). False (nothing changed) when the draw is not blended that way. The marker is cleared after the
+	// draw with the decal marker.
+	bool apply_veil_states(IDirect3DDevice9* dev, shared::common::ffp_state& ffp, float distance)
+	{
+		DWORD blend = FALSE, src = 0, dst = 0;
+		dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &blend);
+		dev->GetRenderState(D3DRS_SRCBLEND, &src);
+		dev->GetRenderState(D3DRS_DESTBLEND, &dst);
+		if (!blend || src != D3DBLEND_SRCALPHA || dst != D3DBLEND_INVSRCALPHA)
+			return false;
+		constexpr DWORD kUnhazedUnlitMarker = 0xD15D0E23;
+		dev->SetTextureStageState(0, D3DTSS_CONSTANT, kUnhazedUnlitMarker);
+		// Its colour, and no fade where it lies on the wall behind it (atmosphere.hpp tag_veil).
+		game::atmosphere::tag_veil(dev, ffp.ps_const_data(), ffp.vs_const_data(), ffp.probe_texture(), distance);
+		return true;
+	}
+
 	// The hanging faces of a backed skirt (mesh_tables::skirt_backing_indices) once more, as a solid cutout with the draw's
 	// own vertices and texture: the surface its decal lands on where nothing lies below it. Lighting rays pass it (the
 	// no-shadow marker): where the game shows the skirt's fade over the drop, nothing casts a shadow or shuts light out of
@@ -1003,10 +1024,20 @@ namespace comp
 						apply_came_pass_states(ctx, dev, glass_cut);
 					// A light shaft hangs in the air, a glow layer like the unlit ones: never a decal.
 					const bool light_shaft = !water_draw && is_light_shaft_draw();
-					const bool base_decal = !shell && !glass_texture && !light_shaft && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
+					// A veil (mesh_tables::is_veil_draw) is an unlit layer in its vertex colour, out of the look's haze: never a decal.
+					bool veil = !water_draw && !shell && !glass_texture && !light_shaft && mesh_cfg.veils &&
+						game::mesh_tables::is_veil_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
+					if (veil)
+					{
+						float centre[3], ox, oy, oz, veil_distance = -1.0f;
+						if (ffp.draw_world_centre(PrimitiveType, BaseVertexIndex, startIndex, primCount, centre) && ffp.world_offset(ox, oy, oz))
+							veil_distance = std::sqrt((centre[0] - ox) * (centre[0] - ox) + (centre[1] - oy) * (centre[1] - oy) + (centre[2] - oz) * (centre[2] - oz));
+						veil = apply_veil_states(dev, ffp, veil_distance);
+					}
+					const bool base_decal = !shell && !veil && !glass_texture && !light_shaft && !is_atmospheric_layer() && ffp.apply_blended_decal_marker(dev);
 					// Alpha-blended unlit glow layers take the sprites' unlit marker instead (ffp_state).
-					const bool unlit_layer = !base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
-						ffp.apply_unlit_layer_marker(dev, light_shaft);
+					const bool unlit_layer = veil || (!base_decal && !shell && !glass_texture && !is_atmospheric_layer() &&
+						ffp.apply_unlit_layer_marker(dev, light_shaft));
 					// Hazed by the game with its own set, not the set of the wall behind it (atmosphere.hpp tag_unhazed).
 					if (unlit_layer && light_shaft)
 						game::atmosphere::tag_unhazed(dev);
@@ -1048,9 +1079,11 @@ namespace comp
 						((game::map_lights::current_map_id() >> 16) & 0xFFFF) == ((10u << 8) | 2u);
 					if (foliage)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kFoliageMarker);
-					// Ash Lake's bed and the trunks in its water fade to black by painted vertex colour. Only there: the table is one map's.
+					// Ash Lake's bed and the trunks in its water fade to black by painted vertex colour; so does the wall round the Kiln's
+					// doorway (scripts/gen_painted_meshes.py LISTED). Only in the table's own maps: a draw is known by its indices alone.
+					const DWORD painted_map = (game::map_lights::current_map_id() >> 16) & 0xFFFF;
 					const bool painted = !water_draw && !inside_out && !lamp && !no_shadow && !foliage &&
-						((game::map_lights::current_map_id() >> 16) & 0xFFFF) == ((13u << 8) | 2u) &&
+						(painted_map == ((13u << 8) | 2u) || painted_map == (18u << 8)) &&
 						game::mesh_tables::is_painted_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount);
 					if (painted)
 						dev->SetTextureStageState(4, D3DTSS_CONSTANT, kPaintedColourMarker);

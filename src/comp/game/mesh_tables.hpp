@@ -84,6 +84,15 @@ namespace comp::game::mesh_tables
 	// triangle list over the draw's own vertices, which the renderer draws once more as a solid cutout. Null for any other draw.
 	const std::vector<uint16_t>* skirt_backing_indices(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A veil (rtx_comp\mesh_tables\veil_meshes.txt, hand-kept): a blended map mesh the game lays over a surface it fogs with
+	// another set, fading out by vertex alpha. The Kiln's doorway at the end of the white passage: m0010B0A18 mesh17 is a ring of
+	// rock wall round the door, solid at the door and clear 10 m out. The game draws it dark, with its own fog, over the
+	// passage it has already fogged white, so the white thins to black towards the door. As a decal it was pasted onto the
+	// passage and took the passage's haze: white up to the edge of the solid wall inside it, a hard cutout
+	// (frame_20261112_020600, _020606). Drawn as an unlit layer in the game's colour for it and left out of the look's haze, it
+	// hides the fog behind it by its alpha, as the game's blend does.
+	bool is_veil_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }

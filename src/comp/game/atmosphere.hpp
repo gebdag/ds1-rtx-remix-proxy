@@ -83,6 +83,14 @@ namespace comp::game::atmosphere
 	// the eye is used to a bright view). [FFP] WhitePassageLight (0.06), live: the light it throws from inside, against c100.
 	// After tag_haze_set and tag_self_lit, for the opaque unlit m18_ao draw at c100 2 or more.
 	void tag_white_passage(IDirect3DDevice9* dev, const float* ps_const);
+	// After tag_self_lit, for a veil (mesh_tables::is_veil_draw): its colour as the game's shader gives it, in the self-lit tag
+	// an unlit layer's texture is scaled by: c100 times the area's ambient (c86 * the probe's mean + the hemisphere's middle)
+	// times what its own haze leaves of it at `distance` (the draw's centre from the camera; fog by VS c128 and c103.w,
+	// extinction c104 * c111.w, c105 by c110.w), gamma space. Not carried: the fog colour's own part (c103.rgb times the fog,
+	// 0.05 at 33 m in the Kiln) and the inscatter, which a scale cannot add; the lightmap and point lights on it. The tag
+	// also keeps the layer whole where it lies on a surface: the runtime fades an unlit layer out near one, as the game's soft
+	// sprites do, unless it carries the tag, and a veil lies on the wall it covers. One step of the tag is 1/16 in gamma.
+	void tag_veil(IDirect3DDevice9* dev, const float* ps_const, const float* vs_const, IDirect3DBaseTexture9* probe, float distance);
 
 	void tag_self_lit(IDirect3DDevice9* dev, bool ambient, const float* ps_const,
 		IDirect3DBaseTexture9* probe = nullptr, bool lava = false, bool unlit = false, bool lit_effect = false, bool light_shaft = false, const float* shaft_gain = nullptr,

@@ -355,6 +355,10 @@ namespace comp
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] GapSkirtAlphaRef: shells marked 'gap' (New Londo skirts over trenches) are cut here, not at 64");
 
+			ImGui::Checkbox("Veils", &cfg.meshes.veils);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] Veils: black blended meshes over the fog (the Kiln exit's aura) are unlit layers that hide the fog behind them");
+
 			ImGui::Checkbox("Skirt Backing", &cfg.meshes.skirt_backing);
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] SkirtBacking: skirts over open air (Valley of Drakes bank) get their hanging faces drawn solid under the decal");

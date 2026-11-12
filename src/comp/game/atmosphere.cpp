@@ -735,6 +735,42 @@ namespace comp::game::atmosphere
 		}
 	}
 
+	void tag_veil(IDirect3DDevice9* dev, const float* ps_const, const float* vs_const, IDirect3DBaseTexture9* probe, float distance)
+	{
+		if (!ps_const)
+			return;
+		std::array<std::array<float, 3>, 6> faces {};
+		const bool probed = probe && shared::common::ffp_state::get().cube_face_averages(probe, faces);
+		DWORD tag = kSelfLitMarker;
+		for (int c = 0; c < 3; c++)
+		{
+			float mean = 0.0f;
+			for (const auto& f : faces)
+				mean += f[c] / 6.0f;
+			const float ambient = (probed ? ps_const[86 * 4 + c] * mean : 0.0f) + 0.5f * (ps_const[98 * 4 + c] + ps_const[99 * 4 + c]);
+			// Its own haze at its distance, as the light shaft's (tag_self_lit): what the fog leaves, then the extinction times
+			// c105 for c110.w of it. Without a distance, up close: no fog and no extinction.
+			float fog = 0.0f, ext = 1.0f;
+			if (vs_const && distance > 0.0f)
+			{
+				fog = std::clamp(std::clamp((distance - vs_const[128 * 4]) * vs_const[128 * 4 + 1], 0.0f, 1.0f) * ps_const[103 * 4 + 3], 0.0f, 1.0f);
+				ext = std::exp2(-ps_const[104 * 4 + c] * distance * ps_const[111 * 4 + 3] * 2.08136892f);
+			}
+			const float share = std::clamp(ps_const[110 * 4 + 3], 0.0f, 1.0f);
+			float hazed = (1.0f - fog) * (1.0f - share + share * ext * ps_const[105 * 4 + c]);
+			if (!std::isfinite(hazed))
+				hazed = 1.0f;
+			const float value = ps_const[100 * 4 + c] * ambient * hazed;
+			// At least one step, so the tag is there whatever the colour.
+			tag |= static_cast<DWORD>(std::clamp(std::lround(std::max(value, 0.0f) / kSelfLitRange * 255.0f), 1L, 255L)) << (16 - 8 * c);
+		}
+		if (dev && tag != g_self_lit_tag_set)
+		{
+			dev->SetTextureStageState(3, D3DTSS_CONSTANT, tag);
+			g_self_lit_tag_set = tag;
+		}
+	}
+
 	int seath_glow_mode()
 	{
 		return g_seath_glow;
@@ -1034,6 +1070,7 @@ namespace comp::game::atmosphere
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
 		else if (key == "Lights.EffectDrawDump") { static std::string last; if (value != last) { last = value; ffx_lights::dump_drawn(); } }
 		else if (key == "Fur.ShellGeometry") comp::skinning::s_shell_fur = b;
+		else if (key == "Meshes.Veils") shared::common::config::get().meshes.veils = value != "0";
 		else if (key == "Meshes.SkirtBacking") shared::common::config::get().meshes.skirt_backing = value != "0";
 		else if (key == "Meshes.GapSkirtAlphaRef") shared::common::config::get().meshes.gap_skirt_alpha_ref = std::clamp(std::atoi(value.c_str()), 0, 255);
 		else if (key == "Meshes.GroundCardHeightKept") shared::common::config::get().meshes.ground_card_height_kept = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 1.0f);
