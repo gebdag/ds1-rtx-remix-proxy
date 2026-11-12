@@ -101,6 +101,12 @@ BACKING_POINTS = 24        # sample points per face for that share
 BACKING_CONFIRMED = {
     ('m16_00_00_00', 'm2750B0A16', 4),   # frame_20261112_014436, _014452, _014500
 }
+# Skirts drawn as their own surface, one by one from captures: a plain skirt whose vertices lie on a steep surface, so neither
+# the shell nor the skirt rules take it, but whose visible part reaches past that surface's curved edge, where the next
+# surface along the view lies metres behind. As a decal it took that surface's light there: a pale strip along the edge.
+SKIRTS_AS_SURFACES = {
+    ('m14_00_00_00', 'm0050B0A14', 10),  # Blighttown, a mound's foot over the swamp: frame_20261112_142920
+}
 BACKING_STEP = 0.05        # m between the points that decide which faces hang: a face with one such point hanging is backed.
 #                            The seam is a slit a few centimetres wide across faces up to 5 m long; 24 points a face missed it
 #                            in places (frame_20261112_014500 kept two slivers)
@@ -533,6 +539,13 @@ def main():
                       f'{near_share:.0%} within {SOLID_NEAR:g} m')
                 add(map_id, model, i, mesh, name, solid)
                 shelled.add((model, i))
+
+        for model, flver, names, sizes, layers in flvers:
+            for i, mesh in enumerate(flver.meshes):
+                if (map_id, model, i) in SKIRTS_AS_SURFACES and (model, i) not in shelled:
+                    print(f'skirt as surface {map_id}/{model}/mesh{i} {names[i]}')
+                    add(map_id, model, i, mesh, names[i], solid)
+                    shelled.add((model, i))
 
         # Gap skirts: listed as shells marked 'gap' (checked for shared keys with the solid shells). A skirt's vertices lie on
         # surfaces, so the meshes off them (shells, listed or not) are not candidates.
