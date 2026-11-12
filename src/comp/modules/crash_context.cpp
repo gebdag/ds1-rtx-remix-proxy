@@ -4,7 +4,9 @@
 #pragma comment(lib, "dbghelp.lib")
 
 #include "crash_context.hpp"
+#include "mod_check.hpp"
 #include "../game/camera.hpp"
+#include "shared/common/config.hpp"
 
 namespace comp::crash_context
 {
@@ -91,6 +93,26 @@ namespace comp::crash_context
 			append_line(file, "eax=%08X ebx=%08X ecx=%08X edx=%08X", ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx);
 			append_line(file, "esi=%08X edi=%08X ebp=%08X esp=%08X eip=%08X", ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp, ctx->Eip);
 
+			// Stack of the crashing thread as module+offset (no symbols needed): enough to tell whose code it was.
+			append_line(file, "");
+			append_line(file, "stack:");
+			{
+				CONTEXT walk_ctx = *ep->ContextRecord;
+				STACKFRAME64 sf = {};
+				sf.AddrPC.Offset = walk_ctx.Eip;    sf.AddrPC.Mode = AddrModeFlat;
+				sf.AddrFrame.Offset = walk_ctx.Ebp; sf.AddrFrame.Mode = AddrModeFlat;
+				sf.AddrStack.Offset = walk_ctx.Esp; sf.AddrStack.Mode = AddrModeFlat;
+				const auto process = GetCurrentProcess();
+				SymInitialize(process, nullptr, TRUE);
+				for (int i = 0; i < 32 && StackWalk64(IMAGE_FILE_MACHINE_I386, process, GetCurrentThread(), &sf, &walk_ctx,
+					nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr) && sf.AddrPC.Offset; ++i)
+				{
+					append_line(file, "  %2d %s", i, module_plus_offset(reinterpret_cast<const void*>(static_cast<uintptr_t>(sf.AddrPC.Offset)),
+						mod_buf, sizeof(mod_buf)));
+				}
+				SymCleanup(process);
+			}
+
 			append_line(file, "");
 			append_line(file, "frame=%u uptime_ms=%u draws_last_frame=%u",
 				g_block.frame, g_block.tick_ms - g_block.start_tick_ms, g_block.draw_calls_last_frame);
@@ -115,7 +137,56 @@ namespace comp::crash_context
 				append_line(file, "  [frame %u, t+%ums] %s", ev.frame, ev.tick_ms - g_block.start_tick_ms, ev.msg);
 			}
 
+			if (const auto mods = mod_check::summary(); !mods.empty())
+			{
+				append_line(file, "");
+				append_line(file, "DLL mods found (remove them in case there are issues):");
+				DWORD written = 0;
+				WriteFile(file, mods.data(), static_cast<DWORD>(mods.size()), &written, nullptr);
+			}
+
 			CloseHandle(file);
+		}
+
+		// After the crash line: the other DLL mods found go to the log (console and console.log). In verbose mode the
+		// whole crash report follows them, and the console then stays open, in front, until Enter; it closes with the
+		// process otherwise.
+		void report_to_log(const char* report_path)
+		{
+			const bool verbose = shared::common::config::get().troubleshooting.verbose;
+			if (verbose)
+			{
+				std::ifstream report(report_path);
+				for (std::string line; std::getline(report, line); )
+					shared::common::log("CrashReport", line, shared::common::LOG_TYPE::LOG_TYPE_ERROR);
+			}
+			if (const auto mods = mod_check::summary(); !mods.empty())
+			{
+				shared::common::log("CrashHandler", "Other DLL mods are installed. Remove them in case there are issues:",
+					shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+				for (size_t start = 0, end; start < mods.size(); start = end + 2)
+				{
+					end = mods.find("\r\n", start);
+					shared::common::log("CrashHandler", std::string_view(mods).substr(start, end - start), shared::common::LOG_TYPE::LOG_TYPE_WARN);
+					if (end == std::string::npos)
+						break;
+				}
+			}
+			if (!verbose || !shared::common::g_external_console_created)
+				return;
+
+			shared::common::log("CrashHandler", "Verbose: this window stays open. Press Enter to close it.", shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
+			if (const auto window = GetConsoleWindow())
+			{
+				ShowWindow(window, SW_SHOWNORMAL);
+				SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+				SetForegroundWindow(window);
+			}
+			const auto in = GetStdHandle(STD_INPUT_HANDLE);
+			FlushConsoleInputBuffer(in);
+			char buf[16];
+			DWORD n = 0;
+			ReadConsoleA(in, buf, sizeof(buf), &n, nullptr);
 		}
 
 		LONG WINAPI crash_handler(EXCEPTION_POINTERS* ep)
@@ -158,6 +229,7 @@ namespace comp::crash_context
 				module_plus_offset(ep->ExceptionRecord->ExceptionAddress, mod_buf, sizeof(mod_buf)),
 				g_block.frame, report_path);
 			shared::common::log("CrashHandler", msg, shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
+			report_to_log(report_path);
 
 			// Let WER continue so its full-memory dump is still written.
 			InterlockedExchange(&g_in_handler, 0);

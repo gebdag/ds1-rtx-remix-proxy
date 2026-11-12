@@ -220,6 +220,15 @@ namespace shared::common
 			bool log_present_info = true;
 		} diagnostics;
 
+		// [Troubleshooting] Verbose=1: more in the log for tracking down crashes and missing pieces. A startup report of
+		// every file and library the mod needs (and which are missing), every module loaded in the game with its
+		// version, and on a crash the whole crash report (exception, registers, stack, recent events) in the log, with
+		// the console kept open until Enter is pressed. Off by default; the normal log is always written.
+		struct troubleshooting_settings
+		{
+			bool verbose = false;
+		} troubleshooting;
+
 		struct remix_settings
 		{
 			bool enabled = true;

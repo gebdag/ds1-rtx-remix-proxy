@@ -5,6 +5,8 @@
 #include "d3d9_proxy.hpp"
 #include "game/frustum_culling.hpp"
 #include "modules/crash_context.hpp"
+#include "modules/dependency_check.hpp"
+#include "modules/mod_check.hpp"
 #include "shared/common/flags.hpp"
 #include "shared/common/config.hpp"
 
@@ -68,11 +70,38 @@ namespace comp
 			Beep(523, 100);
 		}
 
+		// Overlays and injectors have attached by the time the window exists.
+		if (!shared::globals::lookdev_host)
+			mod_check::scan_loaded();
+		if (shared::common::config::get().troubleshooting.verbose)
+			dependency_check::log_loaded_modules();
+
 		// Post-load DLLs (after window is found, game is running)
 		d3d9_proxy::load_postload_dlls();
 
 		comp::main();
 		return 0;
+	}
+
+	// Off the loader lock: the mod check reads version resources (GetFileVersionInfo), which is not safe in DllMain,
+	// and neither scan may delay the game's start.
+	DWORD WINAPI startup_checks([[maybe_unused]] LPVOID lpParam)
+	{
+		mod_check::scan_folder();
+		if (shared::common::config::get().troubleshooting.verbose)
+			dependency_check::log_report();
+		return 0;
+	}
+
+	void print_banner()
+	{
+		shared::common::set_console_color_blue(true);
+		std::cout << "Launching RTX Remix Comp [" << COMP_MOD_VERSION_MAJOR << "." << COMP_MOD_VERSION_MINOR << "." << COMP_MOD_VERSION_PATCH << "]\n";
+		std::cout << "> Compiled On : " + std::string(__DATE__) + " " + std::string(__TIME__) + "\n";
+		std::cout << "> Based on xoxor4d/remix-comp-base\n";
+		std::cout << "> Adapted by gabdeg for Dark Souls: Prepare to Die Edition\n";
+		std::cout << "> Running as d3d9.dll proxy\n\n";
+		shared::common::set_console_color_default();
 	}
 }
 
@@ -86,14 +115,7 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		shared::globals::setup_dll_module(hmodule);
 		shared::globals::setup_exe_module();
 		shared::globals::setup_homepath();
-
-		shared::common::set_console_color_blue(true);
-		std::cout << "Launching RTX Remix Comp [" << COMP_MOD_VERSION_MAJOR << "." << COMP_MOD_VERSION_MINOR << "." << COMP_MOD_VERSION_PATCH << "]\n";
-		std::cout << "> Compiled On : " + std::string(__DATE__) + " " + std::string(__TIME__) + "\n";
-		std::cout << "> Based on xoxor4d/remix-comp-base\n";
-		std::cout << "> Adapted by gabdeg for Dark Souls: Prepare to Die Edition\n";
-		std::cout << "> Running as d3d9.dll proxy\n\n";
-		shared::common::set_console_color_default();
+		comp::print_banner();
 
 		// The INIs live in rtx_comp\settings, not in the game's root folder. Files an earlier build left in the
 		// old places move there; one already there wins, and a leftover stays where it is, unread.
@@ -117,6 +139,12 @@ BOOL APIENTRY DllMain(HMODULE hmodule, const DWORD ul_reason_for_call, LPVOID)
 		shared::common::config::get().load(shared::globals::settings_path + ini_name);
 		if (shared::globals::lookdev_host)
 			shared::common::config::get().set_overlay(shared::globals::settings_path + "\\remix-comp-proxy.host.ini");
+
+		if (!shared::globals::lookdev_host)
+		{
+			if (const auto t = CreateThread(nullptr, 0, comp::startup_checks, nullptr, 0, nullptr); t)
+				CloseHandle(t);
+		}
 
 		// Apply fixed-address game patches as early as possible.
 		// Effect disabling lives in game/render_toggles.cpp now — schedule-level

@@ -218,6 +218,9 @@ namespace shared::common
 		cheats.enemies_ignore_player = get_bool("Cheats", "EnemiesIgnorePlayer", false);
 		cheats.no_fall_damage = get_bool("Cheats", "NoFallDamage", false);
 
+		// [Troubleshooting]
+		troubleshooting.verbose = get_bool("Troubleshooting", "Verbose", false);
+
 		// [Diagnostics]
 		diagnostics.enabled = get_bool("Diagnostics", "Enabled", true);
 		diagnostics.auto_capture = get_bool("Diagnostics", "AutoCapture", true);

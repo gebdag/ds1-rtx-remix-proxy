@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "d3d9_proxy.hpp"
 #include "shared/common/config.hpp"
+#include "modules/dependency_check.hpp"
 
 namespace d3d9_proxy
 {
@@ -80,10 +81,12 @@ namespace d3d9_proxy
 			}
 			else
 			{
+				const DWORD error = GetLastError();
 				shared::common::log("Proxy",
 					std::format("Remix enabled but could not load '{}' (error 0x{:X}). Falling back to system d3d9.",
-						cfg.remix.dll_name, GetLastError()),
+						cfg.remix.dll_name, error),
 					shared::common::LOG_TYPE::LOG_TYPE_WARN);
+				comp::dependency_check::explain_load_failure(cfg.remix.dll_name, error);
 			}
 		}
 
