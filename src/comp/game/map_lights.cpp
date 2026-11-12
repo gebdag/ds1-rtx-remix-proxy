@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "map_lights.hpp"
+#include "game_build.hpp"
 #include "host_feed.hpp"
 #include "camera.hpp"
 
@@ -96,7 +97,7 @@ namespace comp::game::map_lights
 		if (shared::globals::lookdev_host)
 			return host_feed::frame().map_id;
 
-		const DWORD entry = safe_read_dword(EXE_BASE + FIELD_AREA_ACTIVE_RVA);
+		const DWORD entry = safe_read_dword(build::at(0x00400000 + FIELD_AREA_ACTIVE_RVA));
 		if (!entry) return 0;
 
 		const DWORD vector_header = safe_read_dword(entry + ENTRY_VECTOR);

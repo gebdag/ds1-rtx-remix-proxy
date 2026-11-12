@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "aspect_ratio.hpp"
+#include "game_build.hpp"
 #include "shared/common/config.hpp"
 #include "shared/common/ffp_state.hpp"
 #include "shared/globals.hpp"
@@ -88,14 +89,16 @@ namespace comp::game::aspect_ratio
 			if (g_hook_tried || shared::globals::lookdev_host)
 				return;
 			g_hook_tried = true;
-			if (std::memcmp(reinterpret_cast<const void*>(kProjection), kProjectionBytes, sizeof(kProjectionBytes)) != 0)
+			// Addresses here are the 2015-06-15 build's; build::at() gives the running build's (0 = not available).
+			const DWORD projection = build::at(kProjection);
+			if (!projection || std::memcmp(reinterpret_cast<const void*>(projection), kProjectionBytes, sizeof(kProjectionBytes)) != 0)
 			{
 				shared::common::log("Aspect", "the camera projection is not where it should be: the view stays 16:9 for the game's own logic",
 					shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 				return;
 			}
-			if (MH_CreateHook(reinterpret_cast<void*>(kProjection), reinterpret_cast<void*>(&projection_detour), &g_projection) != MH_OK ||
-				MH_EnableHook(reinterpret_cast<void*>(kProjection)) != MH_OK)
+			if (MH_CreateHook(reinterpret_cast<void*>(projection), reinterpret_cast<void*>(&projection_detour), &g_projection) != MH_OK ||
+				MH_EnableHook(reinterpret_cast<void*>(projection)) != MH_OK)
 			{
 				shared::common::log("Aspect", "hooking the camera projection failed", shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 				return;
@@ -107,7 +110,9 @@ namespace comp::game::aspect_ratio
 
 		bool add_entry(window_size* entry)
 		{
-			DWORD list = kWindowList, function = kWindowListAdd;
+			DWORD list = build::at(kWindowList), function = build::at(kWindowListAdd);
+			if (!list || !function)
+				return false;
 			__try
 			{
 				__asm
@@ -127,10 +132,13 @@ namespace comp::game::aspect_ratio
 
 		bool list_range(window_size*& first, window_size*& last)
 		{
+			const DWORD list = build::at(kWindowList);
+			if (!list)
+				return false;
 			__try
 			{
-				first = *reinterpret_cast<window_size**>(kWindowList + 4);
-				last = *reinterpret_cast<window_size**>(kWindowList + 8);
+				first = *reinterpret_cast<window_size**>(list + 4);
+				last = *reinterpret_cast<window_size**>(list + 8);
 				return first && last > first;
 			}
 			__except (EXCEPTION_EXECUTE_HANDLER)
@@ -185,7 +193,8 @@ namespace comp::game::aspect_ratio
 		void add_window_sizes()
 		{
 			window_size* first = nullptr, * last = nullptr;
-			if (std::memcmp(reinterpret_cast<const void*>(kWindowListAdd), kWindowListAddBytes, sizeof(kWindowListAddBytes)) != 0 || !list_range(first, last))
+			const DWORD list_add = build::at(kWindowListAdd);
+			if (!list_add || std::memcmp(reinterpret_cast<const void*>(list_add), kWindowListAddBytes, sizeof(kWindowListAddBytes)) != 0 || !list_range(first, last))
 				return;
 
 			int desktop_width = 0, desktop_height = 0;
@@ -267,8 +276,10 @@ namespace comp::game::aspect_ratio
 		}
 		if (!usable_ini_size(width, height, desktop_width, desktop_height))
 			return;
-		if (std::memcmp(reinterpret_cast<const void*>(kTableLastWidth), kTableLastWidthBytes, sizeof(kTableLastWidthBytes)) != 0 ||
-			std::memcmp(reinterpret_cast<const void*>(kTableLastHeight), kTableLastHeightBytes, sizeof(kTableLastHeightBytes)) != 0)
+		const DWORD last_width = build::at(kTableLastWidth), last_height = build::at(kTableLastHeight);
+		if (!last_width || !last_height ||
+			std::memcmp(reinterpret_cast<const void*>(last_width), kTableLastWidthBytes, sizeof(kTableLastWidthBytes)) != 0 ||
+			std::memcmp(reinterpret_cast<const void*>(last_height), kTableLastHeightBytes, sizeof(kTableLastHeightBytes)) != 0)
 		{
 			shared::common::log("Aspect", "the game's window size table is not where it should be: it starts at a 16:9 size", shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 			return;
@@ -284,7 +295,7 @@ namespace comp::game::aspect_ratio
 			return true;
 		};
 		constexpr DWORD kImmediate = 7;
-		if (write_int(kTableLastWidth + kImmediate, width) && write_int(kTableLastHeight + kImmediate, height))
+		if (write_int(last_width + kImmediate, width) && write_int(last_height + kImmediate, height))
 		{
 			g_table_patched = true;
 			shared::common::log("Aspect", std::format("the game starts at {}x{}", width, height));

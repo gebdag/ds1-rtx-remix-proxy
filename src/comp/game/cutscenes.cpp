@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "cutscenes.hpp"
+#include "game_build.hpp"
 #include "debug_tools.hpp"
 #include "fps_unlock.hpp"
 #include "map_lights.hpp"
@@ -25,8 +26,9 @@ namespace comp::game::cutscenes
 		// are sampled first, with every register as at the original call (this code's convention is the compiler's own); the
 		// step between the middle two is a cut when it is far larger than the steps either side of it (a fast camera move
 		// changes speed gradually, a cut jumps once).
+		// Addresses in this file are the 2015-06-15 build's; build::at() gives the running build's (0 = not available).
+		// The call is checked as `call kNearestSampler` from the resolved addresses (E8 17 7D D4 FF on 2015-06-15).
 		constexpr DWORD kCameraCall = 0x00FC2084;   // in the SibcamIns sample 0xFC2060, used by remo cut start and update only
-		constexpr BYTE kCameraCallBytes[] = { 0xE8, 0x17, 0x7D, 0xD4, 0xFF };
 		constexpr DWORD kNearestSampler = 0x00D09DA0;
 		constexpr DWORD kHermiteSampler = 0x00D0A1F0;
 		constexpr float kKeysPerSecond = 30.0f;
@@ -37,9 +39,10 @@ namespace comp::game::cutscenes
 
 		bool s_smooth_camera = true;
 		bool s_camera_patched = false;
-		// Shared with the naked thunk (game thread only).
+		// Shared with the naked thunk (game thread only). Set to the running build's samplers before the call is patched.
 		DWORD s_camera_target = kNearestSampler;
 		DWORD s_nearest_ptr = kNearestSampler;
+		DWORD s_hermite_ptr = kHermiteSampler;
 		DWORD s_sample_track = 0, s_sample_dat = 0, s_sample_esp = 0, s_sample_index = 0;
 		float s_sample_time = 0.0f;
 		float s_key_times[kCameraKeys] = {};
@@ -80,7 +83,7 @@ namespace comp::game::cutscenes
 				pose_step(s_poses[k], s_poses[k + 1], distance[k], turn[k]);
 			const bool cut = distance[1] > std::max(kCutMinDistance, kCutRatio * std::max(distance[0], distance[2])) ||
 				turn[1] > std::max(kCutMinTurn, kCutRatio * std::max(turn[0], turn[2]));
-			s_camera_target = cut ? kNearestSampler : kHermiteSampler;
+			s_camera_target = cut ? s_nearest_ptr : s_hermite_ptr;
 
 			const ULONGLONG now = GetTickCount64();
 			if (s_last_sample_ms && now - s_last_sample_ms > 1000)
@@ -142,17 +145,24 @@ namespace comp::game::cutscenes
 			}
 		}
 
-		bool write_call(DWORD target)
+		// `call target` as written at `site`.
+		void call_bytes(DWORD site, DWORD target, BYTE (&bytes)[5])
 		{
-			BYTE bytes[5] = { 0xE8 };
-			const DWORD rel = target - (kCameraCall + 5);
+			bytes[0] = 0xE8;
+			const DWORD rel = target - (site + 5);
 			std::memcpy(bytes + 1, &rel, sizeof(rel));
+		}
+
+		bool write_call(DWORD site, DWORD target)
+		{
+			BYTE bytes[5];
+			call_bytes(site, target, bytes);
 			DWORD old = 0;
-			if (!VirtualProtect(reinterpret_cast<void*>(kCameraCall), sizeof(bytes), PAGE_EXECUTE_READWRITE, &old))
+			if (!VirtualProtect(reinterpret_cast<void*>(site), sizeof(bytes), PAGE_EXECUTE_READWRITE, &old))
 				return false;
-			std::memcpy(reinterpret_cast<void*>(kCameraCall), bytes, sizeof(bytes));
-			VirtualProtect(reinterpret_cast<void*>(kCameraCall), sizeof(bytes), old, &old);
-			FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(kCameraCall), sizeof(bytes));
+			std::memcpy(reinterpret_cast<void*>(site), bytes, sizeof(bytes));
+			VirtualProtect(reinterpret_cast<void*>(site), sizeof(bytes), old, &old);
+			FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(site), sizeof(bytes));
 			return true;
 		}
 
@@ -162,17 +172,25 @@ namespace comp::game::cutscenes
 		{
 			if (s_camera_patched || !s_smooth_camera)
 				return;
-			if (std::memcmp(reinterpret_cast<const void*>(kCameraCall), kCameraCallBytes, sizeof(kCameraCallBytes)) != 0)
+			const DWORD site = build::at(kCameraCall), nearest = build::at(kNearestSampler), hermite = build::at(kHermiteSampler);
+			BYTE expected[5] = {};
+			if (site && nearest)
+				call_bytes(site, nearest, expected);
+			if (!site || !nearest || !hermite || std::memcmp(reinterpret_cast<const void*>(site), expected, sizeof(expected)) != 0)
 			{
 				log("Cutscenes", "Unexpected bytes at the cutscene camera call: smooth camera unavailable", LOG_TYPE::LOG_TYPE_WARN, true);
 				return;
 			}
-			s_camera_patched = write_call(reinterpret_cast<DWORD>(&camera_thunk));
+			s_nearest_ptr = nearest;
+			s_hermite_ptr = hermite;
+			s_camera_target = nearest;
+			s_camera_patched = write_call(site, reinterpret_cast<DWORD>(&camera_thunk));
 			log("Cutscenes", s_camera_patched ? "Smooth cutscene camera on" : "Could not patch the cutscene camera call");
 		}
 		// RemoManStep: the singleton, and its request (thiscall: scene, flags, callback, user data, unused, player).
 		constexpr DWORD kRemoMan = 0x01378490;
 		constexpr DWORD kRequest = 0x00EE1950;
+		// push -1; push 0x01055DFD (its exception handler: an absolute address, compared on 2015-06-15 only); mov eax, fs:...
 		constexpr BYTE kRequestStart[] = { 0x6A, 0xFF, 0x68, 0xFD, 0x5D, 0x05, 0x01, 0x64 };
 		// What the game's own request from a script checks first, and the local player it plays for.
 		constexpr DWORD kEventMan = 0x0137D790;
@@ -209,17 +227,20 @@ namespace comp::game::cutscenes
 		bool in_game()
 		{
 			DWORD chr = 0, player = 0, events = 0;
-			return read_dword(kEventMan, events) && events && read_dword(kWorldChrMan, chr) && chr &&
+			return read_dword(build::at(kEventMan), events) && events && read_dword(build::at(kWorldChrMan), chr) && chr &&
 				read_dword(chr + 0x3C, player) && player;
 		}
 
 		bool request(int id)
 		{
 			using request_fn = char(__thiscall*)(void* self, int scene, unsigned flags, void* callback, void* user, int unused, int player);
+			const DWORD remo_man = build::at(kRemoMan), request_va = build::at(kRequest);
+			if (!remo_man || !request_va)
+				return false;
 			__try
 			{
-				void* man = *reinterpret_cast<void**>(kRemoMan);
-				return man && in_game() && reinterpret_cast<request_fn>(kRequest)(man, id, 0, nullptr, nullptr, 0, -1);
+				void* man = *reinterpret_cast<void**>(remo_man);
+				return man && in_game() && reinterpret_cast<request_fn>(request_va)(man, id, 0, nullptr, nullptr, 0, -1);
 			}
 			__except (EXCEPTION_EXECUTE_HANDLER)
 			{
@@ -257,7 +278,8 @@ namespace comp::game::cutscenes
 			if (s_hooked)
 				return true;
 			const DWORD target = reinterpret_cast<DWORD>(&event_hook);
-			s_hooked = debug_tools::write_code(kScriptUpdateSlot, reinterpret_cast<const BYTE*>(&target), sizeof(target));
+			const DWORD slot = build::at(kScriptUpdateSlot);
+			s_hooked = slot && debug_tools::write_code(slot, reinterpret_cast<const BYTE*>(&target), sizeof(target));
 			return s_hooked;
 		}
 
@@ -309,8 +331,22 @@ namespace comp::game::cutscenes
 			return;
 		s_smooth_camera = shared::common::config::get().get_bool("Cutscenes", "SmoothCamera", true);
 		apply_smooth_camera();
-		s_available = std::memcmp(reinterpret_cast<const void*>(kRequest), kRequestStart, sizeof(kRequestStart)) == 0 &&
-			*reinterpret_cast<const DWORD*>(kScriptUpdateSlot) == kScriptUpdate;
+		const DWORD request_va = build::at(kRequest), slot = build::at(kScriptUpdateSlot), update = build::at(kScriptUpdate);
+		const bool request_ok = request_va && [&]
+		{
+			if (build::is_current())
+				return std::memcmp(reinterpret_cast<const void*>(request_va), kRequestStart, sizeof(kRequestStart)) == 0;
+			// Another build: all but the handler address (build::at() already matched this function's signature).
+			const auto* code = reinterpret_cast<const BYTE*>(request_va);
+			for (size_t i = 0; i < sizeof(kRequestStart); ++i)
+				if ((i < 3 || i > 6) && code[i] != kRequestStart[i])
+					return false;
+			return true;
+		}();
+		s_available = request_ok && slot && update && build::at(kRemoMan) && build::at(kEventMan) && build::at(kWorldChrMan) &&
+			*reinterpret_cast<const DWORD*>(slot) == update;
+		if (s_available)
+			s_script_update = update;
 		if (!s_available)
 		{
 			log("Cutscenes", "Unexpected bytes in the game: cutscene playback unavailable", LOG_TYPE::LOG_TYPE_WARN, true);
@@ -330,7 +366,7 @@ namespace comp::game::cutscenes
 			return false;
 		__try
 		{
-			const auto man = *reinterpret_cast<const BYTE* const*>(kRemoMan);
+			const auto man = *reinterpret_cast<const BYTE* const*>(build::at(kRemoMan));
 			if (!man || !man[kBusy])
 				return false;
 			const auto task = *reinterpret_cast<const BYTE* const*>(man + kPlayingSlot);

@@ -23,11 +23,12 @@
 //
 // All addresses were established by the 2026-07-26/27 Ghidra sessions
 // (findings.db topics 'renderpaths'; sources analysis/ghidra_renderpaths.md,
-// session-20260727-postfx-gates). ASLR is disabled and ImageBase is
-// 0x00400000; VAs are rebased via EXE_BASE anyway so a relocated module
-// would still resolve.
+// session-20260727-postfx-gates). They are the 2015-06-15 build's VAs (ImageBase
+// 0x00400000, no ASLR); rebase() maps them to the running build through
+// game_build.hpp, and to nothing where a build lacks one.
 #include "std_include.hpp"
 #include "render_toggles.hpp"
+#include "game_build.hpp"
 #include "../modules/crash_context.hpp"
 #include "shared/common/config.hpp"
 #include "shared/globals.hpp"
@@ -36,8 +37,7 @@ namespace comp::game::render_toggles
 {
 	namespace
 	{
-		constexpr DWORD IMAGE_BASE = 0x00400000;
-
+		// Addresses below are the 2015-06-15 build's; rebase() maps them to the running build.
 		// [0x013783C0] -> HGMan; HGMan+0x6F8 -> NS_FRPG::GameRend
 		constexpr DWORD HGMAN_SLOT_VA = 0x013783C0;
 		constexpr DWORD GAMEREND_OFFSET = 0x6F8;
@@ -158,15 +158,18 @@ namespace comp::game::render_toggles
 			return v >= 0x10000 && v < 0x7FFF0000;
 		}
 
+		// nullptr when the address is not available on this exe build (never on 2015-06-15).
 		uint8_t* rebase(DWORD va)
 		{
-			return reinterpret_cast<uint8_t*>(EXE_BASE + (va - IMAGE_BASE));
+			return reinterpret_cast<uint8_t*>(build::at(va));
 		}
 
 		uint8_t* resolve_gamerend()
 		{
 			if (shared::globals::lookdev_host) return nullptr;
-			auto* hgman = *reinterpret_cast<uint8_t**>(rebase(HGMAN_SLOT_VA));
+			auto* slot = rebase(HGMAN_SLOT_VA);
+			if (!slot) return nullptr;
+			auto* hgman = *reinterpret_cast<uint8_t**>(slot);
 			if (!plausible(hgman)) return nullptr;
 			auto* gamerend = *reinterpret_cast<uint8_t**>(hgman + GAMEREND_OFFSET);
 			return plausible(gamerend) ? gamerend : nullptr;
@@ -175,7 +178,9 @@ namespace comp::game::render_toggles
 		uint8_t* resolve_drawenvman()
 		{
 			if (shared::globals::lookdev_host) return nullptr;
-			auto* dem = *reinterpret_cast<uint8_t**>(rebase(DRAWENVMAN_SLOT_VA));
+			auto* slot = rebase(DRAWENVMAN_SLOT_VA);
+			if (!slot) return nullptr;
+			auto* dem = *reinterpret_cast<uint8_t**>(slot);
 			return plausible(dem) ? dem : nullptr;
 		}
 
@@ -200,6 +205,8 @@ namespace comp::game::render_toggles
 		void emit_set_enable(uint8_t* token_buf, uint8_t* owner_seed, uint8_t payload)
 		{
 			const DWORD fn = reinterpret_cast<DWORD>(rebase(SET_ENABLE_EMITTER_VA));
+			if (!fn)
+				return;
 			const DWORD payload32 = payload;
 			__asm
 			{
@@ -298,7 +305,8 @@ namespace comp::game::render_toggles
 				return;
 
 			auto* target = rebase(STAGE_MASK_EMITTER_VA);
-			if (MH_CreateHook(target, &stage_mask_emitter_detour, &s_stage_mask_trampoline) == MH_OK &&
+			if (target && rebase(SET_ENABLE_EMITTER_VA) &&
+				MH_CreateHook(target, &stage_mask_emitter_detour, &s_stage_mask_trampoline) == MH_OK &&
 				MH_EnableHook(target) == MH_OK)
 			{
 				s_hook_installed = true;
@@ -404,6 +412,8 @@ namespace comp::game::render_toggles
 						continue;
 
 					uint8_t* addr = field_address(fld, root_ptr);
+					if (!addr)
+						continue; // not available on this exe build
 
 					// A code site carrying neither the stock nor the kill bytes is
 					// not the instruction this patch was built for — leave it alone.
@@ -444,7 +454,8 @@ namespace comp::game::render_toggles
 					if ((fld.r == root::gamerend || fld.r == root::drawenvman) &&
 						(!root_ptr || root_ptr != st.capture_root[f]))
 						continue;
-					write_field(fld, field_address(fld, root_ptr), st.original[f]);
+					if (uint8_t* addr = field_address(fld, root_ptr))
+						write_field(fld, addr, st.original[f]);
 				}
 				st.overridden = false;
 				log_once(st, e, false);
@@ -472,7 +483,8 @@ namespace comp::game::render_toggles
 	int shadow_map_size()
 	{
 		if (shared::globals::lookdev_host) return 0; // callers fall back to the stock 2048
-		return static_cast<int>(*reinterpret_cast<uint32_t*>(rebase(SHADOWMAP_SIZE_VA)));
+		const auto* size = reinterpret_cast<const uint32_t*>(rebase(SHADOWMAP_SIZE_VA));
+		return size ? static_cast<int>(*size) : 0;
 	}
 
 	void set_shadow_map_size(int size)
@@ -531,17 +543,21 @@ namespace comp::game::render_toggles
 		for (int i = 0; i < static_cast<int>(toggle::count); i++)
 			assert_toggle(i, gamerend, drawenvman);
 
-		if (s_desired_shadow_map_size >= 512 && s_desired_shadow_map_size <= 2048)
+		auto* shadow_size = reinterpret_cast<uint32_t*>(rebase(SHADOWMAP_SIZE_VA));
+		if (!shadow_size)
 		{
-			auto* addr = reinterpret_cast<uint32_t*>(rebase(SHADOWMAP_SIZE_VA));
+			// not available on this exe build: the stock size stays
+		}
+		else if (s_desired_shadow_map_size >= 512 && s_desired_shadow_map_size <= 2048)
+		{
 			if (!s_original_shadow_map_size)
-				s_original_shadow_map_size = *addr;
-			if (*addr != static_cast<uint32_t>(s_desired_shadow_map_size))
-				*addr = static_cast<uint32_t>(s_desired_shadow_map_size);
+				s_original_shadow_map_size = *shadow_size;
+			if (*shadow_size != static_cast<uint32_t>(s_desired_shadow_map_size))
+				*shadow_size = static_cast<uint32_t>(s_desired_shadow_map_size);
 		}
 		else if (s_original_shadow_map_size)
 		{
-			*reinterpret_cast<uint32_t*>(rebase(SHADOWMAP_SIZE_VA)) = s_original_shadow_map_size;
+			*shadow_size = s_original_shadow_map_size;
 			s_original_shadow_map_size = 0;
 		}
 

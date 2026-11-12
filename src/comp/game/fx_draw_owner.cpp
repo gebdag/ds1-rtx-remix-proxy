@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "fx_draw_owner.hpp"
+#include "game_build.hpp"
 #include "shared/common/config.hpp"
 
 #include <atomic>
@@ -40,12 +41,16 @@ namespace comp::game::fx_draw_owner
 			}
 		}
 
+		// Addresses above are the 2015-06-15 build's; build::at() gives the running build's (0 = not available).
 		bool prologue_matches(size_t n)
 		{
+			const DWORD draw = build::at(kDraws[n]), slot_va = build::at(kSlots[n]), after = build::at(kSlotAfter);
+			if (!draw || !slot_va || !after)
+				return false;
 			__try {
-				const DWORD* slot = reinterpret_cast<const DWORD*>(kSlots[n]);
-				return slot[0] == kDraws[n] && slot[1] == kSlotAfter &&
-					std::memcmp(reinterpret_cast<const void*>(kDraws[n]), kPrologue, sizeof(kPrologue)) == 0;
+				const DWORD* slot = reinterpret_cast<const DWORD*>(slot_va);
+				return slot[0] == draw && slot[1] == after &&
+					std::memcmp(reinterpret_cast<const void*>(draw), kPrologue, sizeof(kPrologue)) == 0;
 			}
 			__except (EXCEPTION_EXECUTE_HANDLER) {
 				return false;
@@ -67,7 +72,7 @@ namespace comp::game::fx_draw_owner
 		template <size_t... N>
 		bool create_hooks(std::index_sequence<N...>)
 		{
-			return ((MH_CreateHook(reinterpret_cast<void*>(kDraws[N]), &draw_detour<N>, reinterpret_cast<void**>(&g_original[N])) == MH_OK) && ...);
+			return ((MH_CreateHook(reinterpret_cast<void*>(build::at(kDraws[N])), &draw_detour<N>, reinterpret_cast<void**>(&g_original[N])) == MH_OK) && ...);
 		}
 	}
 
@@ -93,7 +98,7 @@ namespace comp::game::fx_draw_owner
 		if (!create_hooks(std::make_index_sequence<kDrawCount>()))
 		{
 			for (const DWORD address : kDraws)
-				MH_RemoveHook(reinterpret_cast<void*>(address));
+				MH_RemoveHook(reinterpret_cast<void*>(build::at(address)));
 			shared::common::log("FxDraw", "hooking the particle draws failed: effect lights keep their table sizes",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
 			return;

@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "intro_skip.hpp"
+#include "game_build.hpp"
 #include "shared/common/config.hpp"
 
 #include <cstring>
@@ -19,8 +20,8 @@ namespace comp::game::intro_skip
 	{
 		if (!shared::common::config::get().intro_skip.enabled || shared::globals::lookdev_host)
 			return;
-		auto* code = reinterpret_cast<unsigned char*>(kSetLogoFlag);
-		if (std::memcmp(code, kSetLogoFlagBytes, sizeof(kSetLogoFlagBytes)) != 0)
+		auto* code = reinterpret_cast<unsigned char*>(build::at(kSetLogoFlag)); // 2015-06-15 address -> running build's
+		if (!code || std::memcmp(code, kSetLogoFlagBytes, sizeof(kSetLogoFlagBytes)) != 0)
 		{
 			shared::common::log("IntroSkip", "the logo step is not where it should be: the logos will play",
 				shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);

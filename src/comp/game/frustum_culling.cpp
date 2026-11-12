@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "frustum_culling.hpp"
+#include "game_build.hpp"
 #include "camera.hpp"
 #include "sun_light.hpp"
 #include "shared/common/config.hpp"
@@ -83,13 +84,16 @@ namespace comp::game::frustum_culling
 	// solved for an apex (the pointer is reused with different planes every call).
 	static thread_local bool in_oriented_box_test_ = false;
 
+	// The RVAs are the 2015-06-15 build's (game_build.hpp); 0 when not available on this build.
 	static DWORD patch_address(const patch_site& site)
 	{
-		return EXE_BASE + site.rva;
+		return build::at(0x00400000 + site.rva);
 	}
 
 	static bool bytes_match(DWORD address, const BYTE* expected, size_t size)
 	{
+		if (!address)
+			return false;
 		return memcmp(reinterpret_cast<const void*>(address), expected, size) == 0;
 	}
 
