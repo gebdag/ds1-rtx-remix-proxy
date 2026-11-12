@@ -104,8 +104,15 @@ BACKING_CONFIRMED = {
 # Skirts drawn as their own surface, one by one from captures: a plain skirt whose vertices lie on a steep surface, so neither
 # the shell nor the skirt rules take it, but whose visible part reaches past that surface's curved edge, where the next
 # surface along the view lies metres behind. As a decal it took that surface's light there: a pale strip along the edge.
-SKIRTS_AS_SURFACES = {
-    ('m14_00_00_00', 'm0050B0A14', 10),  # Blighttown, a mound's foot over the swamp: frame_20261112_142920
+SKIRTS_AS_SURFACES = set()
+# Skirts over a hole the open-air rule cannot see, backed by every face that touches a solid vertex (alpha >= the value), one by
+# one from captures. Blighttown's mound foot skirt lies along the crease where a mound meets the floor; in places the floor stops
+# half a metre short and the mound runs on below it, a hole the skirt spans at floor level that a camera looks into sideways
+# (the floor is below every point of the skirt, so no face 'hangs'). As a decal the hole showed through (a pale strip); drawn as
+# its own surface, the corner went black (frame_20261112_142920). It stays a decal over the backing, which lighting rays pass
+# from either side (the proxy's backing marker): its faces lying against the mound leave it lit.
+SKIRT_BACKINGS_WHOLE = {
+    ('m14_00_00_00', 'm0050B0A14', 10): 0.9,
 }
 BACKING_STEP = 0.05        # m between the points that decide which faces hang: a face with one such point hanging is backed.
 #                            The seam is a slit a few centimetres wide across faces up to 5 m long; 24 points a face missed it
@@ -546,6 +553,25 @@ def main():
                     print(f'skirt as surface {map_id}/{model}/mesh{i} {names[i]}')
                     add(map_id, model, i, mesh, names[i], solid)
                     shelled.add((model, i))
+
+        for model, flver, names, sizes, layers in flvers:
+            for i, mesh in enumerate(flver.meshes):
+                solid_alpha = SKIRT_BACKINGS_WHOLE.get((map_id, model, i))
+                if solid_alpha is None or (model, i) in shelled:
+                    continue
+                p = np.asarray(positions(mesh), dtype=np.float64)[:, :3]
+                a = mesh_alpha(mesh)
+                lift = a >= solid_alpha
+                print(f'skirt backed whole {map_id}/{model}/mesh{i} {names[i]}: faces touching {int(lift.sum())} of {len(p)} vertices')
+                for j, fs in enumerate(mesh.face_sets):
+                    t = strip_triangles(fs)
+                    t = t[((t >= 0) & (t < len(p))).all(1)]
+                    t = t[lift[t].any(1)]
+                    if not len(t):
+                        continue
+                    idx = np.asarray(fs.indices, dtype='<u2')
+                    backing_lines.append(f'{fnv1a64(idx.tobytes()):016x} {len(idx)} {map_id}/{model}/mesh{i}/lod{j} {names[i]} '
+                                         f'{t.size} ' + ' '.join(str(int(v)) for v in t.reshape(-1)))
 
         # Gap skirts: listed as shells marked 'gap' (checked for shared keys with the solid shells). A skirt's vertices lie on
         # surfaces, so the meshes off them (shells, listed or not) are not candidates.

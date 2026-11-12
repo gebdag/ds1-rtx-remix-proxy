@@ -50,6 +50,8 @@ namespace comp
 		constexpr DWORD kThinWallMarker = 0xD4000003;
 		// Stage 4's D3DTSS_CONSTANT on a lamp the runtime's lighting rays pass (game/mesh_lights.hpp).
 		constexpr DWORD kLampMarker = 0xD4000004;
+		// Stage 4: a skirt backing, passed by lighting rays from either side (Surface::isDs1NoShadowBothSides).
+		constexpr DWORD kBackingMarker = 0xD400000D;
 		// Stage 0: the sprites' unhazed unlit layer (d3d9_rtx.cpp, Surface::isDs1Unhazed): the look's haze leaves it alone.
 		constexpr DWORD kUnhazedUnlitLayerMarker = 0xD15D0E23;
 		// Stage 4's D3DTSS_CONSTANT on foliage (texture_names::is_foliage): lighting rays pass it in part (Surface::isDs1Foliage).
@@ -310,9 +312,11 @@ namespace comp
 	}
 
 	// The hanging faces of a backed skirt (mesh_tables::skirt_backing_indices) once more, as a solid cutout with the draw's
-	// own vertices and texture: the surface its decal lands on where nothing lies below it. Lighting rays pass it (the
-	// no-shadow marker): where the game shows the skirt's fade over the drop, nothing casts a shadow or shuts light out of
-	// the seam. The index buffers are made once per table entry and kept (managed pool: they outlive a device reset).
+	// own vertices and texture: the surface its decal lands on where nothing lies below it. Lighting rays pass it from either
+	// side (the backing marker): where the game shows the skirt's fade over the drop, nothing casts a shadow or shuts light out
+	// of the seam, and its back faces leave the surface they lie against lit (a lamp's back faces stop rays close up; with the
+	// lamp marker Blighttown's mound went black beside its skirt's backing). The index buffers are made once per table entry
+	// and kept (managed pool: they outlive a device reset).
 	HRESULT draw_skirt_backing(IDirect3DDevice9* dev, const std::vector<uint16_t>& faces, IDirect3DIndexBuffer9* mesh_ib,
 		UINT min_vertex, UINT num_vertices)
 	{
@@ -357,7 +361,7 @@ namespace comp
 		dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 		DWORD stage4 = 0;
 		dev->GetTextureStageState(4, D3DTSS_CONSTANT, &stage4);
-		dev->SetTextureStageState(4, D3DTSS_CONSTANT, kLampMarker);
+		dev->SetTextureStageState(4, D3DTSS_CONSTANT, kBackingMarker);
 		dev->SetIndices(it->second);
 		const HRESULT hr = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, min_vertex, num_vertices, 0, static_cast<UINT>(faces.size() / 3));
 		dev->SetIndices(mesh_ib);
