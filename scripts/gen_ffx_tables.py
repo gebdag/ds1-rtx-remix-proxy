@@ -46,6 +46,11 @@ def rows(name):
 # so it popped as the camera turned. The table lights every instance whatever is drawn.
 OVERRIDES = {"90020": ((0.3, 0.6, 1.5), 4.8)}
 
+# Effects whose light follows its sprite's own fade by age, like a hit's (the impact column), though no Bullet names them: a
+# child emitter outlives the visuals and held the light on. The Four Kings' attack effects 15402 (blue-white, 4.9 m) and
+# 15404: 'lit 5 s past its visual life, kept on by child 2121' in the game's log (2026-11-12), long after the burst was gone.
+FOLLOW_FADE = {"15402", "15404"}
+
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -71,7 +76,8 @@ def main():
         persistent = int(r["lifetime"].startswith(PERSISTENT))
         life = float(r["emissive_life_s"])
         dominant = re.search(r"life([\d.]+)", r["dominant_sprite"])
-        impact = int(not persistent and "sfxId_Hit" in sources.get(r["ffx_id"], "") and dominant is not None)
+        impact = int(not persistent and dominant is not None and
+                     ("sfxId_Hit" in sources.get(r["ffx_id"], "") or r["ffx_id"] in FOLLOW_FADE))
         if impact:
             life = float(dominant.group(1))
         fade = ",".join(r["fade_curve"].split())
