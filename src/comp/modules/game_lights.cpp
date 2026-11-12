@@ -595,6 +595,11 @@ namespace comp
 		row.key = row_key(row.kind, l);
 		if (row.kind == kind::ffx_table)
 			row.id = string_hash64(va("ffx_slot:%d", l.slot)) | 0x8000000000000000ull | kSessionKeyBit;
+		// A custom light's key is its position (overrides and solo go by it), so the row is told apart by its place in the
+		// file instead: dragging its position used to change the row every 5 cm, so the list lost it as the selected light,
+		// its editor above folded to one line and the menu jumped under the slider being dragged.
+		if (row.kind == kind::custom)
+			row.id = string_hash64(va("custom_slot:%u:%d", rows_custom_generation_, l.slot)) | 0x8000000000000000ull | kSessionKeyBit;
 		// The lights of one effect are one group: an edit applies to all of them and is saved. A game light's own
 		// FFX is mostly a shared light node (2101), so the effect that called it is what tells them apart.
 		const int group_effect = row.kind == kind::ffx_table ? l.ffx_id
@@ -856,6 +861,8 @@ namespace comp
 			}
 			sources.push_back(&l);
 		}
+		// Read before get(): asking for it can switch maps, which would take away the lights pointed to below.
+		rows_custom_generation_ = game::custom_lights::generation();
 		if (kind_enabled_[static_cast<int>(kind::custom)])
 			for (const auto& l : game::custom_lights::get())
 				sources.push_back(&l);
@@ -3475,6 +3482,13 @@ namespace comp
 			{
 				lights.erase(lights.begin() + custom_selected_);
 				select_custom(-1);
+				// Custom rows are told apart by slot: the deleted light's slot now holds the next one, which is not what was picked.
+				for (const auto& r : rows_)
+					if (r.kind == kind::custom && r.ident() == selected_)
+					{
+						selected_ = 0;
+						break;
+					}
 				changed = true;
 			}
 			if (custom_selected_ >= 0)
@@ -3699,6 +3713,13 @@ namespace comp
 				lights.erase(lights.begin() + *it);
 			select_custom(-1);
 			selection_.clear();
+			// Custom rows are told apart by slot: the deleted light's slot now holds the next one, which is not what was picked.
+			for (const auto& r : rows_)
+				if (r.kind == kind::custom && r.ident() == selected_)
+				{
+					selected_ = 0;
+					break;
+				}
 			game::custom_lights::mark_dirty();
 			return;
 		}

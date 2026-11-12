@@ -187,6 +187,7 @@ namespace comp
 		template <typename Indices> void mirror_custom_to_list(const Indices& indices);
 		unsigned int custom_generation_ = 0;   // the reading of the file (custom_lights::generation) the section's indices belong to
 		unsigned int list_custom_generation_ = 0;   // and the list editor's
+		unsigned int rows_custom_generation_ = 0;   // the reading of the file rows_ were made from (custom rows' ids)
 		bool custom_owns_list_ = false;        // the list's selection mirrors the section's, until a row of the list is clicked
 		// Selects one custom light (-1: none) and drops any multi-selection.
 		void select_custom(int index);
