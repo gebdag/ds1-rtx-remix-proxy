@@ -316,12 +316,7 @@ namespace comp::game::ffx_lights
 				g_flicker_seconds = std::clamp(v, 0.05f, 10.0f);
 			g_size_shrink = cfg.get_int("Lights", "EffectSizeShrink", 0) != 0;
 			g_follow_fade_all = cfg.get_int("Lights", "EffectFollowFadeAll", 0) != 0;
-			{
-				std::stringstream ids(cfg.get_string("Lights", "EffectFollowFade", ""));
-				for (std::string id; std::getline(ids, id, ',');)
-					if (const int v = std::atoi(id.c_str()); v > 0)
-						g_follow_fade.insert(v);
-			}
+			set_follow_fade_ids(cfg.get_string("Lights", "EffectFollowFade", ""));
 			g_bonfire_centre = cfg.get_int("Lights", "BonfireLightCentre", 1) != 0;
 			if (const float v = cfg.get_float("Lights", "BonfireLightHeight", g_bonfire_height); std::isfinite(v))
 				g_bonfire_height = std::clamp(v, -0.5f, 1.5f);
@@ -733,6 +728,34 @@ namespace comp::game::ffx_lights
 		r *= scale; g *= scale; b *= scale;
 		if (g_flicker_state.size() > 256)
 			std::erase_if(g_flicker_state, [&](const auto& t) { return std::chrono::duration<float>(now - t.second.seen).count() > 5.0f; });
+	}
+
+	std::string follow_fade_ids()
+	{
+		if (!g_loaded)
+			load();
+		std::vector<int> ids(g_follow_fade.begin(), g_follow_fade.end());
+		std::sort(ids.begin(), ids.end());
+		std::string text;
+		for (const int id : ids)
+			text += (text.empty() ? "" : ",") + std::to_string(id);
+		return text;
+	}
+
+	void set_follow_fade_ids(const std::string& ids)
+	{
+		g_follow_fade.clear();
+		std::stringstream in(ids);
+		for (std::string id; std::getline(in, id, ',');)
+			if (const int v = std::atoi(id.c_str()); v > 0)
+				g_follow_fade.insert(v);
+	}
+
+	bool follow_fade_all()
+	{
+		if (!g_loaded)
+			load();
+		return g_follow_fade_all;
 	}
 
 	bool size_rule_enabled()

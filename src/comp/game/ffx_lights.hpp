@@ -88,6 +88,11 @@ namespace comp::game::ffx_lights
 	// centre ([Lights] EffectSizeLift). Set through set_follow_option("Lights.EffectSize" / "Lights.EffectSizeLift", 0 or 1).
 	bool size_rule_enabled();
 	bool size_lift_enabled();
+	// Effects whose light follows its burst's own fade by age and ends with it ([Lights] EffectFollowFade, comma-separated ids), and
+	// every effect the table does not call persistent ([Lights] EffectFollowFadeAll, live proxy.Lights.EffectFollowFadeAll).
+	std::string follow_fade_ids();
+	void set_follow_fade_ids(const std::string& ids);
+	bool follow_fade_all();
 
 	// The flicker of a game effect light whose reach the flame's size makes longer. The game flickers such a light hard and keeps
 	// it short: the Kiln brazier's cutscene light (41812) went 1.09, 2.14, 1.32, 0.24, 1.09, 0.87 in six captures of one scene

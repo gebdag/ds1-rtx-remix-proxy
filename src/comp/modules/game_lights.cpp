@@ -1913,6 +1913,8 @@ namespace comp
 			{ "Lights", "EffectSizeLift", "Raise fire lights to their flame", flag(game::ffx_lights::size_lift_enabled()) },
 			{ "Lights", "FlameLift", "Raise flame lights out of their holder", flag(game::map_lights::flame_lift_enabled()) },
 			{ "Lights", "EffectFlicker", "Flicker of lengthened fire lights", num(game::ffx_lights::effect_flicker()) },
+			{ "Lights", "EffectFollowFade", "Effect lights that end with their burst", game::ffx_lights::follow_fade_ids() },
+			{ "Lights", "EffectFollowFadeAll", "Every effect light ends with its burst", flag(game::ffx_lights::follow_fade_all()) },
 			{ "Lights", "BonfireLightCentre", "Bonfire lights on the bonfire's axis", flag(game::ffx_lights::bonfire_light_centred()) },
 			{ "Lights", "BonfireLightHeight", "Bonfire light height", num(game::ffx_lights::bonfire_light_height()) },
 			{ "Lights", "BonfireLightHeightLarge", "Kiln bonfire light height", num(game::ffx_lights::bonfire_light_height_large()) },
@@ -2972,6 +2974,31 @@ namespace comp
 		if (ImGui::SliderFloat("##bonfire_height_large", &bonfire_height_large, -0.3f, 1.5f, "%.2f m") |
 			revert_buttons("bonfire_height_large", bonfire_height_large, saved_float("Lights", "BonfireLightHeightLarge", 0.7f), 0.7f))
 			game::ffx_lights::set_follow_option("Lights.BonfireLightHeightLarge", bonfire_height_large);
+		// Effect lights left on after their effect is gone: by id, or all of them.
+		ImGui::Spacing();
+		ImGui::TextDisabled("Effect lights that linger");
+		{
+			static char ids[256] = {};
+			static bool ids_read = false;
+			if (!ids_read)
+			{
+				ids_read = true;
+				std::snprintf(ids, sizeof(ids), "%s", game::ffx_lights::follow_fade_ids().c_str());
+			}
+			form_label("End with their burst (effect ids)",
+				"These effects' lights follow their burst's own fade and end with it, however long the effect's leftover emitters\n"
+				"live, as a projectile's hit light does. Comma-separated FFX ids (15402,15404). The game's log names an effect whose\n"
+				"light stays on: '[FfxLights] effect N ... kept on by child M'. Applies on Enter. Saved as [Lights] EffectFollowFade.");
+			if (ImGui::InputText("##follow_fade_ids", ids, sizeof(ids), ImGuiInputTextFlags_EnterReturnsTrue))
+				game::ffx_lights::set_follow_fade_ids(ids);
+		}
+		bool follow_all = game::ffx_lights::follow_fade_all();
+		if (form_checkbox("Every effect light ends with its burst", "##follow_fade_all", &follow_all,
+			"Every effect not marked persistent: its light follows its burst's fade and ends with it. For finding lights that\n"
+			"linger. Off by default: an effect that keeps emitting (a breath, a fire on the ground, a storm of pillars) goes dark\n"
+			"once its first burst has faded, while it still burns. Saved as [Lights] EffectFollowFadeAll.") |
+			revert_buttons("follow_fade_all", follow_all, saved_bool("Lights", "EffectFollowFadeAll", false), false))
+			game::ffx_lights::set_follow_option("Lights.EffectFollowFadeAll", follow_all ? 1.0f : 0.0f);
 		// The runtime's own view of every light it renders (rtx.ds1Lights.showView): not saved, off at every start.
 		static bool show_lights = false;
 		if (form_checkbox("Show lights in the world", "##show_lights", &show_lights,
