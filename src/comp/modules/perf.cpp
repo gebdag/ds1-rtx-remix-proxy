@@ -540,6 +540,18 @@ namespace comp::perf
 			"draws per frame after toggling.");
 		ImGui::Spacing();
 
+		if (ImGui::CollapsingHeader("Ray Tracing Geometry", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Checkbox("Cut-out foliage as triangle lists", &cfg.meshes.cutout_lists);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] CutoutLists");
+			ImGui::TextWrapped(
+				"The game draws grass, leaves and branches as triangle strips stitched with empty triangles: two of every three "
+				"triangles Remix gets have no area. On, those draws reach Remix as lists of their real triangles: the same picture "
+				"with a third of the triangles in the ray tracing structures and the opacity micromaps (Firelink: ~0.9 ms, a third "
+				"less micromap memory). Switching it rebuilds that foliage's micromaps (about a minute).");
+		}
+
 		if (ImGui::CollapsingHeader("Draw Groups (what is rendered)", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			game_toggle_row(toggle::group_map, static_cast<int>(draw_cat::world_rigid));

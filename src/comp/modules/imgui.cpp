@@ -434,9 +434,7 @@ namespace comp
 			ImGui::InputText("Only meshes named##cut", &cfg.meshes.cut_mesh_filter);
 			ImGui::SameLine();
 			ImGui::TextDisabled("[Meshes] CutMeshFilter: e.g. m12_grass_20 or m2631B1/mesh7; empty = all");
-			ImGui::Checkbox("Cut-out strips as lists", &cfg.meshes.cutout_lists);
-			ImGui::SameLine();
-			ImGui::TextDisabled("[Meshes] CutoutLists: the game's cut-out strips without their empty stitch triangles (a third of the triangles)");
+			ImGui::TextDisabled("Cut-out strips as lists: Perf tab, Ray Tracing Geometry");
 			if (ImGui::Button("Log this frame's cut-out draws"))
 				game::mesh_tables::request_cutout_census();
 			ImGui::SameLine();
