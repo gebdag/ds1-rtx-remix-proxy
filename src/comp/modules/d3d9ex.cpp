@@ -1072,7 +1072,7 @@ namespace comp
 		// mode or [Troubleshooting] Verbose: a player's console stays free of them.
 		{
 			static const bool hitch_log = shared::common::config::get().dev_logs();
-			static const double hitch_ms = hitch_log ? shared::common::config::get().get_float("Diagnostics", "HitchMs", 60.0f): std::numeric_limits<double>::max();
+			static const double hitch_ms = hitch_log ? shared::common::config::get().get_float("Diagnostics", "HitchMs", 60.0f) : std::numeric_limits<double>::max();
 			static LARGE_INTEGER s_last {}, s_freq {};
 			LARGE_INTEGER now {};
 			QueryPerformanceCounter(&now);

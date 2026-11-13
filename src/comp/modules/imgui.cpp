@@ -1325,7 +1325,7 @@ namespace comp
 						gl->draw_pos_hud();
 					game::light_dump::draw_overlay();
 					game::cheats::draw_coordinates_overlay();
-if (shared::common::config::get().lookdev.enabled)
+					if (shared::common::config::get().lookdev.enabled)
 						draw_lookdev_input_hud();
 					else if (std::string name; lookdev_capture::recent_capture(name))
 						ImGui::GetForegroundDrawList()->AddText(ImVec2(20.0f, 20.0f), IM_COL32(255, 255, 255, 255), std::format("Captured {}", name).c_str());

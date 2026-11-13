@@ -1049,7 +1049,7 @@ namespace comp::game::atmosphere
 				cheats::teleport_to_xyz(x, y, z);
 			}
 		}
-		else if (key == "Meshes.CutoutLists")shared::common::config::get().meshes.cutout_lists = b;
+		else if (key == "Meshes.CutoutLists") shared::common::config::get().meshes.cutout_lists = b;
 		else if (key == "Meshes.CutMeshFilter") shared::common::config::get().meshes.cut_mesh_filter = value == "-" ? std::string() : value;
 		else if (key == "Meshes.CutoutCensus") { static std::string last; if (value != last) { last = value; mesh_tables::request_cutout_census(); } }
 		else if (key == "Lights.EffectDrawDump") { static std::string last; if (value != last) { last = value; ffx_lights::dump_drawn(); } }

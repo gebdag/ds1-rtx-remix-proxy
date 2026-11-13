@@ -476,7 +476,7 @@ namespace comp::game::cheats
 
 	void init()
 	{
-		const DWORD teleport_ptr= shared::utils::mem::find_pattern(
+		const DWORD teleport_ptr = shared::utils::mem::find_pattern(
 			TELEPORT_BASE_AOB, TELEPORT_BASE_AOB_OFFSET, "TeleportBase", true, 0);
 		if (teleport_ptr)
 		{
