@@ -33,6 +33,10 @@ namespace shared::common
 	public:
 		static ffp_state& get();
 
+		// The size of the game's scene targets: the back buffer's, or the render size while the proxy renders at another size
+		// than it presents (config resolution split). False when neither is known.
+		static bool scene_size(IDirect3DDevice9* dev, UINT& width, UINT& height);
+
 		void init(IDirect3DDevice9* real_device);
 
 		// --- State mutators (called from D3D9Device interceptions) ---

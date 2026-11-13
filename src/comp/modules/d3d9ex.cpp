@@ -20,6 +20,7 @@ using comp::tracer;
 #include "shared/common/ffp_state.hpp"
 #include "shared/common/ffp_prof.hpp"
 #include "shared/common/config.hpp"
+#include "shared/common/remix_api.hpp"
 #include "../game/fps_unlock.hpp"
 #include "../game/render_toggles.hpp"
 #include "../game/texture_names.hpp"
@@ -382,6 +383,29 @@ namespace {
 			monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right, monitor.rcMonitor.bottom));
 	}
 
+	// While rendering at another size than presenting (config resolution split), Remix is told the scene targets' size
+	// (rtx.ds1SceneTarget): it path traces only draws aimed at the back buffer's size otherwise, and the view stayed black.
+	// Nothing is sent while the sizes are the same, unless a size was sent before (then 0, the stock rule).
+	void send_scene_target_size()
+	{
+		static UINT sent_width = 0, sent_height = 0;
+		if (shared::globals::lookdev_host || !shared::common::remix_api::is_initialized())
+			return;
+		const auto& res = shared::common::config::get().resolution;
+		const UINT width = res.split() ? res.render_width : 0, height = res.split() ? res.render_height : 0;
+		if (width == sent_width && height == sent_height)
+			return;
+		auto& api = shared::common::remix_api::get();
+		if (!api.m_bridge.SetConfigVariable)
+			return;
+		const bool ok = api.m_bridge.SetConfigVariable("rtx.ds1SceneTarget.width", std::to_string(width).c_str()) == REMIXAPI_ERROR_CODE_SUCCESS &&
+			api.m_bridge.SetConfigVariable("rtx.ds1SceneTarget.height", std::to_string(height).c_str()) == REMIXAPI_ERROR_CODE_SUCCESS;
+		shared::common::log("Resolution", ok ? std::format("Remix path traces scene targets of {}x{} (back buffer {}x{})", width, height,
+			res.present_width, res.present_height) : std::string("Remix refused rtx.ds1SceneTarget"));
+		sent_width = width;
+		sent_height = height;
+	}
+
 	// The game's back buffer request, at device creation and every Reset, is what the resolution follows.
 	void follow_game_resolution(D3DPRESENT_PARAMETERS* pp, const char* where)
 	{
@@ -590,7 +614,12 @@ namespace {
 			D3DSURFACE_DESC src_desc {}, rt_desc {};
 			static_cast<IDirect3DTexture9*>(source)->GetLevelDesc(0, &src_desc);
 			rt->GetDesc(&rt_desc);
-			if ((src_desc.Usage & D3DUSAGE_RENDERTARGET) && src_desc.Width == rt_desc.Width && src_desc.Height == rt_desc.Height)
+			// The scene target is the back buffer's size, or the render size while rendering apart from presenting (the game's
+			// final pass then scales it down onto the back buffer).
+			const auto& res = shared::common::config::get().resolution;
+			const bool scene_sized = (src_desc.Width == rt_desc.Width && src_desc.Height == rt_desc.Height) ||
+				(res.split() && src_desc.Width == res.render_width && src_desc.Height == res.render_height);
+			if ((src_desc.Usage & D3DUSAGE_RENDERTARGET) && scene_sized)
 				static_cast<IDirect3DTexture9*>(source)->GetSurfaceLevel(0, &target);
 		}
 		if (target)
@@ -1031,6 +1060,7 @@ namespace comp
 		s_composite_requested = false;
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
+		send_scene_target_size();
 		// A frame presented over [Diagnostics] HitchMs (300) after the last one is a hitch the player sees: logged with the wall clock
 		// (the remix log's times), the frame count, how long the last Present call blocked (Remix's side) against the rest (the game and
 		// the proxy between Presents), and what the game created in between, to match against what loaded around it. Only with dev

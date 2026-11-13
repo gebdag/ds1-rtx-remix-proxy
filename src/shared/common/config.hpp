@@ -486,6 +486,14 @@ namespace shared::common
 			// From the game's back buffer request at CreateDevice and Reset: works out the sizes in use and
 			// replaces the request with the present size. A size of 0 (the window's) leaves it all alone.
 			void follow_game(UINT& back_buffer_width, UINT& back_buffer_height);
+			// Rendering at another size than presenting ([Resolution] RenderWidth/Height apart from PresentWidth/Height): the game's
+			// scene targets are render_width x render_height, the back buffer present_width x present_height. False when they are
+			// the same (all 0, or a render size alone): then the scene targets are the back buffer's size.
+			bool split() const
+			{
+				return render_width && render_height && present_width && present_height &&
+					(render_width != present_width || render_height != present_height);
+			}
 
 			// After a Reset the game remakes its render textures at the size it was given, not the 1024x720 and
 			// 1280x720 it first asked for: a request of that size is one of those.

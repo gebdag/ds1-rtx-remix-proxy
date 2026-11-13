@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "shaft_source.hpp"
+#include "shared/common/ffp_state.hpp"
 
 #include <unordered_map>
 
@@ -47,13 +48,11 @@ namespace comp::game::shaft_source
 			rt->GetDesc(&rt_desc);
 			rt->Release();
 
-			IDirect3DSurface9* bb = nullptr;
-			if (FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) || !bb)
+			// The scene size: the back buffer's, or the render size while rendering apart from presenting.
+			UINT scene_width = 0, scene_height = 0;
+			if (!shared::common::ffp_state::scene_size(dev, scene_width, scene_height))
 				return true;
-			D3DSURFACE_DESC bb_desc = {};
-			bb->GetDesc(&bb_desc);
-			bb->Release();
-			return rt_desc.Width == bb_desc.Width && rt_desc.Height == bb_desc.Height;
+			return rt_desc.Width == scene_width && rt_desc.Height == scene_height;
 		}
 	}
 

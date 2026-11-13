@@ -784,6 +784,28 @@ namespace shared::common
 		return true;
 	}
 
+	bool ffp_state::scene_size(IDirect3DDevice9* dev, UINT& width, UINT& height)
+	{
+		const auto& res = config::get().resolution;
+		if (res.split())
+		{
+			width = res.render_width;
+			height = res.render_height;
+			return true;
+		}
+		IDirect3DSurface9* back_buffer = nullptr;
+		if (!dev || FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) || !back_buffer)
+			return false;
+		D3DSURFACE_DESC desc {};
+		const HRESULT hr = back_buffer->GetDesc(&desc);
+		back_buffer->Release();
+		if (FAILED(hr))
+			return false;
+		width = desc.Width;
+		height = desc.Height;
+		return true;
+	}
+
 	void ffp_state::note_menu_quad(IDirect3DDevice9* dev, const void* vertices, UINT stride, UINT count)
 	{
 		// The private target is the size of the back buffer: Remix sizes its frame from the target it writes, and a frame the
@@ -793,13 +815,9 @@ namespace shared::common
 		D3DSURFACE_DESC screen = {};
 		if (!dev || !vertices || stride != 12 || !count || !cur_rt0_ || FAILED(cur_rt0_->GetDesc(&screen)))
 			return;
+		// The scene size: the back buffer's, or the render size while rendering apart from presenting.
 		D3DSURFACE_DESC back = {};
-		IDirect3DSurface9* back_buffer = nullptr;
-		if (FAILED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) || !back_buffer)
-			return;
-		const HRESULT back_desc = back_buffer->GetDesc(&back);
-		back_buffer->Release();
-		if (FAILED(back_desc))
+		if (!scene_size(dev, back.Width, back.Height))
 			return;
 		int min_x = INT_MAX, max_x = INT_MIN, min_y = INT_MAX, max_y = INT_MIN;
 		for (UINT i = 0; i < count; i++)
@@ -2875,9 +2893,12 @@ namespace shared::common
 		if (SUCCEEDED(dev->GetRenderTarget(0, &game_rt)) && game_rt &&
 			SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer)) && back_buffer)
 		{
+			// Smaller than the scene targets (the back buffer's size, unless rendering apart from presenting: then the back buffer
+			// still counts as a scene target to Remix, rtx.ds1SceneTarget).
 			D3DSURFACE_DESC rt_desc {}, bb_desc {};
 			game_rt->GetDesc(&rt_desc);
-			back_buffer->GetDesc(&bb_desc);
+			if (!scene_size(dev, bb_desc.Width, bb_desc.Height))
+				back_buffer->GetDesc(&bb_desc);
 			if (rt_desc.Width < bb_desc.Width || rt_desc.Height < bb_desc.Height)
 			{
 				dev->GetViewport(&game_viewport);
