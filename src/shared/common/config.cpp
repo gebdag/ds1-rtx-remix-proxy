@@ -210,6 +210,7 @@ namespace shared::common
 		ffp_steps.overlay_save_lazy = get_bool("FFPSteps", "OverlaySaveLazy", false);
 		ffp_steps.skin_upload_used_bones = get_bool("FFPSteps", "SkinUploadUsedBones", true);
 		ffp_steps.pool_depth_surfaces = get_bool("FFPSteps", "PoolDepthSurfaces", true);
+		ffp_steps.imgui_skip_empty = get_bool("FFPSteps", "ImguiSkipEmpty", true);
 
 		// [PostFX] Comma-separated list of pass indices to skip (empty = skip all)
 		postfx.skip_passes_str = get_string("PostFX", "SkipPasses", "");

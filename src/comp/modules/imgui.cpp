@@ -1332,7 +1332,10 @@ namespace comp
 					shared::globals::imgui_is_rendering = true;
 					ImGui::EndFrame();
 					ImGui::Render();
-					ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+					// Nothing to draw: no render pass, so none of its calls that wait on the Remix server ([FFPSteps] ImguiSkipEmpty).
+					ImDrawData* const draw_data = ImGui::GetDrawData();
+					if (draw_data && (draw_data->TotalVtxCount > 0 || !shared::common::config::get().ffp_steps.imgui_skip_empty))
+						ImGui_ImplDX9_RenderDrawData(draw_data);
 					shared::globals::imgui_is_rendering = false;
 
 					// restore

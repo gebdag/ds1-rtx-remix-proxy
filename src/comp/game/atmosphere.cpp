@@ -1018,7 +1018,8 @@ namespace comp::game::atmosphere
 		else if (key == "FFPSteps.OverlaySaveLazy") steps.overlay_save_lazy = b;
 		else if (key == "FFPSteps.SkinUploadUsedBones") steps.skin_upload_used_bones = b;
 		else if (key == "FFPSteps.PoolDepthSurfaces") steps.pool_depth_surfaces = b;
-		// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
+		else if (key == "FFPSteps.ImguiSkipEmpty") steps.imgui_skip_empty = b;
+// Light diagnostics: Lights.Sun, Lights.Kind<n> (game_lights::light_kind), Lights.EmitterRadius, Lights.Dump
 		// (appends the drawn light list to rtx_comp\light_rows.txt).
 		else if (key == "Estus.ForceEmpty") estus::set_force_empty(b);
 		else if (key == "Sfx.OwnWhite") shared::common::config::get().sfx.own_white = b;

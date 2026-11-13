@@ -202,6 +202,11 @@ namespace shared::common
 			// Hand the game's per-frame depth-stencil surfaces out again instead
 			// of creating new ones, each of which waits for the Remix server.
 			bool pool_depth_surfaces = true;
+
+			// No ImGui render pass when nothing is drawn (menu closed, no overlay text). The pass creates a state block and locks
+			// two buffers every frame; through the bridge each of those waits until the Remix server has caught up with every
+			// call before it, so the game stopped once a frame for Remix, and a slow Remix moment became a hitch.
+			bool imgui_skip_empty = true;
 		} ffp_steps;
 
 		struct postfx_settings
