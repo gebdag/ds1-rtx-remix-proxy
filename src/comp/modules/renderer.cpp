@@ -1349,9 +1349,9 @@ namespace comp
 					const int shell_mode = shared::common::config::get().meshes.shell_mode;
 					const bool flask = !water_draw && game::texture_names::is_estus_flask(
 						ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
-					bool gap_skirt = false;
+					bool gap_skirt = false, shell_blend = false;
 					const bool shell = flask || (shell_mode != 0 &&
-						game::mesh_tables::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount, &gap_skirt));
+						game::mesh_tables::is_shell_draw(ffp.cur_ib(), PrimitiveType, startIndex, primCount, &gap_skirt, &shell_blend));
 					// Window glass is split into its came and its glass (game/glass.hpp): the base
 					// draw becomes the came, and neither pass is a decal.
 					DWORD glass_cut = 0;
@@ -1378,7 +1378,7 @@ namespace comp
 					// Hazed by the game with its own set, not the set of the wall behind it (atmosphere.hpp tag_unhazed).
 					if (unlit_layer && light_shaft)
 						game::atmosphere::tag_unhazed(dev);
-					if (shell && (shell_mode == 2 || flask))
+					if (shell && !shell_blend && (shell_mode == 2 || flask))
 					{
 						// Unblended and alpha-tested, Remix renders it as an opaque cutout (as the glass came pass).
 						save_overlay_render_states(ctx, dev);
