@@ -372,6 +372,185 @@ namespace comp
 		return hr;
 	}
 
+	// A cut-out strip as a triangle list of its real triangles ([Meshes] CutoutLists): the engine stitches a mesh's triangles
+	// into one strip with degenerate triangles, two of every three. The list is made once per index range and kept (managed
+	// pool); it indexes the draw's own vertices. Null when the range is not 16-bit indices or holds no real triangle.
+	struct strip_list
+	{
+		IDirect3DIndexBuffer9* ib = nullptr;
+		UINT triangles = 0;
+	};
+
+	const strip_list* cutout_strip_list(IDirect3DDevice9* dev, IDirect3DIndexBuffer9* mesh_ib, UINT start_index, UINT prim_count)
+	{
+		struct key
+		{
+			IDirect3DIndexBuffer9* ib;
+			unsigned epoch;
+			UINT start, prims;
+			bool operator<(const key& o) const { return std::tie(ib, epoch, start, prims) < std::tie(o.ib, o.epoch, o.start, o.prims); }
+		};
+		static std::map<key, strip_list> cache;
+		static size_t strip_total = 0, list_total = 0;
+		const key k{ mesh_ib, game::mesh_tables::index_buffer_epoch(mesh_ib), start_index, prim_count };
+		if (const auto it = cache.find(k); it != cache.end())
+			return it->second.ib ? &it->second : nullptr;
+		strip_list& made = cache[k]; // a failure is kept too
+		D3DINDEXBUFFER_DESC desc{};
+		const UINT count = prim_count + 2;
+		void* data = nullptr;
+		if (FAILED(mesh_ib->GetDesc(&desc)) || desc.Format != D3DFMT_INDEX16 || (start_index + count) * 2 > desc.Size ||
+			FAILED(mesh_ib->Lock(start_index * 2, count * 2, &data, D3DLOCK_READONLY)) || !data)
+			return nullptr;
+		const auto* strip = static_cast<const uint16_t*>(data);
+		std::vector<uint16_t> list;
+		list.reserve(static_cast<size_t>(prim_count) * 3);
+		for (UINT i = 0; i < prim_count; i++)
+		{
+			const uint16_t a = strip[i], b = strip[i + 1], c = strip[i + 2];
+			if (a == b || b == c || a == c)
+				continue;
+			// Every second triangle of a strip is wound the other way.
+			list.push_back((i & 1u) ? b : a);
+			list.push_back((i & 1u) ? a : b);
+			list.push_back(c);
+		}
+		mesh_ib->Unlock();
+		if (list.empty())
+			return nullptr;
+		IDirect3DIndexBuffer9* ib = nullptr;
+		const UINT bytes = static_cast<UINT>(list.size() * sizeof(uint16_t));
+		if (FAILED(dev->CreateIndexBuffer(bytes, D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ib, nullptr)) || !ib)
+			return nullptr;
+		void* out = nullptr;
+		if (FAILED(ib->Lock(0, bytes, &out, 0)) || !out)
+		{
+			ib->Release();
+			return nullptr;
+		}
+		std::memcpy(out, list.data(), bytes);
+		ib->Unlock();
+		made = { ib, static_cast<UINT>(list.size() / 3) };
+		strip_total += prim_count;
+		list_total += made.triangles;
+		if (cache.size() % 32 == 1)
+			shared::common::log("CutoutLists", std::format("{} cut-out strips as lists so far: {} strip triangles, {} real ones", cache.size(), strip_total, list_total));
+		return &made;
+	}
+
+	// A cut-out mesh drawn as its cut mesh (mesh_tables::cut_mesh_of, [Meshes] CutMeshes): the cut's vertices are blends of
+	// the draw's expanded vertices, built once per cut and expanded buffer and kept (managed pool). A test path: an expanded
+	// buffer whose contents change under the same address is not followed.
+	struct cut_buffers
+	{
+		IDirect3DVertexBuffer9* vb = nullptr;
+		IDirect3DIndexBuffer9* ib = nullptr;
+		UINT vertices = 0;
+		UINT triangles = 0;
+	};
+
+	const cut_buffers* cut_mesh_buffers(IDirect3DDevice9* dev, const game::mesh_tables::cut_mesh& cut,
+		IDirect3DVertexBuffer9* expanded, UINT expanded_vertices)
+	{
+		static std::map<std::pair<const void*, const void*>, cut_buffers> cache;
+		static size_t total_triangles = 0, total_bytes = 0;
+		const auto key = std::make_pair(static_cast<const void*>(&cut), static_cast<const void*>(expanded));
+		if (const auto it = cache.find(key); it != cache.end())
+			return it->second.vb ? &it->second : nullptr;
+		cut_buffers& made = cache[key]; // a failure is kept too: no retry on every draw
+		if (cut.max_source >= expanded_vertices)
+			return nullptr;
+
+		struct vertex
+		{
+			float position[3];
+			float normal[3];
+			uint32_t colour;
+			float uv[2];
+		};
+		static_assert(sizeof(vertex) == 36);
+		const UINT vertex_count = static_cast<UINT>(cut.vertices.size());
+		const UINT index_count = static_cast<UINT>(cut.triangles.size());
+		const bool wide = vertex_count > 0xFFFFu;
+		IDirect3DVertexBuffer9* vb = nullptr;
+		IDirect3DIndexBuffer9* ib = nullptr;
+		if (FAILED(dev->CreateVertexBuffer(vertex_count * sizeof(vertex), 0, 0, D3DPOOL_MANAGED, &vb, nullptr)) || !vb)
+			return nullptr;
+		if (FAILED(dev->CreateIndexBuffer(index_count * (wide ? 4u : 2u), D3DUSAGE_WRITEONLY, wide ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+			D3DPOOL_MANAGED, &ib, nullptr)) || !ib)
+		{
+			vb->Release();
+			return nullptr;
+		}
+		void* source_data = nullptr;
+		void* vertex_data = nullptr;
+		void* index_data = nullptr;
+		bool ok = SUCCEEDED(expanded->Lock(0, expanded_vertices * sizeof(vertex), &source_data, D3DLOCK_READONLY)) && source_data;
+		if (ok)
+		{
+			ok = SUCCEEDED(vb->Lock(0, 0, &vertex_data, 0)) && vertex_data;
+			if (ok)
+			{
+				const auto* source = static_cast<const vertex*>(source_data);
+				auto* out = static_cast<vertex*>(vertex_data);
+				for (UINT i = 0; i < vertex_count; i++)
+				{
+					const auto& c = cut.vertices[i];
+					const vertex& a = source[c.i0];
+					const vertex& b = source[c.i1];
+					const vertex& d = source[c.i2];
+					const float w0 = c.w0, w1 = c.w1, w2 = 1.0f - c.w0 - c.w1;
+					vertex& v = out[i];
+					for (int k = 0; k < 3; k++)
+					{
+						v.position[k] = w0 * a.position[k] + w1 * b.position[k] + w2 * d.position[k];
+						v.normal[k] = w0 * a.normal[k] + w1 * b.normal[k] + w2 * d.normal[k];
+					}
+					const float length = std::sqrt(v.normal[0] * v.normal[0] + v.normal[1] * v.normal[1] + v.normal[2] * v.normal[2]);
+					if (length > 1e-6f)
+						for (int k = 0; k < 3; k++)
+							v.normal[k] /= length;
+					v.colour = 0;
+					for (int shift = 0; shift < 32; shift += 8)
+					{
+						const float channel = w0 * static_cast<float>((a.colour >> shift) & 0xFF) + w1 * static_cast<float>((b.colour >> shift) & 0xFF) +
+							w2 * static_cast<float>((d.colour >> shift) & 0xFF);
+						v.colour |= static_cast<uint32_t>(std::clamp(channel + 0.5f, 0.0f, 255.0f)) << shift;
+					}
+					for (int k = 0; k < 2; k++)
+						v.uv[k] = w0 * a.uv[k] + w1 * b.uv[k] + w2 * d.uv[k];
+				}
+				vb->Unlock();
+			}
+			expanded->Unlock();
+		}
+		if (ok)
+		{
+			ok = SUCCEEDED(ib->Lock(0, 0, &index_data, 0)) && index_data;
+			if (ok)
+			{
+				if (wide)
+					std::memcpy(index_data, cut.triangles.data(), index_count * 4u);
+				else
+					for (UINT i = 0; i < index_count; i++)
+						static_cast<uint16_t*>(index_data)[i] = static_cast<uint16_t>(cut.triangles[i]);
+				ib->Unlock();
+			}
+		}
+		if (!ok)
+		{
+			vb->Release();
+			ib->Release();
+			return nullptr;
+		}
+		made = { vb, ib, vertex_count, index_count / 3 };
+		total_triangles += made.triangles;
+		total_bytes += vertex_count * sizeof(vertex) + index_count * (wide ? 4u : 2u);
+		shared::common::log("CutMeshes", std::format("built {}: {} vertices, {} triangles; {} cut meshes, {} triangles, {:.1f} MB in all",
+			cut.name, vertex_count, made.triangles, cache.size(), total_triangles, static_cast<double>(total_bytes) / 1048576.0));
+		return &made;
+	}
+
 	// A window glass draw (mesh_tables::glass_texture) with a derived glass texture: the derived
 	// texture, else null (the draw then goes through as before).
 	IDirect3DBaseTexture9* glass_split_texture(IDirect3DDevice9* dev, shared::common::ffp_state& ffp,
@@ -1225,10 +1404,74 @@ namespace comp
 					const bool scrolled = game::texture_scroll::apply(dev, false, water_draw, mesh_vb, mesh_ib,
 						BaseVertexIndex, startIndex, primCount, ffp.frame_count());
 					const bool toned = ffp.apply_skin_tone(dev, false);
+					// A cut-out mesh as its cut mesh, a test ([Meshes] CutMeshes, mesh_tables::cut_mesh_of); else the draw as it is.
+					const cut_buffers* cut_draw = nullptr;
+					const strip_list* list_draw = nullptr;
+					IDirect3DVertexBuffer9* cut_expanded = nullptr;
+					const bool census = game::mesh_tables::cutout_census_frame(ffp.frame_count());
+					if ((mesh_cfg.cut_meshes != 0 || mesh_cfg.cutout_lists || census) && !water_draw && !shell && !glass_texture && !base_decal && !unlit_layer)
+					{
+						DWORD alpha_test = FALSE, alpha_blend = FALSE;
+						dev->GetRenderState(D3DRS_ALPHATESTENABLE, &alpha_test);
+						dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &alpha_blend);
+						if (alpha_test && !alpha_blend)
+						{
+							if (mesh_cfg.cutout_lists && PrimitiveType == D3DPT_TRIANGLESTRIP)
+								list_draw = cutout_strip_list(dev, mesh_ib, startIndex, primCount);
+							const auto* cut = game::mesh_tables::cut_mesh_of(mesh_ib, PrimitiveType, startIndex, primCount);
+							const std::string texture_name = !cut && !census ? std::string() : game::texture_names::name_of(
+								ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+							// Index data alone can collide: the draw's own texture must be the cut's (when it has a name).
+							if (cut && !texture_name.empty() && _stricmp(texture_name.c_str(), cut->texture.c_str()) != 0)
+								cut = nullptr;
+							if (cut && !mesh_cfg.cut_mesh_filter.empty() && cut->name.find(mesh_cfg.cut_mesh_filter) == std::string::npos)
+								cut = nullptr;
+							if (census)
+							{
+								DWORD ref = 0, zwrite = 0, cull = 0;
+								dev->GetRenderState(D3DRS_ALPHAREF, &ref);
+								dev->GetRenderState(D3DRS_ZWRITEENABLE, &zwrite);
+								dev->GetRenderState(D3DRS_CULLMODE, &cull);
+								shared::common::log("CutoutCensus", std::format("texture '{}' type {} prims {} vertices {} ref {} zwrite {} cull {} foliage {} cut {}",
+									texture_name, static_cast<int>(PrimitiveType), primCount, NumVertices, ref, zwrite, cull, foliage ? 1 : 0,
+									cut ? cut->name : std::string("-")));
+							}
+							const int mode = mesh_cfg.cut_meshes;
+							if (cut && mode != 0)
+							{
+								UINT offset = 0, stride = 0;
+								if (mode != 3 && SUCCEEDED(dev->GetStreamSource(0, &cut_expanded, &offset, &stride)) && cut_expanded &&
+									offset == 0 && stride == 36)
+									cut_draw = cut_mesh_buffers(dev, *cut, cut_expanded, MinVertexIndex + NumVertices);
+								if (mode == 3 || (mode == 1 && cut_draw))
+								{
+									ctx.save_rs(dev, D3DRS_ALPHATESTENABLE);
+									dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+								}
+							}
+						}
+					}
 					{
 						shared::common::ffp_prof::scope dprof(shared::common::ffp_prof::step::draw_base);
-						hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
+						if (cut_draw)
+						{
+							dev->SetStreamSource(0, cut_draw->vb, 0, 36);
+							dev->SetIndices(cut_draw->ib);
+							hr = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, cut_draw->vertices, 0, cut_draw->triangles);
+							dev->SetStreamSource(0, cut_expanded, 0, 36);
+							dev->SetIndices(mesh_ib);
+						}
+						else if (list_draw)
+						{
+							dev->SetIndices(list_draw->ib);
+							hr = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, MinVertexIndex, NumVertices, 0, list_draw->triangles);
+							dev->SetIndices(mesh_ib);
+						}
+						else
+							hr = dev->DrawIndexedPrimitive(PrimitiveType, 0, MinVertexIndex, NumVertices, startIndex, primCount);
 					}
+					if (cut_expanded)
+						cut_expanded->Release();
 					if (toned)
 						ffp.clear_skin_tone(dev);
 					if (scrolled)

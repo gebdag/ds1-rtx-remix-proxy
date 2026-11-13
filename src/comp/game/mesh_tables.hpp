@@ -100,6 +100,33 @@ namespace comp::game::mesh_tables
 	// hides the fog behind it by its alpha, as the game's blend does.
 	bool is_veil_draw(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
 
+	// A cut-out mesh (an alpha-tested map mesh: grass, leaves, branches) cut along its texture's alpha
+	// (rtx_comp\mesh_tables\cut_meshes.bin, scripts/gen_cut_meshes.py): the opaque part of its cards as a triangle list. Each
+	// vertex is a blend of three of the draw's own vertices (counted from its base vertex), so the renderer builds them from
+	// the vertices it has expanded. Null for any other draw. A test path ([Meshes] CutMeshes), off by default.
+	struct cut_vertex
+	{
+		uint32_t i0, i1, i2;
+		float w0, w1; // of i0 and i1; i2 has the rest
+	};
+	struct cut_mesh
+	{
+		std::string name;                 // '<map>/<model>/mesh<n>/lod<n> <texture>'
+		std::string texture;              // the texture it is drawn with: index data alone can collide
+		std::vector<cut_vertex> vertices;
+		std::vector<uint32_t> triangles;
+		uint32_t max_source = 0;          // the highest of the draw's vertices it uses
+	};
+	const cut_mesh* cut_mesh_of(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count);
+
+	// Live proxy.Meshes.CutoutCensus: the next frame's alpha-tested map draws are logged, one line each ([CutoutCensus]).
+	void request_cutout_census();
+	bool cutout_census_frame(UINT frame);
+
+	// How many index buffers have been created at this address so far: a cache keyed by an index buffer's address holds it
+	// too, so an entry made for a freed buffer is not taken for the new one's.
+	unsigned index_buffer_epoch(IDirect3DIndexBuffer9* ib);
+
 	// A new index buffer can reuse a freed one's address: forget its ranges.
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib);
 }

@@ -24,6 +24,7 @@
 #include "../game/vanilla_view.hpp"
 #include "../game/dlss_nr.hpp"
 #include "../game/light_dump.hpp"
+#include "../game/mesh_tables.hpp"
 
 // Allow us to directly call the ImGui WndProc function.
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -406,6 +407,37 @@ namespace comp
 			ImGui::TextDisabled("[Meshes] GroundCards: leaves, lily pads, bones lifted off the ground are brought down to it");
 			ImGui::SliderFloat("Ground Card Height Kept", &cfg.meshes.ground_card_height_kept, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat("Ground Card Clearance (m)", &cfg.meshes.ground_card_clearance, 0.0f, 0.05f, "%.3f");
+			ImGui::Separator();
+
+			// Mesh cards: the game's cut-out (alpha-tested) map meshes drawn as cards cut along their texture's alpha
+			// (rtx_comp\mesh_tables\cut_meshes.bin, scripts/gen_cut_meshes.py). A test path.
+			ImGui::TextUnformatted("Mesh Cards (cut-out foliage)");
+			ImGui::RadioButton("Game's cards##cut", &cfg.meshes.cut_meshes, 0);
+			ImGui::SameLine();
+			ImGui::RadioButton("Mesh cards, solid##cut", &cfg.meshes.cut_meshes, 1);
+			ImGui::SameLine();
+			ImGui::RadioButton("Mesh cards, alpha tested##cut", &cfg.meshes.cut_meshes, 2);
+			ImGui::SameLine();
+			ImGui::RadioButton("Whole cards solid##cut", &cfg.meshes.cut_meshes, 3);
+			ImGui::TextDisabled("[Meshes] CutMeshes 0-3. Only meshes in the table are cut; the others stay as the game draws them. 3 seals the cards whole (upper bound only)");
+			{
+				static int table_state = -1; // -1 unknown, 0 missing, 1 present
+				if (table_state < 0)
+					table_state = GetFileAttributesA((shared::globals::root_path + "\\rtx_comp\\mesh_tables\\cut_meshes.bin").c_str()) != INVALID_FILE_ATTRIBUTES ? 1 : 0;
+				if (!table_state)
+					ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "No rtx_comp\\mesh_tables\\cut_meshes.bin: nothing is cut (make one with scripts/gen_cut_meshes.py)");
+			}
+			ImGui::SetNextItemWidth(260.0f);
+			ImGui::InputText("Only meshes named##cut", &cfg.meshes.cut_mesh_filter);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] CutMeshFilter: e.g. m12_grass_20 or m2631B1/mesh7; empty = all");
+			ImGui::Checkbox("Cut-out strips as lists", &cfg.meshes.cutout_lists);
+			ImGui::SameLine();
+			ImGui::TextDisabled("[Meshes] CutoutLists: the game's cut-out strips without their empty stitch triangles (a third of the triangles)");
+			if (ImGui::Button("Log this frame's cut-out draws"))
+				game::mesh_tables::request_cutout_census();
+			ImGui::SameLine();
+			ImGui::TextDisabled("[CutoutCensus] lines in console.log: texture, size, and which cut mesh each draw has");
 			ImGui::Separator();
 		}
 

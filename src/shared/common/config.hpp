@@ -462,6 +462,18 @@ namespace shared::common
 			bool ground_cards = true;
 			float ground_card_height_kept = 0.2f;
 			float ground_card_clearance = 0.003f;
+			// Cut meshes (rtx_comp\mesh_tables\cut_meshes.bin, scripts/gen_cut_meshes.py), a test of drawing the game's cut-out
+			// (alpha-tested) map meshes as cards cut along their texture's alpha: 0 = as the game draws them, 1 = cut and solid
+			// (no alpha test), 2 = cut, alpha test kept, 3 = the whole card solid (how fast it would be with no cut-outs at all).
+			// Live: proxy.Meshes.CutMeshes.
+			int cut_meshes = 0;
+			// Only the cut meshes whose name ('<map>/<model>/mesh<n>/lod<n> <texture>') holds this text. Live: proxy.Meshes.CutMeshFilter.
+			std::string cut_mesh_filter;
+			// The game's cut-out (alpha-tested) map meshes are triangle strips stitched with degenerate triangles: two of every three
+			// triangles Remix gets are empty. On: such a draw goes to Remix as a triangle list of its real triangles, the same
+			// picture with a third of the triangles in the acceleration structure and in the opacity micromaps.
+			// Live: proxy.Meshes.CutoutLists.
+			bool cutout_lists = false;
 		} meshes;
 
 		struct resolution_settings

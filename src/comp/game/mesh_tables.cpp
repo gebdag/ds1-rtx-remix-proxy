@@ -342,9 +342,156 @@ namespace comp::game::mesh_tables
 		return &m.e->texture;
 	}
 
+	namespace
+	{
+		struct cut_range
+		{
+			range_key key;
+			const cut_mesh* mesh;
+		};
+
+		bool g_cuts_loaded = false;
+		std::unordered_map<uint64_t, cut_mesh> g_cuts;      // index FNV-1a 64 -> cut mesh (a node map: pointers stay valid)
+		std::unordered_set<UINT> g_cut_counts;
+		std::unordered_map<IDirect3DIndexBuffer9*, std::vector<cut_range>> g_cut_cache;
+		std::atomic<int> g_census_state{ 0 };               // 0 idle, 1 asked, 2 a frame is being logged
+		std::atomic<UINT> g_census_frame{ 0 };
+
+		void load_cuts_locked()
+		{
+			g_cuts_loaded = true;
+			const auto path = shared::globals::root_path + "\\rtx_comp\\mesh_tables\\cut_meshes.bin";
+			std::ifstream file(path, std::ios::binary);
+			if (!file)
+			{
+				shared::common::log("MeshTables", std::format("{} not found - no cut meshes", path));
+				return;
+			}
+			char magic[8]{};
+			uint32_t count = 0;
+			file.read(magic, 8);
+			file.read(reinterpret_cast<char*>(&count), 4);
+			if (!file || std::memcmp(magic, "DS1CUT02", 8) != 0)
+			{
+				shared::common::log("MeshTables", std::format("{} is not a DS1CUT02 table", path), shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);
+				return;
+			}
+			size_t triangles = 0;
+			for (uint32_t i = 0; i < count; i++)
+			{
+				uint64_t hash = 0;
+				uint32_t index_count = 0, vertex_count = 0, triangle_count = 0;
+				uint16_t name_length = 0;
+				file.read(reinterpret_cast<char*>(&hash), 8);
+				file.read(reinterpret_cast<char*>(&index_count), 4);
+				file.read(reinterpret_cast<char*>(&vertex_count), 4);
+				file.read(reinterpret_cast<char*>(&triangle_count), 4);
+				file.read(reinterpret_cast<char*>(&name_length), 2);
+				if (!file || vertex_count == 0 || triangle_count == 0 || vertex_count > 16000000u || triangle_count > 16000000u)
+					break;
+				cut_mesh m;
+				m.name.resize(name_length);
+				file.read(m.name.data(), name_length);
+				m.vertices.resize(vertex_count);
+				file.read(reinterpret_cast<char*>(m.vertices.data()), static_cast<std::streamsize>(vertex_count) * sizeof(cut_vertex));
+				m.triangles.resize(static_cast<size_t>(triangle_count) * 3);
+				file.read(reinterpret_cast<char*>(m.triangles.data()), static_cast<std::streamsize>(triangle_count) * 12);
+				if (!file)
+					break;
+				bool valid = true;
+				for (const uint32_t v : m.triangles)
+					valid &= v < vertex_count;
+				for (const auto& v : m.vertices)
+					m.max_source = std::max({ m.max_source, v.i0, v.i1, v.i2 });
+				if (!valid)
+					continue;
+				if (const auto space = m.name.rfind(' '); space != std::string::npos)
+					m.texture = m.name.substr(space + 1);
+				triangles += triangle_count;
+				g_cut_counts.insert(index_count);
+				g_cuts.emplace(hash, std::move(m));
+			}
+			shared::common::log("MeshTables", std::format("{} cut meshes loaded, {} triangles", g_cuts.size(), triangles));
+		}
+	}
+
+	const cut_mesh* cut_mesh_of(IDirect3DIndexBuffer9* ib, D3DPRIMITIVETYPE type, UINT start_index, UINT prim_count)
+	{
+		UINT count = 0;
+		if (type == D3DPT_TRIANGLESTRIP)
+			count = prim_count + 2;
+		else if (type == D3DPT_TRIANGLELIST)
+			count = prim_count * 3;
+		if (!ib || !count)
+			return nullptr;
+
+		std::lock_guard lock(g_mutex);
+		if (!g_cuts_loaded)
+			load_cuts_locked();
+		if (!g_cut_counts.contains(count))
+			return nullptr;
+		auto& ranges = g_cut_cache[ib];
+		const range_key key{ start_index, count };
+		for (const auto& r : ranges)
+		{
+			if (r.key == key)
+				return r.mesh;
+		}
+		const cut_mesh* mesh = nullptr;
+		D3DINDEXBUFFER_DESC desc{};
+		const UINT offset = start_index * 2, bytes = count * 2;
+		void* data = nullptr;
+		if (SUCCEEDED(ib->GetDesc(&desc)) && desc.Format == D3DFMT_INDEX16 && offset + bytes <= desc.Size &&
+			SUCCEEDED(ib->Lock(offset, bytes, &data, D3DLOCK_READONLY)) && data)
+		{
+			const auto hash = fnv1a64(static_cast<const uint8_t*>(data), bytes);
+			ib->Unlock();
+			if (const auto it = g_cuts.find(hash); it != g_cuts.end())
+				mesh = &it->second;
+		}
+		ranges.push_back({ key, mesh });
+		return mesh;
+	}
+
+	void request_cutout_census()
+	{
+		g_census_state.store(1);
+	}
+
+	bool cutout_census_frame(UINT frame)
+	{
+		const int state = g_census_state.load(std::memory_order_relaxed);
+		if (state == 0)
+			return false;
+		if (state == 1)
+		{
+			g_census_frame.store(frame + 1);
+			g_census_state.store(2);
+			return false;
+		}
+		const UINT target = g_census_frame.load();
+		if (frame > target)
+			g_census_state.store(0);
+		return frame == target;
+	}
+
+	namespace
+	{
+		std::unordered_map<IDirect3DIndexBuffer9*, unsigned> g_epochs;
+	}
+
+	unsigned index_buffer_epoch(IDirect3DIndexBuffer9* ib)
+	{
+		std::lock_guard lock(g_mutex);
+		const auto it = g_epochs.find(ib);
+		return it == g_epochs.end() ? 0u : it->second;
+	}
+
 	void on_index_buffer_created(IDirect3DIndexBuffer9* ib)
 	{
 		std::lock_guard lock(g_mutex);
 		g_cache.erase(ib);
+		g_cut_cache.erase(ib);
+		g_epochs[ib]++;
 	}
 }

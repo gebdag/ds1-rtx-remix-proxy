@@ -1035,6 +1035,10 @@ namespace comp::game::atmosphere
 		else if (key == "HDR.Enabled") shared::common::config::get().hdr.enabled = b;
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
+		else if (key == "Meshes.CutMeshes") shared::common::config::get().meshes.cut_meshes = std::clamp(v, 0, 3);
+		else if (key == "Meshes.CutoutLists") shared::common::config::get().meshes.cutout_lists = b;
+		else if (key == "Meshes.CutMeshFilter") shared::common::config::get().meshes.cut_mesh_filter = value == "-" ? std::string() : value;
+		else if (key == "Meshes.CutoutCensus") { static std::string last; if (value != last) { last = value; mesh_tables::request_cutout_census(); } }
 		else if (key == "Lights.EffectDrawDump") { static std::string last; if (value != last) { last = value; ffx_lights::dump_drawn(); } }
 		else if (key == "Fur.ShellGeometry") comp::skinning::s_shell_fur = b;
 		else if (key == "Meshes.Veils") shared::common::config::get().meshes.veils = value != "0";
