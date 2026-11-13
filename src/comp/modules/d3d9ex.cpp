@@ -387,16 +387,40 @@ namespace {
 			monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right, monitor.rcMonitor.bottom));
 	}
 
+	// The back buffer size the game (or, in the lookdev host, the capture) asked for at the last CreateDevice/Reset.
+	UINT s_asked_width = 0, s_asked_height = 0;
+	// Lookdev host: the capture made a render target at the render size, another than the back buffer's: it was made while
+	// splitting (its scene targets were recorded at the render size). Captures ask for the present size as their back buffer.
+	bool s_host_split_targets = false;
+
+	void note_host_target(UINT width, UINT height, DWORD usage)
+	{
+		if (!shared::globals::lookdev_host || s_host_split_targets || !(usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
+			return;
+		const auto& res = shared::common::config::get().resolution;
+		if (res.split() && width == res.render_width && height == res.render_height)
+		{
+			s_host_split_targets = true;
+			shared::common::log("Resolution", std::format("Lookdev: the capture has {}x{} scene targets (made while splitting)", width, height));
+		}
+	}
+
 	// While rendering at another size than presenting (config resolution split), Remix is told the scene targets' size
 	// (rtx.ds1SceneTarget): it path traces only draws aimed at the back buffer's size otherwise, and the view stayed black.
 	// Nothing is sent while the sizes are the same, unless a size was sent before (then 0, the stock rule).
+	// The lookdev host replays a capture's targets at the sizes they were recorded at, whatever the INI says now: a capture
+	// made while splitting asked for the render size as its back buffer (its scene targets are that size), an older one
+	// asked for its own size and its scene targets match its back buffer (the stock rule). A split capture replayed black.
 	void send_scene_target_size()
 	{
 		static UINT sent_width = 0, sent_height = 0;
-		if (shared::globals::lookdev_host || !shared::common::remix_api::is_initialized())
+		if (!shared::common::remix_api::is_initialized())
 			return;
 		const auto& res = shared::common::config::get().resolution;
-		const UINT width = res.split() ? res.render_width : 0, height = res.split() ? res.render_height : 0;
+		bool split = res.split();
+		if (shared::globals::lookdev_host)
+			split = split && s_host_split_targets;
+		const UINT width = split ? res.render_width : 0, height = split ? res.render_height : 0;
 		if (width == sent_width && height == sent_height)
 			return;
 		auto& api = shared::common::remix_api::get();
@@ -434,6 +458,8 @@ namespace {
 		if (!pp)
 			return;
 		const UINT asked_width = pp->BackBufferWidth, asked_height = pp->BackBufferHeight;
+		s_asked_width = asked_width;
+		s_asked_height = asked_height;
 		auto& res = shared::common::config::get().resolution;
 		res.follow_game(pp->BackBufferWidth, pp->BackBufferHeight);
 		shared::common::log("Resolution", std::format("{}: BackBuffer {}x{} -> {}x{}, render {}x{}", where, asked_width, asked_height,
@@ -1155,6 +1181,7 @@ namespace comp
 		const create_timer creates_timer;
 		TRACE_IF_ACTIVE(trace_CreateTexture, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 		const auto& res = shared::common::config::get().resolution;
+		note_host_target(Width, Height, Usage);
 		const UINT asked_width = Width, asked_height = Height;
 		const D3DFORMAT asked_format = Format;
 		bool ui_target = false;
@@ -1305,6 +1332,7 @@ namespace comp
 	HRESULT d3d9ex::D3D9Device::CreateRenderTarget(UINT Width, UINT Height, D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Lockable, IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
 	{
 		TRACE_IF_ACTIVE(trace_CreateRenderTarget, Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
+		note_host_target(Width, Height, D3DUSAGE_RENDERTARGET);
 		const auto& res = shared::common::config::get().resolution;
 		if (res.render_width > 0 && res.render_height > 0 && ((Width == 1024 && Height == 720) || (shared::globals::lookdev_host && res.was_render_size(Width, Height))))
 		{
