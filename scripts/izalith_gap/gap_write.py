@@ -49,7 +49,7 @@ usda = f'''#usda 1.0
         string lightspeed_game_name = "DarkSouls1"
         string lightspeed_layer_type = "replacement"
         string lightspeed_mod_name = "ds1_izalith_gap"
-        string lightspeed_mod_notes = "Lost Izalith, Bed of Chaos entrance: a ground sheet {walk - level:.0f} m under the walkway where the sky showed through. Checked against every visible map piece of m14_01 and m14_00 (not only what a capture drew): nothing of the map under it, nothing within 0.4 m. Textured with the walkway's own floor texture. Built by gap_full.py / gap_write.py."
+        string lightspeed_mod_notes = "Lost Izalith, Bed of Chaos entrance: a ground sheet {walk - level:.0f} m under the walkway where the sky showed through. Checked against every visible map piece of m14_01 and m14_00 (not only what a capture drew): nothing of the map under it, nothing within 0.4 m. Textured with a plain stone ground texture of the area. Built by gap_full.py / gap_write.py."
         string lightspeed_mod_version = "1.1"
     }}
     upAxis = "Y"

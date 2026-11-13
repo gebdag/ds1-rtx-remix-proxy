@@ -9,9 +9,9 @@ through 3,395 map triangles that the captures did not have).
    cross, small holes closed, dropped where any map piece is straight below or within 0.4 m. 2026-11-13: from -384.7 to
    -392.7 the sheet is 100 % clean; the mod uses -386.74 (28 m under the walkway, 6,044 cells of 0.5 m).
 2. `py -3.12 -P gap_full.py cams_iz.npy full_sheet.npz -386.74` saves that sheet.
-3. `python gap_write.py full_sheet.npz anchor_4069.npy <mods>\ds1_izalith_gap <capture textures>\8CE69FC5F7D01B3E.dds`
+3. `python gap_write.py full_sheet.npz anchor_4069.npy <mods>\ds1_izalith_gap <capture textures>\AB1A93758512AAA4.dds`
    writes mod.usda (under mesh_4069520337E21066: single-instance, opaque ring structure; transform = x mirror, so the
-   sheet's points are game-world coordinates) and copies the walkway's floor texture.
+   sheet's points are game-world coordinates) and copies a plain stone ground texture of the area (AB1A93758512AAA4; the walkway floor 8CE69FC5 is cracked stone that looked like holes).
 
 Remix world = game world with x mirrored (checked: 96 % of captured vertices lie on the map with that mapping).
 `cams_iz.npy` is the camera of the Remix capture used for the view rays; `anchor_4069.npy` the anchor's transform.
