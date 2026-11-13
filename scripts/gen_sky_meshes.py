@@ -111,12 +111,16 @@ SKIRTS_AS_SURFACES = set()
 # (the floor is below every point of the skirt, so no face 'hangs'). As a decal the hole showed through (a pale strip); drawn as
 # its own surface, the corner went black (frame_20261112_142920). It stays a decal over the backing, which lighting rays pass
 # from either side (the proxy's backing marker): its faces lying against the mound leave it lit.
+# Value: the alpha a vertex needs, and 'all' (a face is backed only when every one of its vertices has it) or 'any' (one is
+# enough). Blighttown's mound foot skirt (m14_00_00_00 m0050B0A14 mesh10) is no longer backed: with 'any' the backing drew the
+# fading faces up the walls fully where the game fades them out, a hard-edged sheet of skirt texture up the wall and on
+# stretches of floor that showed none before (frame_20261113_233501, _233545), worse than the pale strip it covered at the
+# crease (frame_20261112_142920); with 'all' no face of it qualifies (44 of 155 vertices are solid, no face wholly).
 SKIRT_BACKINGS_WHOLE = {
-    ('m14_00_00_00', 'm0050B0A14', 10): 0.9,
     # Undead Burg's rock cap over a pillar by the stairs (cull none, see the runtime's two-sided decals): seen from below, rays pass
     # beside the pillar and its decal landed on a wall 3 m behind, past the runtime's 0.5 m decal lift: a black triangle in the
     # rock (frame_20261112_193221, _195417). Backed whole (every face with any alpha), it is lit where it is from every side.
-    ('m10_01_00_00', 'm2110B1A10', 19): 0.01,
+    ('m10_01_00_00', 'm2110B1A10', 19): (0.01, 'any'),
 }
 BACKING_STEP = 0.05        # m between the points that decide which faces hang: a face with one such point hanging is backed.
 #                            The seam is a slit a few centimetres wide across faces up to 5 m long; 24 points a face missed it
@@ -560,9 +564,10 @@ def main():
 
         for model, flver, names, sizes, layers in flvers:
             for i, mesh in enumerate(flver.meshes):
-                solid_alpha = SKIRT_BACKINGS_WHOLE.get((map_id, model, i))
-                if solid_alpha is None or (model, i) in shelled:
+                rule = SKIRT_BACKINGS_WHOLE.get((map_id, model, i))
+                if rule is None or (model, i) in shelled:
                     continue
+                solid_alpha, mode = rule
                 p = np.asarray(positions(mesh), dtype=np.float64)[:, :3]
                 a = mesh_alpha(mesh)
                 lift = a >= solid_alpha
@@ -570,7 +575,7 @@ def main():
                 for j, fs in enumerate(mesh.face_sets):
                     t = strip_triangles(fs)
                     t = t[((t >= 0) & (t < len(p))).all(1)]
-                    t = t[lift[t].any(1)]
+                    t = t[lift[t].all(1)] if mode == 'all' else t[lift[t].any(1)]
                     if not len(t):
                         continue
                     idx = np.asarray(fs.indices, dtype='<u2')
