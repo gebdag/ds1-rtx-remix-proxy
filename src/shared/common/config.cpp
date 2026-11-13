@@ -321,7 +321,7 @@ namespace shared::common
 		meshes.ground_card_clearance = std::clamp(get_float("Meshes", "GroundCardClearance", get_float("Sky", "GroundCardClearance", 0.003f)), 0.0f, 0.05f);
 		meshes.cut_meshes = std::clamp(get_int("Meshes", "CutMeshes", 0), 0, 3);
 		meshes.cut_mesh_filter = get_string("Meshes", "CutMeshFilter", "");
-		meshes.cutout_lists = get_int("Meshes", "CutoutLists", 0) != 0;
+		meshes.cutout_lists = get_int("Meshes", "CutoutLists", 1) != 0;
 
 		// [Resolution]
 		resolution.ini_render_width = static_cast<UINT>(get_int("Resolution", "RenderWidth", 0));

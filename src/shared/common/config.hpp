@@ -477,8 +477,8 @@ namespace shared::common
 			// The game's cut-out (alpha-tested) map meshes are triangle strips stitched with degenerate triangles: two of every three
 			// triangles Remix gets are empty. On: such a draw goes to Remix as a triangle list of its real triangles, the same
 			// picture with a third of the triangles in the acceleration structure and in the opacity micromaps.
-			// Live: proxy.Meshes.CutoutLists.
-			bool cutout_lists = false;
+			// On by default (measured at Firelink with the micromap defaults). Live: proxy.Meshes.CutoutLists.
+			bool cutout_lists = true;
 		} meshes;
 
 		struct resolution_settings
