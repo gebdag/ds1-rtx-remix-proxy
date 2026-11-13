@@ -2,6 +2,10 @@
 #include "cheats.hpp"
 #include "debug_tools.hpp"
 #include "shared/common/config.hpp"
+#include "map_lights.hpp"
+
+#include <fstream>
+#include <sstream>
 
 using shared::common::log;
 using shared::common::LOG_TYPE;
@@ -230,6 +234,74 @@ namespace comp::game::cheats
 		}
 	}
 
+	static bool safe_read_vec3(DWORD addr, float& x, float& y, float& z)
+	{
+		if (!addr) return false;
+		__try {
+			const auto* in = reinterpret_cast<const float*>(addr);
+			x = in[0];
+			y = in[1];
+			z = in[2];
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
+	// Saved teleport spots: one per line in rtx_comp\teleport_spots.txt, `name|mNN_NN|x y z` (name without '|').
+	struct saved_spot
+	{
+		std::string name;
+		std::string map;
+		float x = 0.0f, y = 0.0f, z = 0.0f;
+	};
+	static std::vector<saved_spot> s_spots;
+	static bool s_spots_loaded = false;
+	static bool s_show_coordinates = false;
+	static char s_spot_name[64] = {};
+
+	static std::string spots_path()
+	{
+		return shared::globals::root_path + "\\rtx_comp\\teleport_spots.txt";
+	}
+
+	static void load_spots()
+	{
+		s_spots_loaded = true;
+		s_spots.clear();
+		std::ifstream file(spots_path());
+		std::string line;
+		while (std::getline(file, line))
+		{
+			if (line.empty() || line[0] == '#')
+				continue;
+			const auto a = line.find('|'), b = line.find('|', a == std::string::npos ? a : a + 1);
+			if (a == std::string::npos || b == std::string::npos)
+				continue;
+			saved_spot s;
+			s.name = line.substr(0, a);
+			s.map = line.substr(a + 1, b - a - 1);
+			std::istringstream in(line.substr(b + 1));
+			if (in >> s.x >> s.y >> s.z)
+				s_spots.push_back(s);
+		}
+	}
+
+	static void save_spots()
+	{
+		std::ofstream file(spots_path(), std::ios::trunc);
+		file << "# Teleport spots (F4 > Cheats): name|map|x y z. proxy.Cheats.TeleportSpot = <name> teleports from a script.\n";
+		for (const auto& s : s_spots)
+			file << s.name << '|' << s.map << '|' << std::format("{:.3f} {:.3f} {:.3f}", s.x, s.y, s.z) << '\n';
+	}
+
+	static std::string current_map_name()
+	{
+		const unsigned id = (map_lights::current_map_id() >> 16) & 0xFFFF;
+		return id ? std::format("m{:02}_{:02}", id >> 8, id & 0xFF) : std::string("m??_??");
+	}
+
 	static int find_bonfire_index_by_id(int id)
 	{
 		for (size_t i = 0; i < bonfire_count(); ++i)
@@ -355,9 +427,56 @@ namespace comp::game::cheats
 		return wrote;
 	}
 
+	static bool player_position(float& x, float& y, float& z)
+	{
+		return safe_read_vec3(get_teleport_primary_addr(), x, y, z);
+	}
+
+	static bool teleport_to(const char* what, float x, float y, float z)
+	{
+		const DWORD primary = get_teleport_primary_addr();
+		const DWORD secondary = get_teleport_secondary_addr();
+		float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+		const bool had = player_position(fx, fy, fz);
+		bool wrote = false;
+		if (primary)
+			wrote = safe_write_vec3(primary, x, y, z) || wrote;
+		if (secondary)
+			wrote = safe_write_vec3(secondary, x, y, z) || wrote;
+		log("Cheats", wrote ? std::format("Teleported to {} ({:.3f}, {:.3f}, {:.3f}) from {} ({})", what, x, y, z,
+				had ? std::format("{:.3f}, {:.3f}, {:.3f}", fx, fy, fz) : std::string("unknown"), current_map_name())
+			: std::format("Teleport to {} failed (no player position)", what), wrote ? LOG_TYPE::LOG_TYPE_GREEN : LOG_TYPE::LOG_TYPE_ERROR, true);
+		return wrote;
+	}
+
+	bool teleport_to_xyz(float x, float y, float z)
+	{
+		return teleport_to("coordinates", x, y, z);
+	}
+
+	bool teleport_to_spot(const std::string& name)
+	{
+		if (!s_spots_loaded)
+			load_spots();
+		for (const auto& s : s_spots)
+			if (s.name == name)
+				return teleport_to(s.name.c_str(), s.x, s.y, s.z);
+		log("Cheats", std::format("No saved teleport spot named '{}'", name), LOG_TYPE::LOG_TYPE_ERROR, true);
+		return false;
+	}
+
+	void draw_coordinates_overlay()
+	{
+		float x, y, z;
+		if (!s_show_coordinates || !player_position(x, y, z))
+			return;
+		ImGui::GetForegroundDrawList()->AddText(ImVec2(20.0f, 60.0f), IM_COL32(255, 255, 160, 255),
+			std::format("{}  X {:.2f}  Y {:.2f}  Z {:.2f}", current_map_name(), x, y, z).c_str());
+	}
+
 	void init()
 	{
-		const DWORD teleport_ptr = shared::utils::mem::find_pattern(
+		const DWORD teleport_ptr= shared::utils::mem::find_pattern(
 			TELEPORT_BASE_AOB, TELEPORT_BASE_AOB_OFFSET, "TeleportBase", true, 0);
 		if (teleport_ptr)
 		{
@@ -691,5 +810,69 @@ namespace comp::game::cheats
 				}
 			}
 		}
+
+		// Coordinates and saved spots.
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Position and saved spots:");
+		if (!s_teleport_base_addr)
+		{
+			ImGui::TextDisabled("Unavailable (teleport AOB not found)");
+			return;
+		}
+		if (!s_spots_loaded)
+			load_spots();
+		float px = 0.0f, py = 0.0f, pz = 0.0f;
+		const bool have_position = player_position(px, py, pz);
+		if (have_position)
+			ImGui::Text("%s  X %.3f  Y %.3f  Z %.3f", current_map_name().c_str(), px, py, pz);
+		else
+			ImGui::TextDisabled("No player position (not in the world)");
+		ImGui::Checkbox("Show coordinates on screen", &s_show_coordinates);
+
+		ImGui::SetNextItemWidth(220.0f);
+		ImGui::InputTextWithHint("##spot_name", "spot name", s_spot_name, sizeof(s_spot_name));
+		ImGui::SameLine();
+		const std::string typed = s_spot_name;
+		const bool name_ok = !typed.empty() && typed.find('|') == std::string::npos;
+		ImGui::BeginDisabled(!have_position || !name_ok);
+		if (ImGui::Button("Save this spot"))
+		{
+			auto it = std::find_if(s_spots.begin(), s_spots.end(), [&](const saved_spot& s) { return s.name == typed; });
+			if (it == s_spots.end())
+				it = s_spots.insert(s_spots.end(), saved_spot{ typed });
+			it->map = current_map_name();
+			it->x = px;
+			it->y = py;
+			it->z = pz;
+			save_spots();
+			log("Cheats", std::format("Saved teleport spot '{}' at {} ({:.3f}, {:.3f}, {:.3f})", typed, it->map, px, py, pz),
+				LOG_TYPE::LOG_TYPE_GREEN, true);
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		ImGui::TextDisabled("(same name: overwritten)");
+
+		int remove = -1;
+		for (int i = 0; i < static_cast<int>(s_spots.size()); ++i)
+		{
+			const auto& s = s_spots[i];
+			ImGui::PushID(i);
+			if (ImGui::Button("Teleport"))
+				teleport_to(s.name.c_str(), s.x, s.y, s.z);
+			ImGui::SameLine();
+			if (ImGui::Button("Delete"))
+				remove = i;
+			ImGui::SameLine();
+			ImGui::Text("%s  (%s  %.2f  %.2f  %.2f)", s.name.c_str(), s.map.c_str(), s.x, s.y, s.z);
+			ImGui::PopID();
+		}
+		if (remove >= 0)
+		{
+			s_spots.erase(s_spots.begin() + remove);
+			save_spots();
+		}
+		if (s_spots.empty())
+			ImGui::TextDisabled("No saved spots yet. Live keys for scripts: proxy.Cheats.TeleportSpot = <name>, proxy.Cheats.TeleportXYZ = x, y, z");
 	}
 }

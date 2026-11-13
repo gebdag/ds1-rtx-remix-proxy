@@ -14,6 +14,7 @@
 #include "map_lights.hpp"
 #include "texture_names.hpp"
 #include "mesh_tables.hpp"
+#include "cheats.hpp"
 #include "cutscenes.hpp"
 #include "host_feed.hpp"
 #include "../modules/game_lights.hpp"
@@ -1037,7 +1038,18 @@ namespace comp::game::atmosphere
 		else if (key == "MenuScene.PathTrace") shared::common::config::get().ffp.menu_scene_path_trace = b;
 		else if (key == "Meshes.GroundCards") shared::common::config::get().meshes.ground_cards = b;
 		else if (key == "Meshes.CutMeshes") shared::common::config::get().meshes.cut_meshes = std::clamp(v, 0, 3);
-		else if (key == "Meshes.CutoutLists") shared::common::config::get().meshes.cutout_lists = b;
+		else if (key == "Cheats.TeleportSpot") { static std::string last; if (value != last) { last = value; cheats::teleport_to_spot(value); } }
+		else if (key == "Cheats.TeleportXYZ")
+		{
+			static std::string last;
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (value != last && sscanf_s(value.c_str(), "%f , %f , %f", &x, &y, &z) == 3)
+			{
+				last = value;
+				cheats::teleport_to_xyz(x, y, z);
+			}
+		}
+		else if (key == "Meshes.CutoutLists")shared::common::config::get().meshes.cutout_lists = b;
 		else if (key == "Meshes.CutMeshFilter") shared::common::config::get().meshes.cut_mesh_filter = value == "-" ? std::string() : value;
 		else if (key == "Meshes.CutoutCensus") { static std::string last; if (value != last) { last = value; mesh_tables::request_cutout_census(); } }
 		else if (key == "Lights.EffectDrawDump") { static std::string last; if (value != last) { last = value; ffx_lights::dump_drawn(); } }
