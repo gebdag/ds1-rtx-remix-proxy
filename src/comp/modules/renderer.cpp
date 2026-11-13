@@ -390,12 +390,57 @@ namespace comp
 			UINT start, prims;
 			bool operator<(const key& o) const { return std::tie(ib, epoch, start, prims) < std::tie(o.ib, o.epoch, o.start, o.prims); }
 		};
-		static std::map<key, strip_list> cache;
+		// Each list is a managed index buffer (and the bridge's copies of it): entries go once their draw has not been seen for
+		// half a minute (another area), or when the game's buffer at that address was made anew (a new epoch), so the cache
+		// holds what the current area draws and not every area of the session.
+		struct entry
+		{
+			strip_list list;
+			uint64_t last_used = 0;
+		};
+		static std::map<key, entry> cache;
 		static size_t strip_total = 0, list_total = 0;
+		static uint64_t last_prune = 0;
+		const uint64_t now = GetTickCount64();
+		auto release = [](entry& e) {
+			if (e.list.ib)
+				e.list.ib->Release();
+			e.list = {};
+		};
+		if (now - last_prune > 2000)
+		{
+			last_prune = now;
+			for (auto it = cache.begin(); it != cache.end();)
+			{
+				if (now - it->second.last_used > 30000)
+				{
+					release(it->second);
+					it = cache.erase(it);
+				}
+				else
+					++it;
+			}
+		}
 		const key k{ mesh_ib, game::mesh_tables::index_buffer_epoch(mesh_ib), start_index, prim_count };
 		if (const auto it = cache.find(k); it != cache.end())
-			return it->second.ib ? &it->second : nullptr;
-		strip_list& made = cache[k]; // a failure is kept too
+		{
+			it->second.last_used = now;
+			return it->second.list.ib ? &it->second.list : nullptr;
+		}
+		// The game's buffer at this address is a new one: the lists made from the old one go.
+		for (auto it = cache.lower_bound(key{ mesh_ib, 0, 0, 0 }); it != cache.end() && it->first.ib == mesh_ib;)
+		{
+			if (it->first.epoch != k.epoch)
+			{
+				release(it->second);
+				it = cache.erase(it);
+			}
+			else
+				++it;
+		}
+		entry& slot = cache[k]; // a failure is kept too
+		slot.last_used = now;
+		strip_list& made = slot.list;
 		D3DINDEXBUFFER_DESC desc{};
 		const UINT count = prim_count + 2;
 		void* data = nullptr;
