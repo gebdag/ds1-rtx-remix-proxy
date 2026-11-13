@@ -479,6 +479,10 @@ namespace shared::common
 			// picture with a third of the triangles in the acceleration structure and in the opacity micromaps.
 			// On by default (measured at Firelink with the micromap defaults). Live: proxy.Meshes.CutoutLists.
 			bool cutout_lists = true;
+			// Textures whose draws CutoutLists never changes (comma-separated game texture names): a mod hangs something on the
+			// draw's mesh hash, which a list would change. The user's Anor Londo picture hangs on m15_room_wall_02's wall piece
+			// (opaque, so CutoutLists does not take it anyway; listed so that it never can). [Meshes] CutoutListsKeep.
+			std::vector<std::string> cutout_lists_keep;
 		} meshes;
 
 		struct resolution_settings

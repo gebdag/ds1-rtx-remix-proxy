@@ -1462,7 +1462,18 @@ namespace comp
 						if (alpha_test && !alpha_blend)
 						{
 							if (mesh_cfg.cutout_lists && PrimitiveType == D3DPT_TRIANGLESTRIP)
-								list_draw = cutout_strip_list(dev, mesh_ib, startIndex, primCount);
+							{
+								bool keep = false;
+								if (!mesh_cfg.cutout_lists_keep.empty())
+								{
+									const std::string keep_name = game::texture_names::name_of(
+										ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
+									for (const auto& k : mesh_cfg.cutout_lists_keep)
+										keep |= !keep_name.empty() && _stricmp(keep_name.c_str(), k.c_str()) == 0;
+								}
+								if (!keep)
+									list_draw = cutout_strip_list(dev, mesh_ib, startIndex, primCount);
+							}
 							const auto* cut = game::mesh_tables::cut_mesh_of(mesh_ib, PrimitiveType, startIndex, primCount);
 							const std::string texture_name = !cut && !census ? std::string() : game::texture_names::name_of(
 								ffp.cur_texture(static_cast<UINT>(shared::common::config::get().ffp.albedo_stage)));
