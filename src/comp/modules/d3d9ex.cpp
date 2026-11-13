@@ -13,6 +13,7 @@
 #include "benchmark.hpp"
 #include "perf.hpp"
 #include "crash_context.hpp"
+#include "hitch_watch.hpp"
 #include "shared/common/shader_cache.hpp"
 
 using comp::tracer;
@@ -1061,13 +1062,14 @@ namespace comp
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
 		send_scene_target_size();
-		// A frame presented over [Diagnostics] HitchMs (300) after the last one is a hitch the player sees: logged with the wall clock
+		hitch_watch::on_present(ffp.draw_call_count());
+		// A frame presented over [Diagnostics] HitchMs (60) after the last one is a hitch the player sees: logged with the wall clock
 		// (the remix log's times), the frame count, how long the last Present call blocked (Remix's side) against the rest (the game and
 		// the proxy between Presents), and what the game created in between, to match against what loaded around it. Only with dev
 		// mode or [Troubleshooting] Verbose: a player's console stays free of them.
 		{
 			static const bool hitch_log = shared::common::config::get().dev_logs();
-			static const double hitch_ms = hitch_log ? shared::common::config::get().get_float("Diagnostics", "HitchMs", 300.0f) : std::numeric_limits<double>::max();
+			static const double hitch_ms = hitch_log ? shared::common::config::get().get_float("Diagnostics", "HitchMs", 60.0f): std::numeric_limits<double>::max();
 			static LARGE_INTEGER s_last {}, s_freq {};
 			LARGE_INTEGER now {};
 			QueryPerformanceCounter(&now);
