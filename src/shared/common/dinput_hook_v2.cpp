@@ -177,6 +177,13 @@ namespace shared::common
 
 	void dinput_v2::updateKeyState(LPBYTE KS)
 	{
+		// The window gets real key messages: forwarding these as well typed every character twice in the menus.
+		if (shared::globals::window_key_messages_seen)
+		{
+			memcpy(s_KS, KS, sizeof(s_KS));
+			return;
+		}
+
 		for (uint32_t vsc = 0; vsc < 256; vsc++) 
 		{
 			if (s_KS[vsc] != KS[vsc]) 

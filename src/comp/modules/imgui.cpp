@@ -45,6 +45,9 @@ namespace comp
 	{
 		game::input_customizer::on_window_message(window);
 
+		if (message_type == WM_KEYDOWN || message_type == WM_CHAR)
+			shared::globals::window_key_messages_seen = true;
+
 		bool block = false;
 
 		if (message_type != WM_MOUSEMOVE && message_type != WM_NCMOUSEMOVE)

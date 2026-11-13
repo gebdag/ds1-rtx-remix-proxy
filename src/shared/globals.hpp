@@ -51,4 +51,8 @@ namespace shared::globals
 	extern bool imgui_open_light_sections;
 	extern bool imgui_allow_input_bypass;
 	extern uint32_t imgui_allow_input_bypass_timeout;
+	// The game window has received a real key message (WM_KEYDOWN / WM_CHAR). From then on the menus take the keyboard from
+	// the window only: the key messages made from DirectInput reads (dinput_v2::updateKeyState) are for windows that get
+	// none (an input mod with raw input only), and both together typed every character twice.
+	extern bool window_key_messages_seen;
 }

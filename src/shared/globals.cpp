@@ -60,4 +60,5 @@ namespace shared::globals
 	bool imgui_open_light_sections = false;
 	bool imgui_allow_input_bypass = false;
 	uint32_t imgui_allow_input_bypass_timeout = 0u;
+	bool window_key_messages_seen = false;
 }
