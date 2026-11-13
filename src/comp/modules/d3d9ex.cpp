@@ -264,7 +264,10 @@ namespace {
 		s_split.skin_draws += comp::skinning::s_stats.draws;
 		s_split.skin_bones += comp::skinning::s_stats.bones;
 		comp::skinning::s_stats = {};
-		if (++s_split.frames < 600)
+		// [FFPSteps] SplitFrames: frames per [FrameSplit] window (600; test runners use fewer for quicker phases).
+		static const unsigned split_frames = static_cast<unsigned>(std::clamp(
+			shared::common::config::get().get_int("FFPSteps", "SplitFrames", 600), 60, 6000));
+		if (++s_split.frames < split_frames)
 			return;
 		const double n = static_cast<double>(s_split.frames);
 		const double frame = split_ms(s_split.frame_ticks) / n, draw = split_ms(s_split.draw_ticks) / n;
