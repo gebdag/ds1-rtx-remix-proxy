@@ -24,6 +24,7 @@
 #include "../game/input_customizer.hpp"
 #include "../game/vanilla_view.hpp"
 #include "../game/dlss_nr.hpp"
+#include "../game/game_ui.hpp"
 #include "../game/light_dump.hpp"
 #include "../game/mesh_tables.hpp"
 
@@ -81,10 +82,11 @@ namespace comp
 	// The function-key hotkeys are read from the key state once a frame, not from window messages: an input mod can take the
 	// keyboard away from the window (raw input without legacy key messages), and the F4 menu then never opened. Each acts when
 	// its key is released, as the WM_KEYUP it replaces did, with the game window in front and Alt up (Alt+F4 closes the game).
-	// Without dev mode only F4 (the menu) is read: F1, F3, F6, F7 and F8 switch rendering, fly the camera, dump or stop the game.
+	// Without dev mode only F4 (the menu) is read: F1, F2, F3, F6, F7 and F8 switch rendering, hide the HUD, fly the camera, dump
+	// or stop the game.
 	void imgui::poll_hotkeys()
 	{
-		static constexpr int keys[] = { VK_F4, VK_F1, VK_F3, VK_F6, VK_F7, VK_F8 };
+		static constexpr int keys[] = { VK_F4, VK_F1, VK_F2, VK_F3, VK_F6, VK_F7, VK_F8 };
 		static bool was_down[std::size(keys)] = {};
 		// F4 always; the rest with dev mode in its dev view (F4's footer checkbox switches to the player's).
 		const size_t key_count = shared::common::config::get().dev_view() ? std::size(keys) : 1;
@@ -128,6 +130,10 @@ namespace comp
 		case VK_F1:
 			// DLSS 3D-Guided Neural Rendering on/off.
 			game::dlss_nr::request_toggle();
+			break;
+		case VK_F2:
+			// The game's HUD and menus hidden and shown again (rtx.showGameUi), for free camera screenshots.
+			game::game_ui::request_toggle();
 			break;
 		case VK_F8:
 			// Vanilla graphics on/off. The lookdev game, which has no Remix, uses F8 to freeze input.

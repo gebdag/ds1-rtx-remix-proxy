@@ -449,7 +449,7 @@ namespace comp::game::free_cam
 			ImGui::SetTooltip("Fly the game's camera: WASD to move, mouse to look, E / Space up, Q down, Shift faster, Ctrl slower.\n"
 				"Mouse wheel zooms (field of view), the middle button returns to the game's field of view.\n"
 				"Ctrl + mouse wheel sets the flying speed (it stays for the next flight).\n"
-				"The player stands still (the game gets no input) while the world keeps running; F7 still stops time.\n"
+				"The player stands still (the game gets no input) while the world keeps running; F7 still stops time, F2 hides the HUD.\n"
 				"The game draws, culls and lights from this camera. Off returns to the game's camera.");
 		ImGui::SetNextItemWidth(200.0f);
 		float speed = s_speed.load();

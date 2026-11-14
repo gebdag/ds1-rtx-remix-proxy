@@ -26,6 +26,7 @@
 #include "game/water_ripples.hpp"
 #include "game/vanilla_view.hpp"
 #include "game/dlss_nr.hpp"
+#include "game/game_ui.hpp"
 #include "game/d3dx_texture_watch.hpp"
 #include "game/frustum_culling.hpp"
 #include "game/effect_lights.hpp"
@@ -86,6 +87,8 @@ namespace comp
 		game::vanilla_view::frame_update();
 		// DLSS 3D-Guided Neural Rendering on/off (F1).
 		game::dlss_nr::frame_update();
+		// The game's HUD and menus hidden or shown (F2).
+		game::game_ui::frame_update();
 
 		// Update game lights each frame
 		if (auto* gl = game_lights::get())
