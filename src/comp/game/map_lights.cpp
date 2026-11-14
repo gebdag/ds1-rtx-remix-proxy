@@ -438,12 +438,10 @@ namespace comp::game::map_lights
 		if (s_raw.empty())
 			shared::common::log("MapLights",
 				std::format("map 0x{:08X} '{}' -> {} ({})", id,
-					s_loaded_map.empty() ? "?" : s_loaded_map, s_status, s_source_path),
-				shared::common::LOG_TYPE::LOG_TYPE_WARN);
+					s_loaded_map.empty() ? "?" : s_loaded_map, s_status, s_source_path));
 		else
 			shared::common::log("MapLights",
-				std::format("map 0x{:08X} '{}' -> {}", id, s_loaded_map, s_status),
-				shared::common::LOG_TYPE::LOG_TYPE_STATUS);
+				std::format("map 0x{:08X} '{}' -> {}", id, s_loaded_map, s_status));
 	}
 
 	const std::vector<point_lights::light>& get()

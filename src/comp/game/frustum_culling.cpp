@@ -582,7 +582,7 @@ namespace comp::game::frustum_culling
 		shared::common::log(
 			"FrustumCulling",
 			message,
-			enabled_ && !keep_light_blockers_ ? shared::common::LOG_TYPE::LOG_TYPE_GREEN : shared::common::LOG_TYPE::LOG_TYPE_WARN,
+			shared::common::LOG_TYPE::LOG_TYPE_DEFAULT,
 			true);
 	}
 

@@ -187,12 +187,14 @@ namespace comp::game::input_customizer
 			VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), PAGE_READWRITE, &old_protect);
 			thunk->u1.Function = reinterpret_cast<DWORD>(&hooked_get_raw_input_data);
 			VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), old_protect, &old_protect);
-			shared::common::log("InputCustomizer", "Dark Souls Input Customizer v1.1 found; its input is held while the F4 menu is open.");
+			shared::common::log("InputCustomizer", "Dark Souls Input Customizer v1.1 found; its input is held while the F4 menu is open.",
+				shared::common::LOG_TYPE::LOG_TYPE_STATUS);
 			return;
 		}
 
 		if (gate_under_mod_hook())
-			shared::common::log("InputCustomizer", "Dark Souls Input Customizer 1.2.0 preview found; raw input is held while the F4 menu is open.");
+			shared::common::log("InputCustomizer", "Dark Souls Input Customizer 1.2.0 preview found; raw input is held while the F4 menu is open.",
+				shared::common::LOG_TYPE::LOG_TYPE_STATUS);
 		else
 			shared::common::log("InputCustomizer", "Dark Souls Input Customizer found (no GetRawInputData import, and its raw input hook was "
 				"in before the proxy's). The F4 menu opens, but the mod still moves the camera while it is open.",

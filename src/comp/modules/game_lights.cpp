@@ -338,7 +338,7 @@ namespace comp
 
 		// DrawLightInstance is only honoured inside the bridge's begin_scene callback.
 		shared::common::remix_api::get().begin_scene_callback_external = remix_draw_callback;
-		log("GameLights", "Remix API ready — harvesting engine point lights", LOG_TYPE::LOG_TYPE_STATUS);
+		log("GameLights", "Remix API ready — harvesting engine point lights");
 		return true;
 	}
 

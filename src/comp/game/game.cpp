@@ -117,7 +117,7 @@ namespace comp::game
 		if (use_pattern)
 		{
 			if (found_pattern_count == total_pattern_count) {
-				shared::common::log("Game", std::format("Found all '{:d}' Patterns.", total_pattern_count), shared::common::LOG_TYPE::LOG_TYPE_GREEN, true);
+				shared::common::log("Game", std::format("Found all '{:d}' Patterns.", total_pattern_count));
 			}
 			else
 			{

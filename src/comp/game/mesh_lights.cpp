@@ -83,7 +83,7 @@ namespace comp::game::mesh_lights
 				g_rule_of_name[r.texture] = static_cast<int>(g_rules.size());
 				g_rules.push_back(r);
 			}
-			shared::common::log("MeshLights", std::format("{}: {} texture(s)", g_path, g_rules.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+			shared::common::log("MeshLights", std::format("{}: {} texture(s)", g_path, g_rules.size()));
 		}
 
 		void load_offsets()
@@ -101,7 +101,7 @@ namespace comp::game::mesh_lights
 					g_offsets.push_back(o);
 			}
 			if (!g_offsets.empty())
-				shared::common::log("MeshLights", std::format("{}: {} lamps stand off their walls", g_map, g_offsets.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+				shared::common::log("MeshLights", std::format("{}: {} lamps stand off their walls", g_map, g_offsets.size()));
 		}
 
 		void update_state()
@@ -315,7 +315,7 @@ namespace comp::game::mesh_lights
 		const size_t before = g_lamps.size();
 		read_draw(dev, rule_index, prim, base_vertex, start_index, prim_count);
 		if (g_lamps.size() != before)
-			shared::common::log("MeshLights", std::format("{}: {} lamp(s) more, {} on this map", g_rules[rule_index].texture, g_lamps.size() - before, g_lamps.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+			shared::common::log("MeshLights", std::format("{}: {} lamp(s) more, {} on this map", g_rules[rule_index].texture, g_lamps.size() - before, g_lamps.size()), shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, true);
 	}
 
 	bool is_lamp(IDirect3DBaseTexture9* texture)

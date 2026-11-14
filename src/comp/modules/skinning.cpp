@@ -20,7 +20,7 @@ namespace comp
 		p_this = this;
 		initialized_ = true;
 		s_shell_fur = shared::common::config::get().get_int("Fur", "ShellGeometry", 0) != 0;
-		shared::common::log("Skinning", "Module initialized.", shared::common::LOG_TYPE::LOG_TYPE_WARN);
+		shared::common::log("Skinning", "Module initialized.");
 	}
 
 	skinning::~skinning()

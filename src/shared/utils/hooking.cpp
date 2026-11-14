@@ -258,7 +258,7 @@ namespace shared::utils
 						if (validate_patterns) 
 						{
 							if (place == inactive_offset + offset) {
-								shared::common::log("Hook", std::format("> Pattern offset validated!", place), shared::common::LOG_TYPE::LOG_TYPE_GREEN, true);
+								shared::common::log("Hook", std::format("> Pattern offset validated!", place));
 							}
 							else {
 								shared::common::log("Hook", std::format("> Pattern offset invalid!", place), shared::common::LOG_TYPE::LOG_TYPE_ERROR, true);

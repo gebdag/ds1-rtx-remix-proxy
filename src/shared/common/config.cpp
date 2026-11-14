@@ -67,6 +67,8 @@ namespace shared::common
 		loaded_ = true;
 		// [Dev] Enabled, here and not in parse_all: once at startup, and never from an area's values.
 		dev.enabled = dev_forced_ || get_bool("Dev", "Enabled", false);
+		set_debug_lines(dev.enabled || get_bool("Troubleshooting", "Verbose", false));
+		log("Config", std::format("Settings: {}", ini_path_), LOG_TYPE::LOG_TYPE_STATUS);
 		if (dev.enabled)
 			log("Config", dev_forced_ ? "Dev mode ON (lookdev)" : "Dev mode ON", LOG_TYPE::LOG_TYPE_STATUS, true);
 		parse_all();
@@ -226,6 +228,7 @@ namespace shared::common
 
 		// [Troubleshooting]
 		troubleshooting.verbose = get_bool("Troubleshooting", "Verbose", false);
+		set_debug_lines(dev_logs());
 
 		// [Diagnostics]: on by default with dev mode, off without it whatever the INI says (Verbose only adds log lines).
 		const bool diagnostics_allowed = dev.enabled;
@@ -376,7 +379,7 @@ namespace shared::common
 			ffp.enabled ? 1 : 0, ffp.albedo_stage, ffp.dedup_pass_mode,
 			ffp.texture_layer_blend ? 1 : 0));
 		if (skinning.enabled)
-			log("Config", "Skinning ENABLED", LOG_TYPE::LOG_TYPE_WARN);
+			log("Config", "Skinning ENABLED");
 	}
 
 	void config::postfx_settings::parse_skip_string()

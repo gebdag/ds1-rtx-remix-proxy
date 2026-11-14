@@ -140,7 +140,7 @@ namespace comp::game::area_overrides
 				else
 					shared::common::log("AreaOverrides", std::format("line {}: {} is neither map, box, yaw, when, lights, rtx.<option> nor proxy.<Section>.<Key>", number, key), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
 			}
-			shared::common::log("AreaOverrides", std::format("{}: {} area(s)", file_path(), g_areas.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+			shared::common::log("AreaOverrides", std::format("{}: {} area(s)", file_path(), g_areas.size()));
 		}
 
 		void reload_if_changed()
@@ -444,7 +444,7 @@ namespace comp::game::area_overrides
 		if (active == g_active && wanted == g_applied)
 			return;
 		if (active != g_active)
-			shared::common::log("AreaOverrides", std::format("area: {} (was {})", join(active), join(g_active)), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+			shared::common::log("AreaOverrides", std::format("area: {} (was {})", join(active), join(g_active)));
 		g_active = active;
 
 		bool proxy_changed = false;
@@ -456,7 +456,7 @@ namespace comp::game::area_overrides
 					set_rtx(key, "");
 				else
 					proxy_changed = true;
-				shared::common::log("AreaOverrides", std::format("{} back from {}", key, value), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+				shared::common::log("AreaOverrides", std::format("{} back from {}", key, value));
 			}
 		std::unordered_map<std::string, std::string> proxy_values;
 		for (const auto& [key, value] : wanted)
@@ -474,7 +474,7 @@ namespace comp::game::area_overrides
 				proxy_values[key.substr(6)] = value;
 			}
 			if (changed)
-				shared::common::log("AreaOverrides", std::format("{} = {}", key, value), shared::common::LOG_TYPE::LOG_TYPE_STATUS, true);
+				shared::common::log("AreaOverrides", std::format("{} = {}", key, value));
 		}
 		g_applied = wanted;
 

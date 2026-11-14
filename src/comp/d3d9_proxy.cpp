@@ -77,7 +77,7 @@ namespace d3d9_proxy
 			if (chain_module_)
 			{
 				resolve_procs(chain_module_);
-				shared::common::log("Proxy", std::format("Loaded Remix bridge: {}", cfg.remix.dll_name));
+				shared::common::log("Proxy", std::format("Loaded Remix bridge: {}", cfg.remix.dll_name), shared::common::LOG_TYPE::LOG_TYPE_STATUS);
 			}
 			else
 			{

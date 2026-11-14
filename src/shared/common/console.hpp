@@ -127,6 +127,11 @@ namespace shared::common
 	}
 
 	inline std::ofstream log_file;
+
+	// Plain (INFO) lines are troubleshooting detail: written only with [Troubleshooting] Verbose=1 or dev mode (config sets this
+	// as it loads). A player's log keeps the STATUS / OK / WARN / ERROR lines: what loaded, and what went wrong.
+	inline bool g_debug_lines = false;
+	inline void set_debug_lines(bool on) { g_debug_lines = on; }
 	inline std::once_flag log_file_once;
 
 	// The last session's logs, kept before this one overwrites them: where the folder rtx_comp\logs exists (made by hand on a
@@ -180,6 +185,8 @@ namespace shared::common
 
 	inline void log(const std::string_view& module_str, const std::string_view& msg, LOG_TYPE type = LOG_TYPE::LOG_TYPE_DEFAULT, bool highlight = false, bool newline_infront = false)
 	{
+		if (type == LOG_TYPE::LOG_TYPE_DEFAULT && !g_debug_lines)
+			return;
 		auto colorize = [](const LOG_TYPE& t, const bool h)
 			{
 				switch (t)

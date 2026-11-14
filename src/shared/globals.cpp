@@ -25,7 +25,7 @@ namespace shared::globals
 
 		MODULEINFO moduleInfo;
 		if (!GetModuleInformation(GetCurrentProcess(), exe_hmodule, &moduleInfo, sizeof(moduleInfo))) {
-			shared::common::log("Globals", std::format("Failed to get exe module information. Error: (0x{:X})", GetLastError()), shared::common::LOG_TYPE::LOG_TYPE_DEFAULT, false);
+			shared::common::log("Globals", std::format("Failed to get exe module information. Error: (0x{:X})", GetLastError()), shared::common::LOG_TYPE::LOG_TYPE_ERROR, false);
 		} else {
 			exe_size = moduleInfo.SizeOfImage;
 		}

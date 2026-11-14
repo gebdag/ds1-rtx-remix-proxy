@@ -114,7 +114,7 @@ namespace comp::game::tex_override
 			}
 		}
 		if (!g_files.empty())
-			shared::common::log("TexOverride", std::format("{} replacement texture(s) in tex_override", g_files.size()));
+			shared::common::log("TexOverride", std::format("{} replacement texture(s) in tex_override", g_files.size()), shared::common::LOG_TYPE::LOG_TYPE_STATUS);
 	}
 
 	bool read_replacement(const void* src, UINT src_size, std::vector<char>& file)
