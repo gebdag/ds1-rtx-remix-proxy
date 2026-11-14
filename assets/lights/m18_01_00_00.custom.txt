@@ -18,3 +18,9 @@
 # around it), aimed at the patch's centre; the hole's edges cut the outline. 1.5e6 gives the game's
 # patch-to-wall contrast (4.0 vs 3.8 in frame_20261108_013716).
 -13.02 193.64 -44.53 8 12 255 245 235 600 Cell_sun remix 1500000.000 0.00 0.100 0.00 spot -0.1742 -0.9217 -0.3467 9 0.2
+#
+# Stray lights (2026-11-14, placed by the user; recovered from the running game after a Remix crash).
+3.670 189.840 -27.957  0.500 4.000  255 217 153  100  stray_1  remix 51.500 0.00 0.335 1.00  spot -0.0109 -0.2478 0.9688 30.0 0.20
+3.511 189.580 -23.371  0.500 4.000  255 217 153  100  stray_2  remix 51.500 0.00 0.335 1.00  spot -0.0150 -0.4889 -0.8722 30.0 0.20
+2.645 190.336 -21.448  0.500 4.000  255 217 153  100  stray_3  remix 51.500 0.00 0.335 1.00  spot 0.9828 -0.1790 0.0456 30.0 0.20
+1.187 191.431 -18.824  0.500 4.000  255 217 153  100  stray_4  remix 51.500 0.00 0.335 1.00  spot 0.9600 -0.2743 0.0552 30.0 0.20
