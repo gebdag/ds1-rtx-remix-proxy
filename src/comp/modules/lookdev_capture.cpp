@@ -2085,6 +2085,8 @@ namespace comp
 			// A pad: held at rest only while input is frozen (block_for_game without the menu); a menu leaves it to the game.
 			else if (!is_keyboard_or_mouse_state(size) && block_for_game(_ReturnAddress(), 9, "DirectInput joystick state", false))
 				shared::common::neutral_joystick_state(dev, data, size);
+			else if (!is_keyboard_or_mouse_state(size) && from_game(_ReturnAddress()))
+				shared::common::note_joystick_state(dev, data, size);
 			return hr;
 		}
 

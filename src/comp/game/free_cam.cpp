@@ -175,7 +175,7 @@ namespace comp::game::free_cam
 					if (!s_recenter)
 					{
 						// Zoomed in, the same hand motion turns less (in proportion to the field of view).
-						const float zoom = s_fov_override && s_game_fov > 0.0f ? s_fov / s_game_fov : 1.0f;
+						const float zoom = s_fov_override && s_game_fov > 0.0f ? std::tan(0.5f * s_fov) / std::tan(0.5f * s_game_fov) : 1.0f;
 						s_yaw += s_yaw_sign * static_cast<float>(cursor.x - s_cursor_ref.x) * s_sensitivity * zoom;
 						s_pitch -= static_cast<float>(cursor.y - s_cursor_ref.y) * s_sensitivity * zoom;
 					}
@@ -252,12 +252,12 @@ namespace comp::game::free_cam
 					write_to(reinterpret_cast<float*>(pers_cam + 0x10));
 				// GameRend::Update copies these over both cameras after this point: the map-entry camera (flag +0xE0, matrix
 				// +0xF0, set by a map's setup) and the camera the culling camera follows when +0x24C is set ([+0x254]).
+				// The map-entry camera (flag +0xE0, matrix +0xF0, FOV +0xE4, one frame after a map's setup) is copied over both
+				// cameras after this point: it gets the free camera too. The camera the culling camera follows while +0x24C is set
+				// ([+0x254], a debug cull freeze nothing in the game sets) is the game's own and never refreshed: left alone.
 				const bool map_entry = *reinterpret_cast<const BYTE*>(gamerend + 0xE0) != 0;
-				const int follow = *reinterpret_cast<const int*>(gamerend + 0x24C) ? *reinterpret_cast<const int*>(gamerend + 0x254) : 0;
 				if (map_entry)
 					write_to(reinterpret_cast<float*>(gamerend + 0xF0));
-				if (follow)
-					write_to(reinterpret_cast<float*>(follow + 0x10));
 				// The zoom: vertical field of view at camera + 0x50 (the map-entry path takes it from GameRend + 0xE4).
 				if (s_fov_override)
 				{
@@ -266,8 +266,6 @@ namespace comp::game::free_cam
 						*reinterpret_cast<float*>(pers_cam + 0x50) = s_fov;
 					if (map_entry)
 						*reinterpret_cast<float*>(gamerend + 0xE4) = s_fov;
-					if (follow)
-						*reinterpret_cast<float*>(follow + 0x50) = s_fov;
 				}
 			}
 			s_update_original(gamerend, dt);
@@ -301,7 +299,7 @@ namespace comp::game::free_cam
 
 	void set_active(bool on)
 	{
-		if (!s_available || on == s_want_active.load())
+		if (!s_available || on == s_want_active.load() || (on && !shared::common::config::get().dev_view()))
 			return;
 		// The player stands still: the game reads no input while the free camera flies (F8's freeze). Its own state comes back after.
 		if (on)
@@ -312,7 +310,10 @@ namespace comp::game::free_cam
 			shared::globals::input_frozen = true;
 		}
 		else
+		{
 			shared::globals::input_frozen = s_saved_frozen;
+			s_fov_request = -1.0f;
+		}
 		s_want_active = on;
 	}
 
@@ -330,13 +331,15 @@ namespace comp::game::free_cam
 
 	void on_mouse_wheel(long delta)
 	{
-		if (delta != 0 && s_want_active.load())
-			s_wheel += delta;
+		if (delta == 0 || !s_want_active.load() || shared::globals::imgui_menu_open || shared::globals::remix_menu_open
+			|| GetForegroundWindow() != shared::globals::main_window)
+			return;
+		s_wheel += delta;
 	}
 
 	void set_fov_degrees(float degrees)
 	{
-		if (std::isfinite(degrees) && degrees >= 0.0f)
+		if (std::isfinite(degrees) && degrees >= 0.0f && s_want_active.load())
 			s_fov_request = degrees;
 	}
 

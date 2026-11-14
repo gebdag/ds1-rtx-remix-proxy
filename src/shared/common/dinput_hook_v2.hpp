@@ -11,6 +11,9 @@ namespace shared::common
 	// set for it (DIPROP_RANGE, asked once per device), POVs centred, no buttons. Used while input is frozen (the free camera, the
 	// lookdev freeze). Never all zeros: that is both sticks pushed up and left, which walks the character.
 	void neutral_joystick_state(IDirectInputDevice8A* device, void* data, DWORD size);
+	// A live (not frozen) DIJOYSTATE / DIJOYSTATE2 read by the game, kept per device (dev mode only): an axis that rested at an end of
+	// its range there (a separate trigger, a throttle) rests there in neutral_joystick_state instead of the middle.
+	void note_joystick_state(IDirectInputDevice8A* device, const void* data, DWORD size);
 
 	class dinput_v2 final : public loader::component_module
 	{
