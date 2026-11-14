@@ -31,8 +31,6 @@ namespace comp::game::free_cam
 	// Field of view in degrees while flying; 0 = the game's own (live key Cheats.FreeCamFov).
 	void set_fov_degrees(float degrees);
 
-	float& speed();             // metres a second (Shift x5, Ctrl x0.2)
-	float& mouse_sensitivity(); // radians per pixel
 
 	void tab_imgui();
 }

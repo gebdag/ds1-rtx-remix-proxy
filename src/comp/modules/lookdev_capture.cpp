@@ -17,7 +17,6 @@
 #include "../game/texture_names.hpp"
 #include "../game/vanilla_view.hpp"
 #include "../game/input_trace.hpp"
-#include "../game/free_cam.hpp"
 
 #include "shared/common/dinput_hook_v2.hpp"
 #include <Xinput.h>

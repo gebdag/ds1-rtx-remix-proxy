@@ -35,7 +35,7 @@ namespace comp::game::free_cam
 		bool s_recenter = true; // the next frame only centres the cursor (after a start, a menu, a focus change)
 		POINT s_cursor_ref {};  // where the cursor was left last frame: the reference for this frame's motion
 
-		float s_speed = 6.0f;
+		std::atomic<float> s_speed = 6.0f; // the game thread (wheel) and the D3D thread (F4 slider)
 		float s_sensitivity = 0.0025f;
 
 		// Field of view (vertical, radians; camera + 0x50). s_fov_override false = the game's own, which s_game_fov follows.
@@ -48,9 +48,13 @@ namespace comp::game::free_cam
 		float s_fov = 0.0f, s_game_fov = 0.75f;
 		bool s_middle_down = false;
 
-		// Low-level mouse hook (WH_MOUSE_LL) on a thread of its own, installed while flying.
+		// Low-level mouse hook (WH_MOUSE_LL) on a thread of its own, installed while flying. The thread does nothing but install
+		// the hook, pump messages and remove it: a hook thread that blocks (a log write, a lock) stalls every mouse event on the
+		// desktop until Windows drops the hook. Started and stopped from the D3D thread only (set_active).
 		HANDLE s_wheel_thread = nullptr;
 		DWORD s_wheel_thread_id = 0;
+		HANDLE s_wheel_ready = nullptr;          // set by the thread once its queue exists and the hook call returned
+		std::atomic<DWORD> s_wheel_hook_error = 0; // 0 = the hook is in
 
 		LRESULT CALLBACK low_level_mouse(int code, WPARAM message, LPARAM data)
 		{
@@ -61,13 +65,11 @@ namespace comp::game::free_cam
 
 		DWORD WINAPI wheel_thread(LPVOID)
 		{
-			HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, &low_level_mouse, GetModuleHandleW(nullptr), 0);
-			if (!hook)
-				shared::common::log("FreeCam", std::format("the mouse wheel hook failed ({}): no zoom or speed by wheel", GetLastError()),
-					shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
-			else
-				shared::common::log("FreeCam", "mouse wheel hook in");
 			MSG msg;
+			PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // the queue, before anyone may post the quit
+			HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, &low_level_mouse, shared::globals::dll_hmodule, 0);
+			s_wheel_hook_error = hook ? 0 : (GetLastError() ? GetLastError() : 1);
+			SetEvent(s_wheel_ready);
 			while (GetMessageW(&msg, nullptr, 0, 0) > 0)
 			{
 			}
@@ -78,23 +80,41 @@ namespace comp::game::free_cam
 
 		void start_wheel_hook()
 		{
+			if (s_wheel_thread) // still running (a stop that timed out keeps it): it serves this flight too
+				return;
+			if (!s_wheel_ready)
+				s_wheel_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+			ResetEvent(s_wheel_ready);
+			s_wheel_thread = CreateThread(nullptr, 0, &wheel_thread, nullptr, 0, &s_wheel_thread_id);
 			if (!s_wheel_thread)
-				s_wheel_thread = CreateThread(nullptr, 0, &wheel_thread, nullptr, 0, &s_wheel_thread_id);
+			{
+				shared::common::log("FreeCam", std::format("the mouse wheel thread did not start ({}): no zoom or speed by wheel", GetLastError()),
+					shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+				return;
+			}
+			// Mouse events wait for this thread: it runs a little above the game's.
+			SetThreadPriority(s_wheel_thread, THREAD_PRIORITY_ABOVE_NORMAL);
+			// The thread holds the loader lock briefly as it starts (DLL_THREAD_ATTACH): wait for its queue and hook.
+			if (WaitForSingleObject(s_wheel_ready, 2000) != WAIT_OBJECT_0)
+				shared::common::log("FreeCam", "the mouse wheel thread is slow to start: the wheel works once it is up", shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+			else if (const DWORD error = s_wheel_hook_error.load())
+				shared::common::log("FreeCam", std::format("the mouse wheel hook failed ({}): no zoom or speed by wheel", error), shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+			else
+				shared::common::log("FreeCam", "mouse wheel hook in");
 		}
 
 		void stop_wheel_hook()
 		{
 			if (!s_wheel_thread)
 				return;
-			// The thread's message queue exists once it first waits: retry until the quit lands or the thread is gone.
-			for (int i = 0; i < 50 && WaitForSingleObject(s_wheel_thread, 0) == WAIT_TIMEOUT; i++)
+			// Its queue exists before it signals ready; a thread not ready yet gets the quit once it is (wait, then post).
+			WaitForSingleObject(s_wheel_ready, 2000);
+			PostThreadMessageW(s_wheel_thread_id, WM_QUIT, 0, 0);
+			if (WaitForSingleObject(s_wheel_thread, 1000) != WAIT_OBJECT_0)
 			{
-				if (PostThreadMessageW(s_wheel_thread_id, WM_QUIT, 0, 0))
-				{
-					WaitForSingleObject(s_wheel_thread, 500);
-					break;
-				}
-				Sleep(10);
+				// Kept, not lost: the next start reuses it and the next stop tries again (never a second hook counting twice).
+				shared::common::log("FreeCam", "the mouse wheel thread did not stop yet", shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+				return;
 			}
 			CloseHandle(s_wheel_thread);
 			s_wheel_thread = nullptr;
@@ -206,8 +226,8 @@ namespace comp::game::free_cam
 			{
 				// Ctrl + wheel: 25 % faster per notch up, slower down (the speed stays for the next flight).
 				if (const long wheel = s_speed_wheel.exchange(0); wheel != 0)
-					s_speed = std::clamp(s_speed * std::pow(1.25f, static_cast<float>(wheel) / WHEEL_DELTA), kSpeedMin, kSpeedMax);
-				float speed = s_speed;
+					s_speed = std::clamp(s_speed.load() * std::pow(1.25f, static_cast<float>(wheel) / WHEEL_DELTA), kSpeedMin, kSpeedMax);
+				float speed = s_speed.load();
 				if (key(VK_SHIFT)) speed *= 5.0f;
 				if (key(VK_CONTROL)) speed *= 0.2f;
 				move_f = (key('W') ? 1.0f : 0.0f) - (key('S') ? 1.0f : 0.0f);
@@ -296,6 +316,11 @@ namespace comp::game::free_cam
 			{
 				s_running = false;
 				shared::common::log("FreeCam", "off: the game's camera again");
+			}
+			if (s_running && !cull_cam)
+			{
+				s_wheel = 0;
+				s_speed_wheel = 0;
 			}
 			if (s_running && cull_cam)
 			{
@@ -409,8 +434,6 @@ namespace comp::game::free_cam
 			s_fov_request = degrees;
 	}
 
-	float& speed() { return s_speed; }
-	float& mouse_sensitivity() { return s_sensitivity; }
 
 	void tab_imgui()
 	{
@@ -429,7 +452,9 @@ namespace comp::game::free_cam
 				"The player stands still (the game gets no input) while the world keeps running; F7 still stops time.\n"
 				"The game draws, culls and lights from this camera. Off returns to the game's camera.");
 		ImGui::SetNextItemWidth(200.0f);
-		ImGui::SliderFloat("Speed (m/s)", &s_speed, kSpeedMin, kSpeedMax, "%.2f", ImGuiSliderFlags_Logarithmic);
+		float speed = s_speed.load();
+		if (ImGui::SliderFloat("Speed (m/s)", &speed, kSpeedMin, kSpeedMax, "%.2f", ImGuiSliderFlags_Logarithmic))
+			s_speed = speed;
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Also Ctrl + mouse wheel while flying.");
 		ImGui::SetNextItemWidth(200.0f);
