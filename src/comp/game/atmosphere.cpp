@@ -15,6 +15,7 @@
 #include "texture_names.hpp"
 #include "mesh_tables.hpp"
 #include "cheats.hpp"
+#include "free_cam.hpp"
 #include "cutscenes.hpp"
 #include "host_feed.hpp"
 #include "../modules/game_lights.hpp"
@@ -1047,6 +1048,18 @@ namespace comp::game::atmosphere
 			{
 				last = value;
 				cheats::teleport_to_xyz(x, y, z);
+			}
+		}
+		else if (key == "Cheats.FreeCam") free_cam::set_active(b);
+		else if (key == "Cheats.FreeCamNudge")
+		{
+			// "forward right up yaw pitch" (metres, degrees), once per new value.
+			static std::string last;
+			float n[5] = {};
+			if (value != last && sscanf_s(value.c_str(), "%f %f %f %f %f", &n[0], &n[1], &n[2], &n[3], &n[4]) == 5)
+			{
+				last = value;
+				free_cam::nudge(n[0], n[1], n[2], n[3], n[4]);
 			}
 		}
 		else if (key == "Meshes.CutoutLists") shared::common::config::get().meshes.cutout_lists = b;

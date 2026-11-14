@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "cheats.hpp"
 #include "debug_tools.hpp"
+#include "free_cam.hpp"
 #include "shared/common/config.hpp"
 #include "map_lights.hpp"
 
@@ -636,6 +637,9 @@ namespace comp::game::cheats
 
 	void tab_imgui()
 	{
+		free_cam::tab_imgui();
+		ImGui::Separator();
+
 		if (!s_available)
 		{
 			ImGui::TextDisabled("God mode unavailable (AOB not found)");

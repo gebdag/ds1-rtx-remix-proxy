@@ -6,6 +6,7 @@
 #include "cheats.hpp"
 #include "debug_tools.hpp"
 #include "fps_unlock.hpp"
+#include "free_cam.hpp"
 #include "input_customizer.hpp"
 #include "intro_skip.hpp"
 
@@ -134,6 +135,7 @@ namespace comp::game
 		// without them. debug_tools stays: it only finds addresses, and applies the framerate-disconnect fix.
 		if (shared::common::config::get().dev.enabled)
 			cheats::init();
+		free_cam::init(); // dev mode only (checked inside)
 		cutscenes::init();
 		input_customizer::init();
 	}

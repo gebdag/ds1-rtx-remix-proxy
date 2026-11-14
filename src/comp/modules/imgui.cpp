@@ -17,6 +17,7 @@
 #include "../game/fps_unlock.hpp"
 #include "../game/camera.hpp"
 #include "../game/cheats.hpp"
+#include "../game/free_cam.hpp"
 #include "../game/hud_scale.hpp"
 #include "../game/debug_tools.hpp"
 #include "../game/frustum_culling.hpp"
@@ -78,10 +79,10 @@ namespace comp
 	// The function-key hotkeys are read from the key state once a frame, not from window messages: an input mod can take the
 	// keyboard away from the window (raw input without legacy key messages), and the F4 menu then never opened. Each acts when
 	// its key is released, as the WM_KEYUP it replaces did, with the game window in front and Alt up (Alt+F4 closes the game).
-	// Without dev mode only F4 (the menu) is read: F1, F6, F7 and F8 switch rendering, dump or stop the game.
+	// Without dev mode only F4 (the menu) is read: F1, F3, F6, F7 and F8 switch rendering, fly the camera, dump or stop the game.
 	void imgui::poll_hotkeys()
 	{
-		static constexpr int keys[] = { VK_F4, VK_F1, VK_F6, VK_F7, VK_F8 };
+		static constexpr int keys[] = { VK_F4, VK_F1, VK_F3, VK_F6, VK_F7, VK_F8 };
 		static bool was_down[std::size(keys)] = {};
 		// F4 always; the rest with dev mode in its dev view (F4's footer checkbox switches to the player's).
 		const size_t key_count = shared::common::config::get().dev_view() ? std::size(keys) : 1;
@@ -108,6 +109,11 @@ namespace comp
 		case VK_F6:
 			// The light dump (game::light_dump), every frame's light data to a file until F6 again.
 			game::light_dump::toggle();
+			break;
+		case VK_F3:
+			// The free camera (game::free_cam): WASD and the mouse fly the game's camera while the player stands still.
+			if (!shared::globals::lookdev_host)
+				game::free_cam::toggle();
 			break;
 		case VK_F7:
 			// The game's time stopped and restarted, for capturing a frame of a cutscene.
