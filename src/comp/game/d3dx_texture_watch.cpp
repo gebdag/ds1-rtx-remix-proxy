@@ -63,8 +63,8 @@ namespace comp::game::d3dx_texture_watch
 			const auto dds = dds_format_tag(src, src_size);
 			note_first_use(dds);
 
-			// A texture pack's texture, at the size and format of its file. The names come from the game's own
-			// data: it holds the TPF header the file has not got.
+			// A texture pack's texture, at the size and format of its file. The names come from the game's own data: it
+			// holds the TPF header the file has not got.
 			if (std::vector<char> file; tex_override::read_replacement(src, src_size, file))
 			{
 				const auto replaced = o_create_texture(device, file.data(), static_cast<UINT>(file.size()), D3DX_DEFAULT, D3DX_DEFAULT,

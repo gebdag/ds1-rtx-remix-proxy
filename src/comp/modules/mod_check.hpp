@@ -5,7 +5,8 @@ namespace comp
 	// Always-on check for other DLL mods: DLLs in the game folder under the names Windows loads in place of its own
 	// (dinput8.dll, dxgi.dll, version.dll, ...), ASI plugins, and DLLs injected into the game from elsewhere. It never
 	// stops the game and shows nothing on screen: what it finds goes to the log at startup and again, with the crash
-	// report, after a crash. A mod known to break this one is named as incompatible, with the files to remove and any DLL it chain-loads.
+	// report, after a crash. A mod known to break this one is named as incompatible, with the files to remove and any
+	// DLL it chain-loads.
 	namespace mod_check
 	{
 		struct finding
