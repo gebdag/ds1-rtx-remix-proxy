@@ -1,26 +1,10 @@
-# Custom lights for m18_01_00_00 (Undead Asylum). F4 > Lights > Custom lights edits and saves this file.
+# Hand-placed lights for m18_01_00_00 (F4 > Lights > Custom lights writes this file).
 # x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
 #   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
 # With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
-#
-# Corridor sunbeam: the game bakes this patch of sunlight on the rubble into the lightmap and lights
-# only characters with a map light (slot 15, colour 5.0 4.6 4.2), so Remix gets no light there.
-# Placed in the ceiling hole and aimed along the game's god-ray shaft (m19_bg_shaft_10), cone matched to
-# the lightmap's sunlit patch in lookdev capture frame_20261031_161923. A Remix spot of radius 0.3 m;
-# intensity 12700 matches the game's lit rubble (8.6) and floor (5.5) there. The dwindle 8-12 and 600%
-# are its former game-falloff settings, kept for the 'Use the game's falloff' toggle.
--3.20 207.50 19.30 8 12 255 235 215 600 Corridor_sunbeam remix 12700.000 0.00 0.300 1.00 spot -0.31 -0.88 0.37 16 0.5
-#
-# Intro cell sun: in the opening cutscene the game's shadowed sun falls through the 0.7 x 0.6 m hole in
-# the cell ceiling (-13.5 189.5 -45.5) and draws its outline on the back wall and a floor strip by the
-# player. The hole opens into a 5 m shaft the Remix sun cannot pass, so this small spot sits 4.4 m up the
-# shaft along c175 (fitted against the map: it sees 72% of the game's lit patch and 3% of the dark wall
-# around it), aimed at the patch's centre; the hole's edges cut the outline. 1.5e6 gives the game's
-# patch-to-wall contrast (4.0 vs 3.8 in frame_20261108_013716).
--13.02 193.64 -44.53 8 12 255 245 235 600 Cell_sun remix 1500000.000 0.00 0.100 0.00 spot -0.1742 -0.9217 -0.3467 9 0.2
-#
-# Stray lights (2026-11-14, placed by the user; recovered from the running game after a Remix crash).
-3.670 189.840 -27.957  0.500 4.000  255 217 153  100  stray_1  remix 51.500 0.00 0.335 1.00  spot -0.0109 -0.2478 0.9688 30.0 0.20
-3.511 189.580 -23.371  0.500 4.000  255 217 153  100  stray_2  remix 51.500 0.00 0.335 1.00  spot -0.0150 -0.4889 -0.8722 30.0 0.20
-2.645 190.336 -21.448  0.500 4.000  255 217 153  100  stray_3  remix 51.500 0.00 0.335 1.00  spot 0.9828 -0.1790 0.0456 30.0 0.20
-1.187 191.431 -18.824  0.500 4.000  255 217 153  100  stray_4  remix 51.500 0.00 0.335 1.00  spot 0.9600 -0.2743 0.0552 30.0 0.20
+-3.200 207.500 19.300  8.000 12.000  255 235 215  600  Corridor_sunbeam  remix 12700.000 0.00 0.300 1.00  spot -0.3100 -0.8800 0.3700 16.0 0.50
+-13.020 193.640 -44.530  8.000 12.000  255 245 235  600  Cell_sun  remix 1500000.000 0.00 0.100 0.00  spot -0.1742 -0.9217 -0.3467 9.0 0.20
+3.136 190.983 -18.871  0.500 4.000  255 217 153  100  stray_1  remix 51.500 0.00 0.335 1.00  spot -0.0109 -0.7197 0.6942 44.6 0.95
+3.136 194.077 -18.871  0.500 4.000  255 217 153  100  stray_2  remix 51.500 0.00 0.335 1.00  spot 0.0416 -0.6859 -0.7265 30.0 0.20
+3.165 194.077 -19.626  0.500 4.000  255 217 153  100  stray_3  remix 25.300 0.00 0.335 1.00  spot -0.7522 -0.6525 0.0922 30.0 0.20
+3.783 194.077 -15.245  0.500 4.000  255 217 153  100  stray_4  remix 21.700 0.00 0.335 1.00  spot 0.7320 -0.6712 -0.1165 30.0 0.20

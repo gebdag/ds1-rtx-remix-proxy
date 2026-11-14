@@ -1,7 +1,9 @@
-# Custom lights for m15_01_00_00 (Anor Londo). F4 > Lights > Custom lights edits and saves this file.
+# Hand-placed lights for m15_01_00_00 (F4 > Lights > Custom lights writes this file).
 # x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
-#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]  [dark|light]
-#
-# Gwynevere's room: nothing real lights it, the game's region light does it all. One light behind her, in front of the main curtain.
-# 'light': not in the dark version, where she is gone.
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
 640.500 175.000 255.000  2.000 3.000  255 190 130  100  Gwynevere_back  remix 1.500 0.00 0.500 0.00  light
+329.460 110.890 315.840  0.500 4.000  245 228 199  100  chapel_1  remix 2.100 0.00 0.145 1.00
+311.948 110.797 315.585  0.500 4.000  245 228 199  100  chapel_2  remix 2.100 0.00 0.145 1.00
+293.232 110.697 315.347  0.500 4.000  245 228 199  100  chapel_3  remix 2.100 0.00 0.145 1.00
+277.218 110.612 315.143  0.500 4.000  245 228 199  100  chapel_4  remix 2.100 0.00 0.145 1.00
