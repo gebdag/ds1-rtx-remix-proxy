@@ -7,6 +7,11 @@
 
 namespace shared::common
 {
+	// A DIJOYSTATE / DIJOYSTATE2 read (size 80 / 272) rewritten as the pad at rest: every axis at the middle of the range the game
+	// set for it (DIPROP_RANGE, asked once per device), POVs centred, no buttons. Used while input is frozen (the free camera, the
+	// lookdev freeze). Never all zeros: that is both sticks pushed up and left, which walks the character.
+	void neutral_joystick_state(IDirectInputDevice8A* device, void* data, DWORD size);
+
 	class dinput_v2 final : public loader::component_module
 	{
 	public:

@@ -28,7 +28,10 @@
 
 #include "comp/modules/imgui.hpp"
 #include "comp/game/input_trace.hpp"
+#include "comp/game/free_cam.hpp"
 #include <intrin.h>
+#include <array>
+#include <unordered_map>
 
 namespace shared::common
 {
@@ -227,6 +230,41 @@ namespace shared::common
 		}
 	}
 
+	void neutral_joystick_state(IDirectInputDevice8A* device, void* data, DWORD size)
+	{
+		if (!device || !data || (size != sizeof(DIJOYSTATE) && size != sizeof(DIJOYSTATE2)))
+			return;
+		// X Y Z Rx Ry Rz and the two sliders: the same offsets in both structures.
+		static const DWORD offsets[8] = { DIJOFS_X, DIJOFS_Y, DIJOFS_Z, DIJOFS_RX, DIJOFS_RY, DIJOFS_RZ, DIJOFS_SLIDER(0), DIJOFS_SLIDER(1) };
+		static std::mutex lock;
+		static std::unordered_map<void*, std::array<LONG, 8>> centres;
+		std::array<LONG, 8> centre {};
+		{
+			std::lock_guard guard(lock);
+			if (const auto it = centres.find(device); it != centres.end())
+				centre = it->second;
+			else
+			{
+				for (int i = 0; i < 8; i++)
+				{
+					DIPROPRANGE range {};
+					range.diph.dwSize = sizeof(DIPROPRANGE);
+					range.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+					range.diph.dwObj = offsets[i];
+					range.diph.dwHow = DIPH_BYOFFSET;
+					centre[i] = SUCCEEDED(device->GetProperty(DIPROP_RANGE, &range.diph)) ? range.lMin + (range.lMax - range.lMin) / 2 : 0;
+				}
+				centres[device] = centre;
+			}
+		}
+		auto* bytes = static_cast<BYTE*>(data);
+		std::memset(bytes, 0, size); // buttons, and DIJOYSTATE2's velocities, accelerations and forces
+		for (int i = 0; i < 8; i++)
+			*reinterpret_cast<LONG*>(bytes + offsets[i]) = centre[i];
+		for (int i = 0; i < 4; i++)
+			*reinterpret_cast<DWORD*>(bytes + DIJOFS_POV(i)) = 0xFFFFFFFFu;
+	}
+
 	HRESULT __stdcall dinput8_device_get_device_state_v2_hk(IDirectInputDevice8* device, DWORD cbData, LPVOID lpvData)
 	{
 		HRESULT hr = g_dinput8_device_get_device_state_original(device, cbData, lpvData);
@@ -236,10 +274,14 @@ namespace shared::common
 		{
 			case sizeof(DIMOUSESTATE) :
 				di->updateMouseState(static_cast<DIMOUSESTATE*>(lpvData), di->MouseAxisMode == DIPROPAXISMODE_ABS);
+				if (SUCCEEDED(hr) && di->MouseAxisMode != DIPROPAXISMODE_ABS)
+					comp::game::free_cam::on_mouse_wheel(static_cast<DIMOUSESTATE*>(lpvData)->lZ);
 				break;
 
 			case sizeof(DIMOUSESTATE2) :
 				di->updateMouseState(static_cast<DIMOUSESTATE2*>(lpvData), di->MouseAxisMode == DIPROPAXISMODE_ABS);
+				if (SUCCEEDED(hr) && di->MouseAxisMode != DIPROPAXISMODE_ABS)
+					comp::game::free_cam::on_mouse_wheel(static_cast<DIMOUSESTATE2*>(lpvData)->lZ);
 				break;
 
 			case 256:
@@ -256,6 +298,11 @@ namespace shared::common
 		comp::game::input_trace::on_di_state(comp::game::input_trace::is_game_address(_ReturnAddress()), cbData, held);
 		if (held) {
 			memset(lpvData, 0, cbData);
+		}
+		// While input is frozen (not for a menu, which leaves the pad to the game) the pad reads as at rest.
+		else if (!keyboard_or_mouse && SUCCEEDED(hr) && lpvData && shared::globals::input_frozen
+			&& comp::game::input_trace::is_game_address(_ReturnAddress())) {
+			neutral_joystick_state(reinterpret_cast<IDirectInputDevice8A*>(device), lpvData, cbData);
 		}
 
 		return hr;

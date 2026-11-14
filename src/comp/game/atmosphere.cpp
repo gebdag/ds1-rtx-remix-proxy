@@ -1050,7 +1050,8 @@ namespace comp::game::atmosphere
 				cheats::teleport_to_xyz(x, y, z);
 			}
 		}
-		else if (key == "Cheats.FreeCam") free_cam::set_active(b);
+		else if (key == "Cheats.FreeCam") { static std::string last; if (value != last) { last = value; free_cam::set_active(b); } }
+		else if (key == "Cheats.FreeCamFov") { static std::string last; if (value != last) { last = value; free_cam::set_fov_degrees(static_cast<float>(std::atof(value.c_str()))); } }
 		else if (key == "Cheats.FreeCamNudge")
 		{
 			// "forward right up yaw pitch" (metres, degrees), once per new value.

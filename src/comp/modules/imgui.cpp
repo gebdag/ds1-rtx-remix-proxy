@@ -65,7 +65,9 @@ namespace comp
 		// Lookdev input freeze: keyboard, mouse and raw input never reach the game.
 		if (block || shared::globals::input_frozen)
 		{
-			if (message_type >= WM_KEYFIRST && message_type <= WM_KEYLAST)
+			// Alt+F4 and Alt+Enter still reach the window.
+			const bool system_key = message_type == WM_SYSKEYDOWN || message_type == WM_SYSKEYUP || message_type == WM_SYSCHAR || message_type == WM_SYSDEADCHAR;
+			if (message_type >= WM_KEYFIRST && message_type <= WM_KEYLAST && !system_key)
 				return 0;
 			if (message_type >= WM_MOUSEFIRST && message_type <= WM_MOUSELAST)
 				return 0;
@@ -86,6 +88,9 @@ namespace comp
 		static bool was_down[std::size(keys)] = {};
 		// F4 always; the rest with dev mode in its dev view (F4's footer checkbox switches to the player's).
 		const size_t key_count = shared::common::config::get().dev_view() ? std::size(keys) : 1;
+		// F3 and the free camera's checkbox are dev view only: leaving it would strand the user flying with input frozen.
+		if (!shared::common::config::get().dev_view() && game::free_cam::active())
+			game::free_cam::set_active(false);
 		const bool in_front = GetForegroundWindow() == shared::globals::main_window;
 		const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 		for (size_t i = 0; i < key_count; i++)

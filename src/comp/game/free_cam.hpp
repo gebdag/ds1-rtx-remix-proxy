@@ -22,6 +22,13 @@ namespace comp::game::free_cam
 	// may not send input to the game).
 	void nudge(float forward, float right, float up, float yaw_degrees, float pitch_degrees);
 
+	// Mouse wheel motion (DirectInput lZ, 120 a notch) from the game's own mouse reads, which carry it even when an input mod
+	// keeps wheel messages from the window. While flying, the wheel zooms (field of view); the middle button returns to the game's.
+	void on_mouse_wheel(long delta);
+
+	// Field of view in degrees while flying; 0 = the game's own (live key Cheats.FreeCamFov).
+	void set_fov_degrees(float degrees);
+
 	float& speed();             // metres a second (Shift x5, Ctrl x0.2)
 	float& mouse_sensitivity(); // radians per pixel
 

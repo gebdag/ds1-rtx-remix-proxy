@@ -17,6 +17,7 @@
 #include "../game/texture_names.hpp"
 #include "../game/vanilla_view.hpp"
 #include "../game/input_trace.hpp"
+#include "../game/free_cam.hpp"
 
 #include "shared/common/dinput_hook_v2.hpp"
 #include <Xinput.h>
@@ -2074,10 +2075,16 @@ namespace comp
 			const HRESULT hr = s_di_get_state_og(dev, size, data);
 			if (FAILED(hr) || !data)
 				return hr;
+			// The wheel, for the free camera's zoom, before a freeze clears it (the mouse reports relative motion by default).
+			if ((size == sizeof(DIMOUSESTATE) || size == sizeof(DIMOUSESTATE2)) && from_game(_ReturnAddress()))
+				game::free_cam::on_mouse_wheel(static_cast<const DIMOUSESTATE*>(data)->lZ);
 			const bool held = is_keyboard_or_mouse_state(size) && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)");
 			game::input_trace::on_di_state(from_game(_ReturnAddress()), size, held);
 			if (held)
 				std::memset(data, 0, size);
+			// A pad: held at rest only while input is frozen (block_for_game without the menu); a menu leaves it to the game.
+			else if (!is_keyboard_or_mouse_state(size) && block_for_game(_ReturnAddress(), 9, "DirectInput joystick state", false))
+				shared::common::neutral_joystick_state(dev, data, size);
 			return hr;
 		}
 
@@ -2100,6 +2107,9 @@ namespace comp
 		{
 			const HRESULT hr = s_di_get_data_og[Slot](dev, object_size, data, count, flags);
 			if (SUCCEEDED(hr) && count && is_keyboard_or_mouse_device(dev) && block_for_game(_ReturnAddress(), 6 + Slot, "DirectInput GetDeviceData"))
+				*count = 0;
+			// A pad's buffered input: none while input is frozen.
+			else if (SUCCEEDED(hr) && count && !is_keyboard_or_mouse_device(dev) && block_for_game(_ReturnAddress(), 10 + Slot, "DirectInput joystick data", false))
 				*count = 0;
 			return hr;
 		}
@@ -2831,6 +2841,11 @@ namespace comp
 
 	lookdev_capture::private_scope::private_scope() : prev_(t_internal) { t_internal = true; }
 	lookdev_capture::private_scope::~private_scope() { t_internal = prev_; }
+
+	void lookdev_capture::freeze_cursor_here()
+	{
+		GetCursorPos(&s_frozen_cursor);
+	}
 
 	bool lookdev_capture::recent_capture(std::string& name)
 	{

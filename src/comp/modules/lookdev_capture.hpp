@@ -66,5 +66,8 @@ namespace comp
 		// The F4 menu's hold on the game's keyboard (the input-freeze hooks) without this module: the normal game with
 		// [Lookdev] MainGameCapture off.
 		static void install_input_hold();
+
+		// Where the game's GetCursorPos keeps the cursor while input is frozen: here and now (for a freeze not started by F8).
+		static void freeze_cursor_here();
 	};
 }
