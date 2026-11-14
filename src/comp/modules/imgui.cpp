@@ -184,6 +184,14 @@ namespace comp
 		ImGui::CenterText("remix-comp-proxy");
 		ImGui::CenterText("DX9 proxy framework for RTX Remix compatibility mods");
 
+		SPACEY16;
+		ImGui::CenterText("adapted by gabdeg for Dark Souls: Prepare to Die Edition");
+		SPACEY8;
+		CENTER_URL("GitHub (gebdag)", "https://github.com/gebdag/");
+		CENTER_URL("Nexus Mods (gabdeg)", "https://www.nexusmods.com/profile/gabdeg");
+		SPACEY8;
+		CENTER_URL("Join the RTX Remix Discord Community", "https://discord.gg/j7RKktE4Wd");
+
 		ImGui::Spacing(0.0f, 24.0f);
 		ImGui::CenterText("current version");
 
