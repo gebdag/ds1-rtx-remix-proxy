@@ -39,6 +39,7 @@ ADDRS = [
     (0x0137D99C, 'draw_param_man', 'map_sun'),
     (0x0137E7A0, 'fx_host_offset', 'fx_owner'),
     (0x012E29E8, 'waterfall_anim_base', 'waterfall'),
+    (0x011E7E90, 'frame_step', 'fps_unlock'),
 
     (0x01174478, 'vt_frpg_camera_entity', 'camera'),
     (0x011AB110, 'vt_bank_point_light', 'point_lights'),
@@ -89,6 +90,8 @@ ADDRS = [
     (0x00EE1950, 'remo_request', 'cutscenes'),
     (0x00FC2084, 'camera_call', 'cutscenes'),
     (0x00EE5919, 'set_logo_flag', 'intro_skip'),
+    (0x00BAC4ED, 'draw_command_call', 'fps_unlock'),
+    (0x00FFB688, 'interval_store', 'fps_unlock'),
 ]
 
 

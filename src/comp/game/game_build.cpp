@@ -107,6 +107,9 @@ namespace comp::game::build
 			{ 0x012E29E8, 0x012DF9E8, how::data_operand, 8, 0, 0x00000000, 8, 13, "waterfall_anim_base", // waterfall; 13/13 references agree; 2nd signature; 13 refs
 				"01 8B 50 3C 8B 42 0C A3 ?? ?? ?? ?? ?? 41 02 83 F8 18 77 13",
 				"8B 76 04 8B 48 0C 89 0D ?? ?? ?? ?? ?? 7E 18 85 FF 74 4A 33" },
+			{ 0x011E7E90, 0x011E4D60, how::data_operand, 6, 0, 0x00000000, 2, 37, "frame_step", // fps_unlock; 16/16 references agree; 2nd signature; 37 refs
+				"DE 01 00 00 D9 05 ?? ?? ?? ?? 51 D9 1C 24 56 E8 C8 F0",
+				"D9 05 ?? ?? ?? ?? 51 8B C8 D9 1C 24 8B 42 40 FF D0 80" },
 			{ 0x01174478, 0x01171338, how::rtti_vtable, 0, 0, 0x00000000, 0, 0, "vt_frpg_camera_entity", // camera; RTTI col+0 slot+0x0
 				".?AVFrpgCameraEntity@NS_FRPG@@",
 				"" },
@@ -251,6 +254,12 @@ namespace comp::game::build
 			{ 0x00EE5919, 0x00EE4599, how::code, 1, 0, 0x00000000, 49, 0, "set_logo_flag", // intro_skip; disjoint second window agrees; 2nd signature
 				"00 ?? ?? ?? ?? ?? ?? ?? 51 08 C2 08 00 CC CC CC CC CC CC CC CC CC CC CC A1",
 				"C0 89 41 70 C7 41 08 FF FF FF FF C2 08 00 CC CC CC CC CC CC CC CC CC CC A1 ?? ?? ?? ?? ?? ?? ?? ?? 75 17 80 3D ?? ?? ?? ?? 00 75 0E BA 01 00 00" },
+			{ 0x00BAC4ED, 0x00BAC4DD, how::code, 0, 0, 0x00000000, -24, 0, "draw_command_call", // fps_unlock; disjoint second window agrees; 2nd signature
+				"E8 ?? ?? ?? ?? 83 F8 05 77 51 FF 24 85 ?? ?? ?? ?? 8B 07 8B 50 0C 8B CF",
+				"FF D2 32 DB EB 3D 8B 4E 2C 8B 56 28 8B 07 51 8B" },
+			{ 0x00FFB688, 0x00FFA308, how::code, 0, 0, 0x00000000, 20, 0, "interval_store", // fps_unlock; disjoint second window agrees; 2nd signature
+				"C7 86 48 02 00 00 02 00 00 00 5E C2 08 00 CC CC",
+				"00 5E C2 08 00 8B 4E 10 6A 02 51 FF 15 ?? ?? ?? ?? 83 C4 08" },
 			// END GENERATED TABLE
 		};
 

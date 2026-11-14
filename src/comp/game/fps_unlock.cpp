@@ -11,13 +11,12 @@
 // Present.
 #include "std_include.hpp"
 #include "fps_unlock.hpp"
-#include <algorithm>
-#include <cstring>
+#include "game_build.hpp"
 #include "shared/common/config.hpp"
 
 namespace comp::game::fps_unlock
 {
-	// 2015-06-15 VAs; the game's image has a fixed base.
+	// 2015-06-15 VAs; build::at gives the running build's.
 	static constexpr DWORD kFrameStep = 0x011E7E90;       // float, 1/30 as shipped
 	static constexpr DWORD kIntervalStore = 0x00FFB688;   // mov dword ptr [esi+0x248], 2
 	static constexpr DWORD kCommandCall = 0x00BAC4ED;     // call <command getter>
@@ -29,8 +28,6 @@ namespace comp::game::fps_unlock
 	static constexpr int kLoadingFrameCommand = 5;
 	static constexpr float kMinStepFps = 10.0f;            // a longer frame slows the game instead of taking a longer step
 	static constexpr float kFrozenStep = 1e-5f;            // F7: time all but stops (the physics may divide by the step)
-
-	static DWORD at(DWORD va) { return va; }
 
 	static float* s_step = nullptr;
 	static DWORD s_getter = 0; // the command getter the call site went to
@@ -64,7 +61,7 @@ namespace comp::game::fps_unlock
 	{
 		if (shared::globals::lookdev_host)
 			return nullptr;
-		const DWORD address = at(kFrameStep);
+		const DWORD address = build::at(kFrameStep);
 		if (!address || *reinterpret_cast<const float*>(address) != 1.0f / 30.0f || !unprotect(address, sizeof(float), PAGE_READWRITE))
 			return nullptr;
 		return reinterpret_cast<float*>(address);
@@ -114,7 +111,7 @@ namespace comp::game::fps_unlock
 	// The stored interval's immediate, if the setter is as shipped.
 	static DWORD find_interval_value()
 	{
-		const DWORD store = at(kIntervalStore);
+		const DWORD store = build::at(kIntervalStore);
 		if (!store || std::memcmp(reinterpret_cast<const void*>(store), kIntervalStoreBytes, sizeof(kIntervalStoreBytes)) != 0)
 			return 0;
 		const DWORD value = store + sizeof(kIntervalStoreBytes);
@@ -124,7 +121,7 @@ namespace comp::game::fps_unlock
 	// The dispatcher's call to the command getter, if both are as shipped.
 	static DWORD find_command_call()
 	{
-		const DWORD call = at(kCommandCall);
+		const DWORD call = build::at(kCommandCall);
 		if (!call || *reinterpret_cast<const unsigned char*>(call) != 0xE8)
 			return 0;
 		const DWORD getter = call + 5 + *reinterpret_cast<const DWORD*>(call + 1);
