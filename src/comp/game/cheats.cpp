@@ -384,6 +384,53 @@ namespace comp::game::cheats
 		return p + TELEPORT_SECONDARY_BLOCK_OFFSET;
 	}
 
+	// The local player's position block, {X, height, Z} at +0x10: the local PlayerIns (WorldChrMan +0x3C) -> +0x28 -> +0x1C, the
+	// chain camera.cpp follows. The teleport chain above starts at a game global that is no fixed pointer: 14 places in the game
+	// store the object they work on into it (mov reg, [obj+0xC]; mov [global], reg), and a chain through it holds only while
+	// the last of them left the player's there. Live, 2026-11-14 in Quelaag's Domain: the global held an id table, +0x44 was null,
+	// Save this spot was greyed out and a teleport went nowhere, while this block had the player.
+	static DWORD player_block_position_addr()
+	{
+		if (const DWORD w = safe_read_ptr(debug_tools::world_chr_man()))
+			if (const DWORD chr = safe_read_ptr(w + 0x3C))
+				if (const DWORD ctrl = safe_read_ptr(chr + 0x28))
+					if (const DWORD block = safe_read_ptr(ctrl + 0x1C))
+						return block + 0x10;
+		return 0;
+	}
+
+	// The teleport chain's blocks, only while they are the player's: the primary block holds the position the player block holds.
+	// Otherwise the global points at some other object, and a write through it would land in that object.
+	static bool checked_teleport_blocks(DWORD& primary, DWORD& secondary)
+	{
+		primary = secondary = 0;
+		float px, py, pz, tx, ty, tz;
+		const DWORD p = get_teleport_primary_addr();
+		if (!p || !safe_read_vec3(player_block_position_addr(), px, py, pz) || !safe_read_vec3(p, tx, ty, tz))
+			return false;
+		const float dx = px - tx, dy = py - ty, dz = pz - tz;
+		if (!(dx * dx + dy * dy + dz * dz < 1.0f))
+			return false;
+		primary = p;
+		secondary = get_teleport_secondary_addr();
+		return true;
+	}
+
+	// Moves the player: through the teleport chain while it is the player's (the way it has always teleported), else straight into
+	// the player block.
+	static bool write_player_position(float x, float y, float z, const char*& how)
+	{
+		DWORD primary, secondary;
+		if (checked_teleport_blocks(primary, secondary))
+		{
+			how = "teleport chain";
+			const bool wrote = safe_write_vec3(primary, x, y, z);
+			return (secondary && safe_write_vec3(secondary, x, y, z)) || wrote;
+		}
+		how = "player block";
+		return safe_write_vec3(player_block_position_addr(), x, y, z);
+	}
+
 	static void sync_last_bonfire_selection_from_game()
 	{
 		const int current_id = safe_read_int(get_last_bonfire_value_addr(), 0);
@@ -411,41 +458,26 @@ namespace comp::game::cheats
 			return false;
 		}
 
-		const DWORD primary = get_teleport_primary_addr();
-		const DWORD secondary = get_teleport_secondary_addr();
-
-		bool wrote = false;
-		if (primary)
-		{
-			wrote = safe_write_vec3(primary, entry.x, entry.y, entry.z) || wrote;
-		}
-
-		if (secondary)
-		{
-			wrote = safe_write_vec3(secondary, entry.x, entry.y, entry.z) || wrote;
-		}
-
+		const char* how = "";
+		const bool wrote = write_player_position(entry.x, entry.y, entry.z, how);
+		log("Cheats", std::format("Bonfire teleport to {} through the {}: {}", entry.name, how, wrote ? "written" : "failed"),
+			wrote ? LOG_TYPE::LOG_TYPE_GREEN : LOG_TYPE::LOG_TYPE_ERROR, true);
 		return wrote;
 	}
 
 	static bool player_position(float& x, float& y, float& z)
 	{
-		return safe_read_vec3(get_teleport_primary_addr(), x, y, z);
+		return safe_read_vec3(player_block_position_addr(), x, y, z);
 	}
 
 	static bool teleport_to(const char* what, float x, float y, float z)
 	{
-		const DWORD primary = get_teleport_primary_addr();
-		const DWORD secondary = get_teleport_secondary_addr();
 		float fx = 0.0f, fy = 0.0f, fz = 0.0f;
 		const bool had = player_position(fx, fy, fz);
-		bool wrote = false;
-		if (primary)
-			wrote = safe_write_vec3(primary, x, y, z) || wrote;
-		if (secondary)
-			wrote = safe_write_vec3(secondary, x, y, z) || wrote;
-		log("Cheats", wrote ? std::format("Teleported to {} ({:.3f}, {:.3f}, {:.3f}) from {} ({})", what, x, y, z,
-				had ? std::format("{:.3f}, {:.3f}, {:.3f}", fx, fy, fz) : std::string("unknown"), current_map_name())
+		const char* how = "";
+		const bool wrote = write_player_position(x, y, z, how);
+		log("Cheats", wrote ? std::format("Teleported to {} ({:.3f}, {:.3f}, {:.3f}) from {} ({}) through the {}", what, x, y, z,
+				had ? std::format("{:.3f}, {:.3f}, {:.3f}", fx, fy, fz) : std::string("unknown"), current_map_name(), how)
 			: std::format("Teleport to {} failed (no player position)", what), wrote ? LOG_TYPE::LOG_TYPE_GREEN : LOG_TYPE::LOG_TYPE_ERROR, true);
 		return wrote;
 	}
