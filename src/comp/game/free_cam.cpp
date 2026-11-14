@@ -40,7 +40,9 @@ namespace comp::game::free_cam
 
 		// Field of view (vertical, radians; camera + 0x50). s_fov_override false = the game's own, which s_game_fov follows.
 		constexpr float kFovMin = 5.0f * kPi / 180.0f, kFovMax = 120.0f * kPi / 180.0f;
-		std::atomic<long> s_wheel = 0;   // wheel motion not applied yet (any thread)
+		std::atomic<long> s_wheel = 0;   // wheel motion not applied yet (any thread): the zoom
+		std::atomic<long> s_speed_wheel = 0; // wheel motion with Ctrl held: the flying speed
+		constexpr float kSpeedMin = 0.25f, kSpeedMax = 100.0f;
 		std::atomic<float> s_fov_request = -1.0f; // a live key's value, degrees (0 = the game's), applied on the game thread
 		bool s_fov_override = false;
 		float s_fov = 0.0f, s_game_fov = 0.75f;
@@ -108,6 +110,7 @@ namespace comp::game::free_cam
 			}
 			s_fov_override = false;
 			s_wheel = 0;
+			s_speed_wheel = 0;
 			return true;
 		}
 
@@ -148,6 +151,9 @@ namespace comp::game::free_cam
 			const bool menu = shared::globals::imgui_menu_open || shared::globals::remix_menu_open;
 			if (in_front && !menu)
 			{
+				// Ctrl + wheel: 25 % faster per notch up, slower down (the speed stays for the next flight).
+				if (const long wheel = s_speed_wheel.exchange(0); wheel != 0)
+					s_speed = std::clamp(s_speed * std::pow(1.25f, static_cast<float>(wheel) / WHEEL_DELTA), kSpeedMin, kSpeedMax);
 				float speed = s_speed;
 				if (key(VK_SHIFT)) speed *= 5.0f;
 				if (key(VK_CONTROL)) speed *= 0.2f;
@@ -190,6 +196,7 @@ namespace comp::game::free_cam
 			{
 				s_recenter = true;
 				s_wheel = 0; // scrolled in a menu or another window: not a zoom
+				s_speed_wheel = 0;
 			}
 
 			if (nudged)
@@ -334,7 +341,12 @@ namespace comp::game::free_cam
 		if (delta == 0 || !s_want_active.load() || shared::globals::imgui_menu_open || shared::globals::remix_menu_open
 			|| GetForegroundWindow() != shared::globals::main_window)
 			return;
-		s_wheel += delta;
+		// With Ctrl held the wheel sets the flying speed instead of the field of view (decided as it turns: Ctrl let go a moment
+		// later still counts for the motion before).
+		if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+			s_speed_wheel += delta;
+		else
+			s_wheel += delta;
 	}
 
 	void set_fov_degrees(float degrees)
@@ -359,10 +371,13 @@ namespace comp::game::free_cam
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Fly the game's camera: WASD to move, mouse to look, E / Space up, Q down, Shift faster, Ctrl slower.\n"
 				"Mouse wheel zooms (field of view), the middle button returns to the game's field of view.\n"
+				"Ctrl + mouse wheel sets the flying speed (it stays for the next flight).\n"
 				"The player stands still (the game gets no input) while the world keeps running; F7 still stops time.\n"
 				"The game draws, culls and lights from this camera. Off returns to the game's camera.");
 		ImGui::SetNextItemWidth(200.0f);
-		ImGui::SliderFloat("Speed (m/s)", &s_speed, 0.5f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+		ImGui::SliderFloat("Speed (m/s)", &s_speed, kSpeedMin, kSpeedMax, "%.2f", ImGuiSliderFlags_Logarithmic);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Also Ctrl + mouse wheel while flying.");
 		ImGui::SetNextItemWidth(200.0f);
 		ImGui::SliderFloat("Mouse sensitivity", &s_sensitivity, 0.0005f, 0.01f, "%.4f", ImGuiSliderFlags_Logarithmic);
 		if (active())

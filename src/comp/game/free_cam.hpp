@@ -24,6 +24,7 @@ namespace comp::game::free_cam
 
 	// Mouse wheel motion (DirectInput lZ, 120 a notch) from the game's own mouse reads, which carry it even when an input mod
 	// keeps wheel messages from the window. While flying, the wheel zooms (field of view); the middle button returns to the game's.
+	// With Ctrl held it sets the flying speed instead.
 	void on_mouse_wheel(long delta);
 
 	// Field of view in degrees while flying; 0 = the game's own (live key Cheats.FreeCamFov).
