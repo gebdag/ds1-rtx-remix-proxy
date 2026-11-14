@@ -28,7 +28,6 @@
 
 #include "comp/modules/imgui.hpp"
 #include "comp/game/input_trace.hpp"
-#include "comp/game/free_cam.hpp"
 #include "shared/common/config.hpp"
 #include <intrin.h>
 #include <array>
@@ -307,14 +306,10 @@ namespace shared::common
 		{
 			case sizeof(DIMOUSESTATE) :
 				di->updateMouseState(static_cast<DIMOUSESTATE*>(lpvData), di->MouseAxisMode == DIPROPAXISMODE_ABS);
-				if (SUCCEEDED(hr) && di->MouseAxisMode != DIPROPAXISMODE_ABS && comp::game::input_trace::is_game_address(_ReturnAddress()))
-					comp::game::free_cam::on_mouse_wheel(static_cast<DIMOUSESTATE*>(lpvData)->lZ);
 				break;
 
 			case sizeof(DIMOUSESTATE2) :
 				di->updateMouseState(static_cast<DIMOUSESTATE2*>(lpvData), di->MouseAxisMode == DIPROPAXISMODE_ABS);
-				if (SUCCEEDED(hr) && di->MouseAxisMode != DIPROPAXISMODE_ABS && comp::game::input_trace::is_game_address(_ReturnAddress()))
-					comp::game::free_cam::on_mouse_wheel(static_cast<DIMOUSESTATE2*>(lpvData)->lZ);
 				break;
 
 			case 256:

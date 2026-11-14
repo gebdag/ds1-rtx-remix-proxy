@@ -2075,9 +2075,6 @@ namespace comp
 			const HRESULT hr = s_di_get_state_og(dev, size, data);
 			if (FAILED(hr) || !data)
 				return hr;
-			// The wheel, for the free camera's zoom, before a freeze clears it (the mouse reports relative motion by default).
-			if ((size == sizeof(DIMOUSESTATE) || size == sizeof(DIMOUSESTATE2)) && from_game(_ReturnAddress()))
-				game::free_cam::on_mouse_wheel(static_cast<const DIMOUSESTATE*>(data)->lZ);
 			const bool held = is_keyboard_or_mouse_state(size) && block_for_game(_ReturnAddress(), 5, "DirectInput GetDeviceState (ANSI)");
 			game::input_trace::on_di_state(from_game(_ReturnAddress()), size, held);
 			if (held)

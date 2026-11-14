@@ -22,8 +22,9 @@ namespace comp::game::free_cam
 	// may not send input to the game).
 	void nudge(float forward, float right, float up, float yaw_degrees, float pitch_degrees);
 
-	// Mouse wheel motion (DirectInput lZ, 120 a notch) from the game's own mouse reads, which carry it even when an input mod
-	// keeps wheel messages from the window. While flying, the wheel zooms (field of view); the middle button returns to the game's.
+	// Mouse wheel motion (120 a notch) from a low-level mouse hook that lives only while flying (the game's DirectInput mouse
+	// carries none when an input mod drives the camera). While flying, the wheel zooms (field of view); the middle button returns
+	// to the game's.
 	// With Ctrl held it sets the flying speed instead.
 	void on_mouse_wheel(long delta);
 

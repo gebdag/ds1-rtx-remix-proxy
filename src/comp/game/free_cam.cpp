@@ -48,6 +48,59 @@ namespace comp::game::free_cam
 		float s_fov = 0.0f, s_game_fov = 0.75f;
 		bool s_middle_down = false;
 
+		// Low-level mouse hook (WH_MOUSE_LL) on a thread of its own, installed while flying.
+		HANDLE s_wheel_thread = nullptr;
+		DWORD s_wheel_thread_id = 0;
+
+		LRESULT CALLBACK low_level_mouse(int code, WPARAM message, LPARAM data)
+		{
+			if (code == HC_ACTION && message == WM_MOUSEWHEEL && data)
+				on_mouse_wheel(static_cast<short>(HIWORD(reinterpret_cast<const MSLLHOOKSTRUCT*>(data)->mouseData)));
+			return CallNextHookEx(nullptr, code, message, data);
+		}
+
+		DWORD WINAPI wheel_thread(LPVOID)
+		{
+			HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, &low_level_mouse, GetModuleHandleW(nullptr), 0);
+			if (!hook)
+				shared::common::log("FreeCam", std::format("the mouse wheel hook failed ({}): no zoom or speed by wheel", GetLastError()),
+					shared::common::LOG_TYPE::LOG_TYPE_WARN, true);
+			else
+				shared::common::log("FreeCam", "mouse wheel hook in");
+			MSG msg;
+			while (GetMessageW(&msg, nullptr, 0, 0) > 0)
+			{
+			}
+			if (hook)
+				UnhookWindowsHookEx(hook);
+			return 0;
+		}
+
+		void start_wheel_hook()
+		{
+			if (!s_wheel_thread)
+				s_wheel_thread = CreateThread(nullptr, 0, &wheel_thread, nullptr, 0, &s_wheel_thread_id);
+		}
+
+		void stop_wheel_hook()
+		{
+			if (!s_wheel_thread)
+				return;
+			// The thread's message queue exists once it first waits: retry until the quit lands or the thread is gone.
+			for (int i = 0; i < 50 && WaitForSingleObject(s_wheel_thread, 0) == WAIT_TIMEOUT; i++)
+			{
+				if (PostThreadMessageW(s_wheel_thread_id, WM_QUIT, 0, 0))
+				{
+					WaitForSingleObject(s_wheel_thread, 500);
+					break;
+				}
+				Sleep(10);
+			}
+			CloseHandle(s_wheel_thread);
+			s_wheel_thread = nullptr;
+			s_wheel_thread_id = 0;
+		}
+
 		std::mutex s_nudge_mutex;
 		float s_nudge[5] = {};
 		bool s_nudge_pending = false;
@@ -315,13 +368,14 @@ namespace comp::game::free_cam
 			if (!s_saved_frozen)
 				lookdev_capture::freeze_cursor_here();
 			shared::globals::input_frozen = true;
+			s_want_active = true;
+			start_wheel_hook();
+			return;
 		}
-		else
-		{
-			shared::globals::input_frozen = s_saved_frozen;
-			s_fov_request = -1.0f;
-		}
-		s_want_active = on;
+		shared::globals::input_frozen = s_saved_frozen;
+		s_fov_request = -1.0f;
+		s_want_active = false;
+		stop_wheel_hook();
 	}
 
 	void toggle() { set_active(!s_want_active.load()); }
