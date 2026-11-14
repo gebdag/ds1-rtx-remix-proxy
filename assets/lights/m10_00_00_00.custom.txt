@@ -1,0 +1,8 @@
+# Hand-placed lights for m10_00_00_00 (F4 > Lights > Custom lights writes this file).
+# x y z  dwindleBegin dwindleEnd  r g b  intensityPct  name  [remix intensity exposure radius volumetric]
+#   [spot dx dy dz coneDeg softness]  [focus exponent]  [off]
+# With 'remix' a plain Remix sphere light; without, the game's falloff (dwindle begin/end, intensityPct).
+-163.060 -85.940 67.090  0.500 4.000  255 217 153  100  gaping_1  remix 15.100 0.00 1.015 1.00
+-165.540 -73.660 36.090  0.500 4.000  255 217 153  100  gaping_2  remix 39.900 0.00 2.460 1.00
+-187.240 -85.820 49.310  0.500 4.000  255 217 153  100  gaping_3  remix 15.100 0.00 1.015 1.00
+-175.506 -90.093 1.437  0.500 4.000  255 217 153  100  gaping_spot  remix 39.900 0.00 2.460 1.00  spot -0.5307 -0.1661 0.8311 30.0 0.20
