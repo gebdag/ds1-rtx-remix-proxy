@@ -35,6 +35,7 @@ using comp::tracer;
 #include "../game/hud_scale.hpp"
 #include "../game/eye_sprites.hpp"
 #include "../game/aspect_ratio.hpp"
+#include "../game/borderless.hpp"
 #include "game_lights.hpp"
 #include "lookdev_capture.hpp"
 
@@ -457,6 +458,7 @@ namespace {
 		s_remembered_viewports.clear();
 		if (!pp)
 			return;
+		comp::game::borderless::adjust_present_params(pp, where);
 		const UINT asked_width = pp->BackBufferWidth, asked_height = pp->BackBufferHeight;
 		s_asked_width = asked_width;
 		s_asked_height = asked_height;
@@ -1091,6 +1093,7 @@ namespace comp
 		if (auto* d = diagnostics::get()) d->on_present(ffp.frame_count(), ffp.draw_call_count(), ffp.scene_count());
 		crash_context::on_present(ffp.draw_call_count());
 		send_scene_target_size();
+		comp::game::borderless::check(shared::globals::main_window);
 		hitch_watch::on_present(ffp.draw_call_count());
 		// A frame presented over [Diagnostics] HitchMs (60) after the last one is a hitch the player sees: logged with the wall clock
 		// (the remix log's times), the frame count, how long the last Present call blocked (Remix's side) against the rest (the game and

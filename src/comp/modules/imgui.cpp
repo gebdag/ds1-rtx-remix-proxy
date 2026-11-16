@@ -22,6 +22,7 @@
 #include "../game/debug_tools.hpp"
 #include "../game/frustum_culling.hpp"
 #include "../game/input_customizer.hpp"
+#include "../game/borderless.hpp"
 #include "../game/vanilla_view.hpp"
 #include "../game/dlss_nr.hpp"
 #include "../game/game_ui.hpp"
@@ -46,6 +47,12 @@ namespace comp
 	LRESULT __stdcall wnd_proc_hk(HWND window, UINT message_type, WPARAM wparam, LPARAM lparam)
 	{
 		game::input_customizer::on_window_message(window);
+
+		if (message_type == game::borderless::kApplyMessage)
+		{
+			game::borderless::apply(window);
+			return 0;
+		}
 
 		if (message_type == WM_KEYDOWN || message_type == WM_CHAR)
 			shared::globals::window_key_messages_seen = true;
@@ -1509,6 +1516,7 @@ namespace comp
 
 		ImGui_ImplWin32_Init(shared::globals::main_window);
 		g_game_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(shared::globals::main_window, GWLP_WNDPROC, LONG_PTR(wnd_proc_hk)));
+		game::borderless::set_window_proc_ready();
 
 		// ---
 		m_initialized = true;

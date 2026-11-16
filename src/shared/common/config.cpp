@@ -226,6 +226,9 @@ namespace shared::common
 		cheats.enemies_ignore_player = dev.enabled && get_bool("Cheats", "EnemiesIgnorePlayer", false);
 		cheats.no_fall_damage = dev.enabled && get_bool("Cheats", "NoFallDamage", false);
 
+		// [Window]
+		window.borderless = get_bool("Window", "Borderless", false);
+
 		// [Troubleshooting]
 		troubleshooting.verbose = get_bool("Troubleshooting", "Verbose", false);
 		set_debug_lines(dev_logs());

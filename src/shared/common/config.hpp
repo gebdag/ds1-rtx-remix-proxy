@@ -250,6 +250,13 @@ namespace shared::common
 			bool log_present_info = true;
 		} diagnostics;
 
+		// [Window] Borderless=1: a borderless window that covers the monitor, whether the game is set to fullscreen or
+		// windowed (comp/game/borderless.cpp). Off by default.
+		struct window_settings
+		{
+			bool borderless = false;
+		} window;
+
 		// [Troubleshooting] Verbose=1: more in the log for tracking down crashes and missing pieces. A startup report of
 		// every file and library the mod needs (and which are missing), every module loaded in the game with its
 		// version, and on a crash the whole crash report (exception, registers, stack, recent events) in the log, with
