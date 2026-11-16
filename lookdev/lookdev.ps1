@@ -13,7 +13,7 @@
     Only (re)write the lookdev INI.
 #>
 param(
-    [string]$GameDir = "<game dir>\DATA",
+    [string]$GameDir = $(if ($env:DS1_LOOKDEV_GAME_DIR) { $env:DS1_LOOKDEV_GAME_DIR } elseif ($env:DS1_GAME_DIR) { "$env:DS1_GAME_DIR\DATA" } else { throw "Set DS1_GAME_DIR (the game folder) or pass -GameDir" }),
     [switch]$NoLaunch
 )
 $ErrorActionPreference = 'Stop'

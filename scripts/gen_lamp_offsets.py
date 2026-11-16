@@ -14,6 +14,11 @@ Needs embreex (pip install embreex).
 
 Usage: py -3.12 scripts/gen_lamp_offsets.py [--map m17_00_00_00] [--texture m17_00_light_01] [--out 1.5] [--deploy]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import shutil
@@ -37,9 +42,8 @@ DIRECTIONS = 32
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
-                                      r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--data', default=ds1paths.GAME + r'\DATA\unpacked')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--map', default='m17_00_00_00')
     ap.add_argument('--texture', default='m17_00_light_01')
     ap.add_argument('--out', type=float, default=1.5, help='metres off the wall')

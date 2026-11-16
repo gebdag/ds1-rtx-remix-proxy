@@ -18,6 +18,11 @@ Needs embreex (pip install embreex).
 
 Usage: py -3.12 scripts/gen_hollow_lights.py [--strength S] [--want E] [--max-lights N] [--deploy]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import shutil
@@ -92,9 +97,8 @@ def spot_shape(to_light):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
-                                      r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--data', default=ds1paths.GAME + r'\DATA\unpacked')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--strength', type=float, default=56.0, help='each light, in Remix units')
     ap.add_argument('--want', type=float, default=0.48, help='light an up-facing surface should get, strength * cos / d^2')
     ap.add_argument('--top', type=float, default=800.0, help='the light at the top of the shaft')

@@ -7,9 +7,9 @@
     <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="SoulsFormats"><HintPath><workspace>\DSMapStudio-1.11.1.hotfix3\SoulsFormats.dll</HintPath></Reference>
-    <Reference Include="DotNext"><HintPath><workspace>\DSMapStudio-1.11.1.hotfix3\DotNext.dll</HintPath></Reference>
-    <Reference Include="DotNext.Unsafe"><HintPath><workspace>\DSMapStudio-1.11.1.hotfix3\DotNext.Unsafe.dll</HintPath></Reference>
-    <Reference Include="Andre.Core"><HintPath><workspace>\DSMapStudio-1.11.1.hotfix3\Andre.Core.dll</HintPath></Reference>
+    <Reference Include="SoulsFormats"><HintPath>$(DSMS_DIR)\SoulsFormats.dll</HintPath></Reference>
+    <Reference Include="DotNext"><HintPath>$(DSMS_DIR)\DotNext.dll</HintPath></Reference>
+    <Reference Include="DotNext.Unsafe"><HintPath>$(DSMS_DIR)\DotNext.Unsafe.dll</HintPath></Reference>
+    <Reference Include="Andre.Core"><HintPath>$(DSMS_DIR)\Andre.Core.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

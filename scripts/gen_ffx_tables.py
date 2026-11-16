@@ -14,13 +14,18 @@ category.
 
 usage: python scripts/gen_ffx_tables.py [analysis_dir]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import csv
 import pathlib
 import re
 import sys
 
 ANALYSIS = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else
-                        r"<workspace>\Vibe-Reverse-Engineering\patches\DarkSouls\analysis")
+                        ds1paths.ANALYSIS)
 OUT = pathlib.Path(__file__).resolve().parent.parent / "assets" / "ffx"
 
 PERSISTENT = ("map-placed", "character idle/aura", "status visual", "world object")

@@ -35,6 +35,11 @@ and how strongly each tilts comes from each water surface's own height pass at r
 (the proxy's game/texture_scroll.cpp, which holds this build's TILES and reference slope);
 the layer velocities printed from the two --speed captures are for reference only.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import math
 import struct
@@ -47,7 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "lookdev"))
 import analyze as A  # noqa: E402
 
-GAME_DIR = Path(r"<game dir>\DATA")
+GAME_DIR = Path(ds1paths.GAME + r"\DATA")
 MOD_DIR = GAME_DIR / "rtx-remix" / "mods" / "ds1_water"
 FPS = 60.0  # the capture frame index counts presents; DS1 runs its water at 60
 

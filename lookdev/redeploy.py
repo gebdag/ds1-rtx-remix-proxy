@@ -7,6 +7,11 @@ ds1-dxvk-nv\\_output into DATA\\.trex when it is newer, starts `host --live` (wh
 proxy build), waits until the streamed map is up and the frame has settled, and runs snap.py.
 The game is not touched: it streams without waiting on the host and resyncs by itself.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import ctypes
 import shutil
 import subprocess
@@ -18,8 +23,8 @@ import lookdev
 import snap
 import suite
 
-RUNTIME_BUILD = Path(r"<projects>\ds1-dxvk-nv\_output\d3d9.dll")
-RUNTIME_PDB = Path(r"<projects>\ds1-dxvk-nv\_Comp64Release\src\d3d9\d3d9.pdb")
+RUNTIME_BUILD = Path(ds1paths.RUNTIME + r"\_output\d3d9.dll")
+RUNTIME_PDB = Path(ds1paths.RUNTIME + r"\_Comp64Release\src\d3d9\d3d9.pdb")
 TREX = lookdev.GAME_DIR / ".trex"
 BRIDGE_LOG = lookdev.GAME_DIR / "rtx-remix" / "logs" / "bridge64.log"
 

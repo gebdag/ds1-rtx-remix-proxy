@@ -7,6 +7,11 @@ Per light, 256 rays in all directions:
   backface  share of the hits that see a surface from behind (a light inside a rock or behind a wall)
   near      the nearest hit distance (a light closer than its own radius to a wall clips into it)
 Usage: py -3.12 domain_lights_check.py <lights.txt> [--csv out.csv]"""
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import struct
 import sys
 from pathlib import Path
@@ -16,8 +21,8 @@ from embreex import rtcore_scene as rtcs
 from embreex.mesh_construction import TriangleMesh
 
 HERE = Path(__file__).parent
-MSB = Path(r"<game dir>\DATA\unpacked\map\MapStudio\m14_00_00_00.msb")
-sys.path.insert(0, r"<projects>\ds1-comp-proxy-nv\scripts")
+MSB = Path(ds1paths.GAME + r"\DATA\unpacked\map\MapStudio\m14_00_00_00.msb")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import _section, _sjis  # noqa: E402  (scripts/)
 
 

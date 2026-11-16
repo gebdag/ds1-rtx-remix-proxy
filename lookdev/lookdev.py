@@ -13,6 +13,11 @@
 [capture] is a .ds1cap path or a name in the game's rtx_comp\\lookdev folder;
 it defaults to the newest capture.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import argparse
 import collections
 import datetime
@@ -23,7 +28,7 @@ import sys
 import time
 from pathlib import Path
 
-GAME_DATA = Path(r"<game dir>\DATA")
+GAME_DATA = Path(ds1paths.GAME + r"\DATA")
 # DS1_LOOKDEV_GAME_DIR points the host at another folder laid out like DATA (its own .trex, rtx.conf and
 # proxy inis, with rtx_comp and rtx-remix\mods linked to DATA's), so the nv set can render captures
 # without touching the live set in DATA.

@@ -11,13 +11,18 @@ And the meshes in LISTED, checked against captures one by one (the proxy takes t
 
 Run: python scripts/gen_painted_meshes.py
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import glob
 import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, r"<workspace>\Vibe-Reverse-Engineering\pbr_tools")
+sys.path.insert(0, ds1paths.PBR_TOOLS)
 import build_pbr as br  # noqa: E402
 
 sys.path.insert(0, str(br.BBFORMATS))

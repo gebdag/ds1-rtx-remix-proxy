@@ -13,7 +13,9 @@ setlocal
 :: *.bak-coldtest original exists beside it, so the originals cannot be deleted by this script.
 :: Refuses while DARKSOULS.exe is running.
 
-set "S=<steam dir>\steamapps\shadercache\211420"
+:: DS1_STEAM_DIR: your Steam folder (the one with steamapps\).
+if not defined DS1_STEAM_DIR (echo Set DS1_STEAM_DIR to your Steam folder first. & exit /b 1)
+set "S=%DS1_STEAM_DIR%\steamapps\shadercache\211420"
 set "BAK=.bak-coldtest"
 :: Windows' own tools by full path: a shell with Git or MSYS first on PATH has another find.exe.
 set "TASKLIST=%SystemRoot%\System32\tasklist.exe"

@@ -1,10 +1,15 @@
 """Lists the collision parts of a DS1 (MSB1) map with their position and place name id (MapNameID), and the map pieces.
 Usage: msb_collisions.py <map.msb>"""
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import struct
 import sys
 from collections import Counter
 
-sys.path.insert(0, r"<projects>\ds1-comp-proxy-nv\scripts")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import _section, _sjis  # noqa: E402
 
 data = open(sys.argv[1], "rb").read()

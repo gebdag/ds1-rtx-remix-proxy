@@ -10,6 +10,11 @@ cube EnvDif_<area>_<id> times its env colour, fitted as a sky gradient plus a lo
 Below MIN_SUN, or small against its ambient (MIN_SUN_SHARE), a map has no sun of its own: outdoor suns measure 0.31 and up at an ambient about their own size;
 enclosed places reach 0.31 at an ambient of 2.5, where such a fit finds nothing real.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import math
 import struct
 import sys
@@ -17,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-UNPACKED = Path(r"<game dir>\DATA\unpacked")
+UNPACKED = Path(ds1paths.GAME + r"\DATA\unpacked")
 OUT = Path(__file__).resolve().parent.parent / "assets" / "sky" / "map_suns.txt"
 NORMALS = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=np.float64)
 WEIGHTS = np.array([0.2126, 0.7152, 0.0722])

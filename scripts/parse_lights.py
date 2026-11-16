@@ -8,13 +8,18 @@ Extracts:
 Outputs JSON suitable for the proxy DLL's light injection system.
 """
 
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import struct
 import json
 import math
 import sys
 from pathlib import Path
 
-DATA_DIR = Path(r"<game dir>\DATA\unpacked")
+DATA_DIR = Path(ds1paths.GAME + r"\DATA\unpacked")
 PARAM_DIR = DATA_DIR / "param" / "DrawParam"
 MSB_DIR = DATA_DIR / "map" / "MapStudio"
 OUTPUT_DIR = Path(__file__).parent.parent / "assets" / "lights"

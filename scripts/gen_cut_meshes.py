@@ -24,6 +24,11 @@ its indices alone).
     python gen_cut_meshes.py m10_02_00_00 [more maps] [--trace 64] [--trace-for TEXTURE=TRACE ...] [--tolerance 1.0]
                              [--keep 0.97] [--only TEXTURE ...] [--max-growth 400] [--out FILE] [--preview DIR]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import collections
 import os
@@ -39,11 +44,11 @@ from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, "<other project>/tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from bbformats.flver import read_flver  # noqa: E402
 from map_geometry import first, map_pieces  # noqa: E402
 
-DATA = "<game dir>/DATA/unpacked/map"
+DATA = ds1paths.GAME + "/DATA/unpacked/map"
 ALPHA_REF = 128  # the game's cut-out draws test alpha > 128
 
 

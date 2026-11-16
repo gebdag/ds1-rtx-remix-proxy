@@ -5,19 +5,23 @@ walkway looking down; then for each level under the walkway, the sheet cells: wh
 closed, kept only if nothing of the map is straight below and nothing within 0.4 m. Prints a table per level; with a level
 given, saves that sheet's cells.
 Usage: py -3.12 -P gap_full.py <cams_iz.npy> <out.npz> [level]"""
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import os
 import sys
 
 import numpy as np
 
-sys.path.insert(0, r"<projects>\ds1-comp-proxy-nv\scripts")
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import first, map_pieces, rotation  # noqa: E402
 from bbformats.flver import read_flver  # noqa: E402
 from embreex import rtcore_scene as rtcs  # noqa: E402
 from embreex.mesh_construction import TriangleMesh  # noqa: E402
 
-DATA = r"<game dir>\DATA\unpacked"
+DATA = ds1paths.GAME + r"\DATA\unpacked"
 cams = np.load(sys.argv[1])
 out = sys.argv[2]
 want = float(sys.argv[3]) if len(sys.argv) > 3 else None

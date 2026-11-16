@@ -22,6 +22,11 @@ And whether the shader reads the scene depth (DecodeDepthTexture): only those sp
 where they meet geometry; the others (SimpleSpriteType0: a message's runes on the floor)
 have hard edges in the game.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import re
 import struct
 import sys
@@ -30,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "lookdev"))
 import analyze  # noqa: E402  (D3DX disassembly)
-SHADERS = Path(r"<game dir>\DATA\unpacked\shader\FRPG_Sfx")
+SHADERS = Path(ds1paths.GAME + r"\DATA\unpacked\shader\FRPG_Sfx")
 OUT = ROOT / "src" / "shared" / "common" / "sfx_shaders.inc"
 
 CLASSES = {

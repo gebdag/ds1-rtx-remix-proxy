@@ -5,20 +5,24 @@ scripts/gen_domain_lights.py does): 256 rays per light;
                 sees the room's faces; one behind a wall or inside a rock sees their backs
   vis_near      nearest hit
 Usage: py -3.12 -P domain_visual_check.py <lights.txt>"""
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import os
 import sys
 
 import numpy as np
 
-sys.path.insert(0, r"<projects>\ds1-comp-proxy-nv\scripts")
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import blocks_rays, first, map_pieces, rotation, table_sources  # noqa: E402
 from bbformats.flver import read_flver  # noqa: E402
 from embreex import rtcore_scene as rtcs  # noqa: E402
 from embreex.mesh_construction import TriangleMesh  # noqa: E402
 
-DATA = r"<game dir>\DATA\unpacked"
-REPO = r"<projects>\ds1-comp-proxy-nv"
+DATA = ds1paths.GAME + r"\DATA\unpacked"
+REPO = ds1paths.REPO
 MAP = "m14_00_00_00"
 
 

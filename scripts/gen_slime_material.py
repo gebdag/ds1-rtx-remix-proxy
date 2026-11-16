@@ -6,6 +6,11 @@ lumps. The material is keyed on the baked texture's hash, from the first level a
 
     py -3.12 scripts/gen_slime_material.py <capture with the slime> <the baked level: width * height * 4 bytes> [--normal m15_detail_tar_n --out sen_tar_normal.dds]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import struct
 import sys
@@ -19,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import analyze as A  # noqa: E402
 from gen_water_material import octahedral, write_dds  # noqa: E402
 
-MOD_DIR = Path(r"<game dir>\DATA\rtx-remix\mods\ds1_swamp")
+MOD_DIR = Path(ds1paths.GAME + r"\DATA\rtx-remix\mods\ds1_swamp")
 
 
 def main():

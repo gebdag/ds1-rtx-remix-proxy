@@ -18,9 +18,14 @@ Images: <cap>_sdr.png (the SDR frame), <cap>_hdr_view.png (the HDR frame mapped 
 gamma 2.2), <cap>_headroom.png (where the HDR frame exceeds SDR white: grey = within SDR, colour = stops above),
 <cap>_hdr_window.png (PrintWindow of the HDR host window: what DWM hands an SDR capture).
 
-The host runs from DS1_LOOKDEV_GAME_DIR (default: the nv set's own host folder <projects>\\ds1-nv-lookdev),
+The host runs from DS1_LOOKDEV_GAME_DIR (default: DS1_GAME_DIR\\DATA; see scripts/ds1paths.py),
 so the game's DATA is never touched. Its .trex\\d3d9.dll must be the hdr10 build.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import argparse
 import json
 import os
@@ -30,7 +35,7 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("DS1_LOOKDEV_GAME_DIR", r"<projects>\ds1-nv-lookdev")
+os.environ.setdefault("DS1_LOOKDEV_GAME_DIR", ds1paths.LOOKDEV_GAME)
 
 import numpy as np
 from PIL import Image, ImageDraw

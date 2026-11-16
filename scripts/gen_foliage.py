@@ -31,6 +31,11 @@ Usage: python gen_foliage.py [--all] [--list]
   --all   every alpha-cut leaf texture by name, written to the live layer (testing candidates; rerun without it after)
   --list  print the picks, write nothing
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import json
 import re
 import sys
@@ -39,8 +44,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-INDEX = Path(r"<workspace>\Vibe-Reverse-Engineering\pbr_tools\hash_index.json")
-Z_PBR = Path(r"<game dir>\DATA\rtx-remix\mods\z_pbr")
+INDEX = Path(ds1paths.PBR_TOOLS + r"\hash_index.json")
+Z_PBR = Path(ds1paths.GAME + r"\DATA\rtx-remix\mods\z_pbr")
 LAYER = "foliage.usda"
 
 NAME = re.compile(r"grass|leaf|ivy|fern|tree|bush|plant|weed|flower", re.I)
@@ -79,9 +84,9 @@ USER_APPROVED = {
 MASKED = {
     "4AA48A4508A90EE5": ("c3230", "chr/c3230/c3230.flver", "wing"),
 }
-UNPACKED = Path(r"<game dir>\DATA\unpacked")
-FLVER_TOOLS = r"<other project>\tools"
-PBR_TOOLS = r"<workspace>\Vibe-Reverse-Engineering\pbr_tools"
+UNPACKED = Path(ds1paths.GAME + r"\DATA\unpacked")
+FLVER_TOOLS = ds1paths.SCRIPTS
+PBR_TOOLS = ds1paths.PBR_TOOLS
 MASK_DIR = "assets/thin_opaque"
 SCALE = 0.55        # hue scale of transmittance and single scattering albedo
 DISTANCE = 0.5      # subsurface_measurement_distance (> 0.05: diffuse reflection keeps its full weight)

@@ -18,6 +18,11 @@
 Shaders are named by matching their bytecode with the game's unpacked .fpo/.vpo
 files, so a family of draws can be found across the whole game, not by address.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import argparse
 import collections
 import ctypes
@@ -28,7 +33,7 @@ from pathlib import Path
 
 import os  # noqa: E402
 # DATA, or the nv set's own host folder (DS1_LOOKDEV_GAME_DIR, see lookdev.py).
-GAME_DIR = Path(os.environ.get("DS1_LOOKDEV_GAME_DIR", r"<game dir>\DATA"))
+GAME_DIR = Path(ds1paths.LOOKDEV_GAME)
 SHADER_DIR = GAME_DIR / "unpacked" / "shader"
 CAPTURE_DIR = GAME_DIR / "rtx_comp" / "lookdev"
 

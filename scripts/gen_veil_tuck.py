@@ -7,6 +7,11 @@ neighbours, along the ring: the proxy moves it [Meshes] VeilTuck metres that way
 
     python scripts/gen_veil_tuck.py [--data <DATA\\unpacked>]   (rewrites assets/mesh_tables/veil_meshes.txt in place)
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import sys
@@ -16,12 +21,12 @@ import numpy as np
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 import gen_sky_meshes as g  # noqa: E402
 from bbformats.flver import read_flver  # noqa: E402
 
 TABLE = HERE.parent / "assets" / "mesh_tables" / "veil_meshes.txt"
-DATA = r"<game dir>\DATA\unpacked"
+DATA = ds1paths.GAME + r"\DATA\unpacked"
 # map/model/mesh of the veils to tuck
 TUCK = {("m18_00_00_00", "m0010B0A18", 17)}
 SOLID = 0.99

@@ -3,6 +3,11 @@ WARP_CDB=1 runs the host under cdb and logs who ends the process.
 
     warpwatch.py <tag> <seconds per capture> [warpsim args...]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import os
 import shutil
 import subprocess
@@ -12,7 +17,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 LOOKDEV = Path(__file__).resolve().parent.parent
-DATA = Path(r"<game dir>\DATA")
+DATA = Path(ds1paths.GAME + r"\DATA")
 CDB = r"C:\Program Files (x86)\Windows Kits\10\Debuggers\x86\cdb.exe"
 tag = sys.argv[1]
 OUT = HERE / f"warp_{tag}"

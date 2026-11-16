@@ -8,6 +8,11 @@ and writes <out>/game.png, <out>/remix.png and <out>/ab.png (game left, Remix ri
 converged, shaders compiled), polling every 0.25 s, so a host restart or a setting
 change is captured as soon as it is visible and no sooner.
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import argparse
 import ctypes
 import sys
@@ -22,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import suite  # noqa: E402  (PrintWindow helpers)
 
 user32 = ctypes.windll.user32
-OUT = Path(r"<projects>\ds1-comp-proxy-nv\lookdev\snaps")
+OUT = Path(ds1paths.REPO + r"\lookdev\snaps")
 
 
 def find_window(match) -> int:

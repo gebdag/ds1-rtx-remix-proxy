@@ -3,6 +3,11 @@ areas. Stands in for the game (no game process needed). Ctrl+C or the host's dea
 
     warpsim.py <seconds per capture> [--days N] [--seed N] [--match TEXT] [--count N]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts")))
+import ds1paths  # noqa: E402
+
 import argparse
 import ctypes
 import mmap
@@ -14,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-CAPS = Path(r"<game dir>\DATA\rtx_comp\lookdev")
+CAPS = Path(ds1paths.GAME + r"\DATA\rtx_comp\lookdev")
 RING = 128 << 20
 NAME = "Local\\ds1_lookdev_stream"
 OFF_WRITE, OFF_READ, OFF_START, OFF_SESSION, OFF_EPOCH, OFF_CONS, OFF_PROD, OFF_BEAT, OFF_WRITTEN, OFF_CONSUMED = 16, 24, 32, 40, 44, 48, 52, 56, 60, 64
@@ -23,7 +28,7 @@ REC_PRESENT = None  # read from the capture format below
 
 
 def rec_types():
-    src = Path(r"<projects>\ds1-comp-proxy-nv\src\shared\lookdev\capture_format.hpp").read_text(encoding="utf-8")
+    src = Path(ds1paths.REPO + r"\src\shared\lookdev\capture_format.hpp").read_text(encoding="utf-8")
     import re
     block = src[src.index("enum record_type"):]
     block = block[:block.index("};")]

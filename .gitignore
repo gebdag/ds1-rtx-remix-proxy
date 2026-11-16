@@ -16,3 +16,14 @@ lookdev/obj/
 # NuGet restore output (Microsoft.DXSDK.D3DX) -- restored by the build
 deps/packages/
 scripts/collision/out/
+
+# Local only: your folders for the tools (copy paths.example.ini) and the deploy target for build.bat
+paths.local.ini
+deploy.conf
+
+# Python caches
+__pycache__/
+
+# IDE state
+.vs/
+*.user

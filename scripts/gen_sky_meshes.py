@@ -34,6 +34,11 @@ so the proxy recognises a draw by hashing the index range it draws.
 
 Usage: py -3.12 scripts/gen_sky_meshes.py [--data <DATA\\unpacked>] [--bbformats <dir with bbformats>]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import glob
 import os
@@ -461,9 +466,8 @@ def skirt_backings(map_id, flvers, in_sky, skip):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
-                                      r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--data', default=ds1paths.GAME + r'\DATA\unpacked')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--out', default=os.path.join(here, '..', 'assets', 'mesh_tables', 'sky_meshes.txt'))
     args = ap.parse_args()
 

@@ -11,6 +11,11 @@ rtx.conf must list the second stand-in in rtx.animatedWaterTextures (0x5A7C3B5F4
 
 Run: python scripts/gen_water_murk.py
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import shutil
 import struct
 from pathlib import Path
@@ -18,7 +23,7 @@ from pathlib import Path
 import xxhash
 from PIL import Image
 
-MODS = Path(r"<game dir>\DATA\rtx-remix\mods")
+MODS = Path(ds1paths.GAME + r"\DATA\rtx-remix\mods")
 OUT = MODS / "ds1_water_murk"
 STANDIN_PIXEL = 0xFF2F5D74
 MURK_RGB = (0.012, 0.020, 0.024)

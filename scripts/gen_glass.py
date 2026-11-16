@@ -59,6 +59,11 @@ Needs embreex (pip install embreex) for the ray tests.
 
 Usage: py -3.12 scripts/gen_glass.py [--data <DATA\\unpacked>] [--bbformats <dir>]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import glob
 import os
@@ -70,7 +75,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-GAME_DIR = r'<game dir>\DATA'
+GAME_DIR = ds1paths.GAME + r'\DATA'
 
 # The alpha shape alone also fits mist, bushes and decals (opaque cores over soft fringes): only
 # window and glass textures are candidates. Grilles, shutters and window sets are wood and iron.
@@ -397,12 +402,12 @@ def mod_usda(materials):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default=os.path.join(GAME_DIR, 'unpacked'))
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--mod', default=os.path.join(GAME_DIR, 'rtx-remix', 'mods', 'ds1_glass'))
     args = ap.parse_args()
 
     sys.path.insert(0, args.bbformats)
-    sys.path.insert(0, r'<workspace>\Vibe-Reverse-Engineering\pbr_tools')
+    sys.path.insert(0, ds1paths.PBR_TOOLS)
     from bbformats.flver import read_flver
     import xxhash
 

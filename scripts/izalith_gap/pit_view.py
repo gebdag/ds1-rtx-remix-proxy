@@ -6,20 +6,24 @@ Usage: py -3.12 -P pit_view.py <cams_iz.npy> <out.png> [yaw_deg pitch_deg dx dy 
        py -3.12 -P pit_view.py <cams_iz.npy> <out.png> --look ex ey ez fx fy fz tanx tany   (Remix world eye, forward)
 The --look values for a lookdev capture: eye = its GAME_FRAME camera with x negated, forward = VS c3.xyz (the main
 view-projection, translation 0) with x negated, tanx/tany = |c3.xyz| / |c0.xyz|, |c3.xyz| / |c1.xyz|."""
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import os
 import sys
 
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, r"<projects>\ds1-comp-proxy-nv\scripts")
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import first, map_pieces, rotation  # noqa: E402
 from bbformats.flver import read_flver  # noqa: E402
 from embreex import rtcore_scene as rtcs  # noqa: E402
 from embreex.mesh_construction import TriangleMesh  # noqa: E402
 
-DATA = r"<game dir>\DATA\unpacked"
+DATA = ds1paths.GAME + r"\DATA\unpacked"
 
 
 def load_map():

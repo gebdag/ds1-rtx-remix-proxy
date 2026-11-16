@@ -13,13 +13,17 @@ Usage::
     python scripts/sfx_inventory.py --lights       # per-map light vs flame coverage
 """
 
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import struct
 from collections import Counter, defaultdict
 from pathlib import Path
 
-DATA = Path(r"<steam dir>\steamapps\common"
-            r"\Dark Souls Prepare to Die Edition\DATA\unpacked")
+DATA = Path(ds1paths.GAME + r"\DATA\unpacked")
 MSB_DIR = DATA / "map" / "MapStudio"
 
 AREA_NAMES = {

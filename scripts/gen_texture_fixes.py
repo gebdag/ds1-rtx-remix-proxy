@@ -13,6 +13,11 @@ the same material (its normal map, roughness...) is written here too, pointing i
 Usage: py -3.12 scripts/gen_texture_fixes.py [--data <DATA folder>]
 Needs texconv.exe (pbr_tools).
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import shutil
@@ -23,8 +28,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-DATA = r"<game dir>\DATA"
-TEXCONV = r"<workspace>\Vibe-Reverse-Engineering\pbr_tools\texconv.exe"
+DATA = ds1paths.GAME + r"\DATA"
+TEXCONV = ds1paths.PBR_TOOLS + r"\texconv.exe"
 
 # name, material hash (the albedo's), source texture under DATA\unpacked, linear colour scale.
 FIXES = [

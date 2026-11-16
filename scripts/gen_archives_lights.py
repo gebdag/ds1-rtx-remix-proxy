@@ -8,6 +8,11 @@ Needs embreex (pip install embreex).
 
 Usage: py -3.12 scripts/gen_archives_lights.py [--fill S] [--deploy]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import shutil
@@ -78,9 +83,8 @@ ROOM_DIRECTION = {'Archives_tower_wall_n': (0.0, 0.0, 1.0), 'Archives_tower_wall
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
-                                      r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--data', default=ds1paths.GAME + r'\DATA\unpacked')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--fill', type=float, default=1.0, help='scales the room lights')
     ap.add_argument('--deploy', action='store_true', help='also into the game\'s rtx_comp\\lights')
     args = ap.parse_args()

@@ -15,6 +15,11 @@ The F4 menu writes light files without the repo's comments. A file whose values 
 alone; in one that differs, the repo's comment lines stay and each light line is replaced by the game's line of the same
 name (deleted lights go, new ones are added at the end).
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import shutil
 import sys
@@ -22,7 +27,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-GAME = Path(r"<game dir>\DATA\rtx_comp")
+GAME = Path(ds1paths.GAME + r"\DATA\rtx_comp")
 if (REPO / "deploy.conf").exists():
     for line in (REPO / "deploy.conf").read_text(encoding="utf-8").splitlines():
         if line.strip() and Path(line.strip().strip('"')).is_dir():

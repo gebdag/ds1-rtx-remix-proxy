@@ -11,6 +11,11 @@ GROW m on all sides, so boxes that meet (hall 1 and hall 2's walkways) overlap i
 Navmesh and collision vertices are part-local: world = local + (19, 63, -119) (every navmesh and collision part of m17_00_00_00
 sits there). Inputs: out/col_m17/*.obj from colexport.cs. Run: py -3.12 -P cover_hall_boxes.py
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import ds1paths  # noqa: E402
+
 import glob
 import os
 import sys
@@ -19,10 +24,10 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from map_geometry import blocks_rays, first, map_pieces, rotation  # noqa: E402
 
-DATA = r"<game dir>\DATA\unpacked"
+DATA = ds1paths.GAME + r"\DATA\unpacked"
 COL = os.path.join(HERE, "out", "col_m17")
 OFF = np.array([19.0, 63.0, -119.0])
 YAW, CELL, Y0, Y1, GROW = 45.0, 1.0, 276.0, 357.0, 0.4

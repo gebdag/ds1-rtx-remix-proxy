@@ -23,6 +23,11 @@ and is none otherwise (a candle deep in a niche stays where it is: the niche is 
 
 Usage: py -3.12 scripts/gen_flame_lift.py [map ...] [--detail] [--point "map,x,y,z"]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import os
 import struct
 import sys
@@ -33,14 +38,14 @@ import numpy as np
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, r"<other project>\tools")
+sys.path.insert(0, ds1paths.SCRIPTS)
 from bbformats.flver import read_flver  # noqa: E402
 from gen_map_lights import MSB_DIR, read_events  # noqa: E402
 from map_geometry import _section, _sjis, blocks_rays, first, rotation, table_sources  # noqa: E402
 from embreex import rtcore_scene  # noqa: E402
 from embreex.mesh_construction import TriangleMesh  # noqa: E402
 
-DATA = Path(r"<game dir>\DATA\unpacked")
+DATA = Path(ds1paths.GAME + r"\DATA\unpacked")
 ASSETS = HERE.parent / "assets"
 OUT = ASSETS / "ffx" / "flame_lift.tsv"
 PART_MAP_PIECE, PART_OBJECT = 0, 1

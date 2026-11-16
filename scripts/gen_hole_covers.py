@@ -9,10 +9,15 @@ its instance transform in the capture (rtx-remix\\captures\\capture_2026-11-06_0
 
 Usage: py -3.12 scripts/gen_hole_covers.py [--data <DATA folder>]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 
-DATA = r"<game dir>\DATA"
+DATA = ds1paths.GAME + r"\DATA"
 
 # name, anchor mesh hash, the anchor instance's world transform (x sign, translation), world rectangle (Remix space: x is the
 # game's x negated) x0 x1 z0 z1, world y.

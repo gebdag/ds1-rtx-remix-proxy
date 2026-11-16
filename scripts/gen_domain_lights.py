@@ -11,6 +11,11 @@ Needs embreex (pip install embreex).
 
 Usage: py -3.12 scripts/gen_domain_lights.py [--strength S] [--want E] [--deploy]
 """
+import os  # noqa: E402  (ds1paths: the local folders, see paths.example.ini)
+import sys  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+import ds1paths  # noqa: E402
+
 import argparse
 import os
 import shutil
@@ -68,9 +73,8 @@ def enclosed(scene, p, front, rng, rays=12):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data', default=r'<steam dir>\steamapps\common'
-                                      r'\Dark Souls Prepare to Die Edition\DATA\unpacked')
-    ap.add_argument('--bbformats', default=r'<other project>\tools')
+    ap.add_argument('--data', default=ds1paths.GAME + r'\DATA\unpacked')
+    ap.add_argument('--bbformats', default=ds1paths.SCRIPTS)
     ap.add_argument('--strength', type=float, default=12.0, help='each light, in Remix units')
     ap.add_argument('--want', type=float, default=0.12, help='light a side-facing surface should get, strength * cos / d^2')
     ap.add_argument('--max-lights', type=int, default=110)

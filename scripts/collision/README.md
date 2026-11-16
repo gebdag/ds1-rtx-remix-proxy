@@ -3,7 +3,7 @@
 Used on 2026-11-12 to prune `assets/lights/m14_00_00_00.custom.txt` (Quelaag's Domain) to the lights that are inside the Domain.
 
 1. **Collision meshes.** `colexport.cs` / `colexport.csproj` (.NET 8, references DSMapStudio's `SoulsFormats.dll`, `DotNext*.dll`,
-   `Andre.Core.dll` from `<workspace>\DSMapStudio-1.11.1.hotfix3`) writes every collision model of a map as an OBJ:
+   `Andre.Core.dll` from your DSMapStudio folder, set as the `DSMS_DIR` environment variable) writes every collision model of a map as an OBJ:
 
        dotnet run -c Release -- "<DATA>\unpacked\map\m14_00_00_00" scripts\collision\out\col_m14
 
