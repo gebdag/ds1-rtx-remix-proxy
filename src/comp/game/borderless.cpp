@@ -40,7 +40,9 @@ namespace comp::game::borderless
 				return false;
 			const LONG style = GetWindowLongW(window, GWL_STYLE);
 			const LONG ex_style = GetWindowLongW(window, GWL_EXSTYLE);
-			if ((style & kFrameStyles) || (ex_style & kFrameExStyles) || !(style & WS_POPUP))
+			// Hidden too: going to fullscreen the game hides its window and leaves showing it to the fullscreen switch, which
+			// the borderless window never makes (the screen showed whatever was behind the game).
+			if ((style & kFrameStyles) || (ex_style & kFrameExStyles) || !(style & WS_POPUP) || !(style & WS_VISIBLE))
 				return true;
 			RECT window_rect {}, target {};
 			if (!GetWindowRect(window, &window_rect) || !monitor_rect(window, target))
@@ -105,11 +107,23 @@ namespace comp::game::borderless
 			return;
 		const LONG style = GetWindowLongW(window, GWL_STYLE);
 		const LONG ex_style = GetWindowLongW(window, GWL_EXSTYLE);
+		const bool hidden = !(style & WS_VISIBLE);
 		SetWindowLongW(window, GWL_STYLE, (style & ~kFrameStyles) | WS_POPUP);
 		SetWindowLongW(window, GWL_EXSTYLE, ex_style & ~kFrameExStyles);
-		SetWindowPos(window, nullptr, target.left, target.top, target.right - target.left, target.bottom - target.top,
-			SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
-		shared::common::log("Window", std::format("Borderless: window covers the monitor ({}, {})-({}, {})",
-			target.left, target.top, target.right, target.bottom), shared::common::LOG_TYPE::LOG_TYPE_STATUS);
+		// A hidden window is shown on top. It takes the focus only when the foreground is this game's own or nobody's, so a
+		// player who has switched to another program keeps it.
+		SetWindowPos(window, hidden ? HWND_TOP : nullptr, target.left, target.top, target.right - target.left, target.bottom - target.top,
+			SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOACTIVATE | (hidden ? SWP_SHOWWINDOW : SWP_NOZORDER));
+		if (hidden)
+		{
+			DWORD foreground_pid = 0;
+			const HWND foreground = GetForegroundWindow();
+			if (foreground)
+				GetWindowThreadProcessId(foreground, &foreground_pid);
+			if (!foreground || foreground_pid == GetCurrentProcessId())
+				SetForegroundWindow(window);
+		}
+		shared::common::log("Window", std::format("Borderless: window covers the monitor ({}, {})-({}, {}){}",
+			target.left, target.top, target.right, target.bottom, hidden ? ", shown" : ""), shared::common::LOG_TYPE::LOG_TYPE_STATUS);
 	}
 }
