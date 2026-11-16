@@ -54,7 +54,8 @@ namespace comp::game::aspect_ratio
 		bool g_config_read = false;
 		bool g_hook_tried = false;
 		bool g_warned = false;
-		int g_position = 0; // 0 automatic, 1 centred, 2 at the edges
+		// [Aspect] HudAtEdges (F4 > HUD checkbox): the HUD in the screen's corners; off keeps it in a 16:9 area in the middle.
+		bool g_at_edges = true;
 
 		bool g_table_patched = false;
 
@@ -251,7 +252,8 @@ namespace comp::game::aspect_ratio
 			g_config_read = true;
 			auto& cfg = shared::common::config::get();
 			g_enabled = cfg.get_bool("Aspect", "Enable", true) && !cfg.lookdev.enabled;
-			g_position = std::clamp(cfg.get_int("Aspect", "HudPosition", 0), 0, 2);
+			// The older HudPosition key (0 automatic, 1 centred, 2 edges) still counts when HudAtEdges is missing.
+			g_at_edges = cfg.get_bool("Aspect", "HudAtEdges", cfg.get_int("Aspect", "HudPosition", 0) != 1);
 		}
 	}
 
@@ -398,19 +400,16 @@ namespace comp::game::aspect_ratio
 
 	bool hud_at_edges()
 	{
-		// Automatic: an ultrawide keeps the HUD where the eye is; a narrower screen has no room to lose.
-		return g_position == 2 || (g_position == 0 && g_fit_y < 1.0f);
+		return g_at_edges;
 	}
 
 	void hud_position_imgui()
 	{
 		if (!g_active)
 			return;
-		static const char* kNames[] = { "Automatic", "Centred", "At the screen's edges" };
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-		if (ImGui::Combo("HUD position", &g_position, kNames, IM_ARRAYSIZE(kNames)))
-			shared::common::config::get().set_string("Aspect", "HudPosition", std::to_string(g_position));
-		ImGui::TextDisabled("This screen isn't 16:9. Automatic: centred on ultrawide, at the edges on narrower screens.");
+		if (ImGui::Checkbox("HUD at the screen's edges", &g_at_edges))
+			shared::common::config::get().set_string("Aspect", "HudAtEdges", g_at_edges ? "1" : "0");
+		ImGui::TextDisabled("This screen isn't 16:9. On: the HUD sits in the screen's corners. Off: it stays in a 16:9 area in the middle.");
 		ImGui::Spacing();
 	}
 }
