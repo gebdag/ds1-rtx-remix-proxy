@@ -366,11 +366,32 @@ namespace comp::game::aspect_ratio
 		for (UINT i = 0; i < kCount; i++)
 		{
 			const float x = quad[i * 4], y = quad[i * 4 + 1];
-			// As wide as the target and centred on it, two corners up and two down: anything else is another draw.
+			// As wide as the target and centred on it, two corners at the image's top and two at its bottom: anything else is
+			// another draw.
 			if (std::abs(x) != 1.0f || !std::isfinite(y) || y == 0.0f || std::abs(y) != height)
 				return vertices;
-			above += y > 0.0f ? 1 : 0;
-			quad[i * 4 + 1] = y > 0.0f ? 1.0f : -1.0f;
+			// Up or down by the texture coordinate, not by the game's y: on a wider screen the game's y is a huge value whose
+			// sign is upside down (3440x1440: the image's top row at y -2982610), and keeping that sign showed the whole frame
+			// upside down. The image's top row (v near 0) goes to the top of the target.
+			const float v = quad[i * 4 + 3];
+			if (!std::isfinite(v))
+				return vertices;
+			const bool top = v < 0.5f;
+			above += top ? 1 : 0;
+			quad[i * 4 + 1] = top ? 1.0f : -1.0f;
+		}
+		{
+			// Dev log, once per height the game draws its final quad at: each corner's position and texture coordinate.
+			static float logged_height = 0.0f;
+			if (above == 2 && height != 1.0f && height != logged_height)
+			{
+				logged_height = height;
+				const auto* raw = static_cast<const float*>(vertices);
+				std::string corners;
+				for (UINT i = 0; i < kCount; i++)
+					corners += std::format(" ({:g}, {:g} | {:g}, {:g})", raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]);
+				shared::common::log("Aspect", std::format("final quad, x y | u v as the game draws it:{}", corners));
+			}
 		}
 		return above == 2 && height != 1.0f ? quad : vertices;
 	}
